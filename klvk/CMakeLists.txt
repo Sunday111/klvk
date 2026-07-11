@@ -1,13 +1,45 @@
 cmake_minimum_required(VERSION 3.20)
 include(set_compiler_options)
 set(module_source_files
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/events/event_manager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/filesystem/filesystem.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/os/os.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/simple_imgui_combo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/type_id_widget.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/vulkan_common.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/error_handling.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/detail.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/event_listener.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/event_listener_interface.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/event_listener_method.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/event_manager.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/mouse_events.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/window_events.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/filesystem/filesystem.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/macro/ensure_enum_size.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/platform/os/os.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/reflection/matrix_reflect.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/reflection/register_types.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/class_member_traits.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/constexpr_string_hash.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/get_enum_underlying.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/member_offset.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/on_scope_leave.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/tagged_id_hash.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/tuple_type_by_index.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/imgui_helpers.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/imgui_value_combo.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/simple_imgui_combo.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/simple_type_widget.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/type_id_widget_minimal.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan_common.hpp)
 add_library(klvk STATIC ${module_source_files})
 set_generic_compiler_options(klvk PRIVATE)
-target_link_libraries(klvk PUBLIC edt
+target_link_libraries(klvk PUBLIC ass
+                                  edt
                                   fmt
+                                  CppReflection
                                   cpptrace::cpptrace
                                   magic_enum
                                   unordered_dense

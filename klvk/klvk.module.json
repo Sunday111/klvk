@@ -2,8 +2,10 @@
     "ModuleType": "Library",
     "Dependencies": {
         "Public": [
+            "ass",
             "edt",
             "fmtlib",
+            "CppReflection",
             "cpptrace",
             "magic_enum",
             "unordered_dense",

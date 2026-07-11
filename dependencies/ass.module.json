@@ -1,0 +1,15 @@
+{
+    "ModuleType": "GitClone",
+    "GitUrl": "https://github.com/Sunday111/ass",
+    "GitTag": "main",
+    "TargetName": "ass",
+    "LocalPath": "Sunday111/ass",
+    "Dependencies": {
+        "Public": [],
+        "Private": []
+    },
+    "CMakeOptions": {
+        "ASS_ENABLE_TESTING": true,
+        "ASS_FETCH_GOOGLE_TESTS": false
+    }
+}
