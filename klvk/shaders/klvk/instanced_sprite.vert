@@ -35,7 +35,8 @@ void main()
     mat3 world_to_view = mat3(pc.col0.xyz, pc.col1.xyz, pc.col2.xyz);
     Instance instance = instances[gl_InstanceIndex];
 
-    vec2 corner = kCorners[gl_VertexIndex] * instance.scale;
+    vec2 unit_corner = kCorners[gl_VertexIndex];
+    vec2 corner = unit_corner * instance.scale;
     float sine = sin(instance.rotation_radians);
     float cosine = cos(instance.rotation_radians);
     corner = mat2(cosine, sine, -sine, cosine) * corner;
@@ -43,5 +44,7 @@ void main()
     gl_Position = vec4(view_position, 0.0, 1.0);
 
     out_color = unpackUnorm4x8(instance.color);
-    out_tex_coord = corner * 0.5 + 0.5;
+    // Texture coordinates come from the unrotated unit quad so the whole
+    // texture always maps onto the sprite regardless of scale and rotation.
+    out_tex_coord = unit_corner * 0.5 + 0.5;
 }
