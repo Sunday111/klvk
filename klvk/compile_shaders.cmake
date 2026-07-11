@@ -1,31 +1,43 @@
-# Included by generated CMake both from the module and the project directory, hence the guard
-# and target-relative paths.
-if(NOT TARGET klvk_compile_shaders)
+# Included by generated CMake both from the module and the project directory, hence the guards
+# and target-relative paths. Other modules (examples) reuse the function for their own shaders.
+if(NOT COMMAND klvk_compile_shaders)
     find_program(KLVK_GLSLC glslc REQUIRED)
 
-    get_target_property(klvk_module_dir klvk SOURCE_DIR)
-    set(klvk_shaders_src_dir "${klvk_module_dir}/shaders")
-    set(klvk_shaders_out_dir "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/content/shaders")
+    # Compiles GLSL sources from <target source dir>/shaders next to the built binaries,
+    # preserving relative paths: shaders/x/y.vert -> content/shaders/x/y.vert.spv.
+    function(klvk_compile_shaders target)
+        if(TARGET ${target}_compile_shaders)
+            return()
+        endif()
 
-    file(GLOB_RECURSE klvk_shader_sources
-        "${klvk_shaders_src_dir}/*.vert"
-        "${klvk_shaders_src_dir}/*.frag"
-        "${klvk_shaders_src_dir}/*.comp")
+        get_target_property(module_dir ${target} SOURCE_DIR)
+        set(shaders_src_dir "${module_dir}/shaders")
+        set(shaders_out_dir "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/content/shaders")
 
-    set(klvk_spirv_outputs)
-    foreach(shader_source ${klvk_shader_sources})
-        file(RELATIVE_PATH shader_rel "${klvk_shaders_src_dir}" "${shader_source}")
-        set(shader_output "${klvk_shaders_out_dir}/${shader_rel}.spv")
-        get_filename_component(shader_output_dir "${shader_output}" DIRECTORY)
-        add_custom_command(
-            OUTPUT "${shader_output}"
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${shader_output_dir}"
-            COMMAND ${KLVK_GLSLC} --target-env=vulkan1.3 "${shader_source}" -o "${shader_output}"
-            DEPENDS "${shader_source}"
-            COMMENT "glslc ${shader_rel}")
-        list(APPEND klvk_spirv_outputs "${shader_output}")
-    endforeach()
+        file(GLOB_RECURSE shader_sources
+            "${shaders_src_dir}/*.vert"
+            "${shaders_src_dir}/*.frag"
+            "${shaders_src_dir}/*.comp")
 
-    add_custom_target(klvk_compile_shaders DEPENDS ${klvk_spirv_outputs})
-    add_dependencies(klvk klvk_compile_shaders)
+        set(spirv_outputs)
+        foreach(shader_source ${shader_sources})
+            file(RELATIVE_PATH shader_rel "${shaders_src_dir}" "${shader_source}")
+            set(shader_output "${shaders_out_dir}/${shader_rel}.spv")
+            get_filename_component(shader_output_dir "${shader_output}" DIRECTORY)
+            add_custom_command(
+                OUTPUT "${shader_output}"
+                COMMAND ${CMAKE_COMMAND} -E make_directory "${shader_output_dir}"
+                COMMAND ${KLVK_GLSLC} --target-env=vulkan1.3 "${shader_source}" -o "${shader_output}"
+                DEPENDS "${shader_source}"
+                COMMENT "glslc ${shader_rel}")
+            list(APPEND spirv_outputs "${shader_output}")
+        endforeach()
+
+        add_custom_target(${target}_compile_shaders DEPENDS ${spirv_outputs})
+        add_dependencies(${target} ${target}_compile_shaders)
+    endfunction()
+endif()
+
+if(TARGET klvk)
+    klvk_compile_shaders(klvk)
 endif()
