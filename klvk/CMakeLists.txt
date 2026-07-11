@@ -9,6 +9,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/mesh/procedural_mesh_generator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/os/os.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/rendering/curve_renderer_2d.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/rendering/instanced_sprite_renderer_2d.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/texture/procedural_texture_generator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/simple_imgui_combo.cpp
@@ -39,6 +40,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/platform/os/os.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/reflection/matrix_reflect.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/reflection/register_types.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/rendering/curve_renderer_2d.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/rendering/instanced_sprite_renderer_2d.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/class_member_traits.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/constexpr_string_hash.hpp
