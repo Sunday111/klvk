@@ -206,6 +206,22 @@ public:
         std::span<const VkGraphicsPipelineCreateInfo> create_infos,
         const VkAllocationCallbacks* allocator = nullptr);
 
+    [[nodiscard]] KLVK_VK_INLINE static VkCallResult<std::vector<VkPipeline>> CreateComputePipelinesNE(
+        VkDevice device,
+        VkPipelineCache pipeline_cache,
+        std::span<const VkComputePipelineCreateInfo> create_infos,
+        const VkAllocationCallbacks* allocator = nullptr) noexcept;
+    [[nodiscard]] KLVK_VK_INLINE static tl::expected<std::vector<VkPipeline>, VulkanError> CreateComputePipelinesCE(
+        VkDevice device,
+        VkPipelineCache pipeline_cache,
+        std::span<const VkComputePipelineCreateInfo> create_infos,
+        const VkAllocationCallbacks* allocator = nullptr) noexcept;
+    [[nodiscard]] KLVK_VK_INLINE static std::vector<VkPipeline> CreateComputePipelines(
+        VkDevice device,
+        VkPipelineCache pipeline_cache,
+        std::span<const VkComputePipelineCreateInfo> create_infos,
+        const VkAllocationCallbacks* allocator = nullptr);
+
     [[nodiscard]] KLVK_VK_INLINE static VkCallResult<VkImageView> CreateImageViewNE(
         VkDevice device,
         const VkImageViewCreateInfo& create_info,
@@ -503,6 +519,17 @@ public:
         uint32_t instance_count,
         uint32_t first_vertex,
         uint32_t first_instance) noexcept;
+
+    KLVK_VK_INLINE static void CmdDispatchNE(
+        VkCommandBuffer command_buffer,
+        uint32_t group_count_x,
+        uint32_t group_count_y,
+        uint32_t group_count_z) noexcept;
+    KLVK_VK_INLINE static void CmdDispatch(
+        VkCommandBuffer command_buffer,
+        uint32_t group_count_x,
+        uint32_t group_count_y,
+        uint32_t group_count_z) noexcept;
 
     KLVK_VK_INLINE static void CmdDrawIndexedNE(
         VkCommandBuffer command_buffer,

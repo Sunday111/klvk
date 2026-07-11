@@ -1,0 +1,38 @@
+#version 450
+
+layout(local_size_x = 64) in;
+
+struct Particle
+{
+    vec4 position;
+    vec4 velocity;
+};
+
+layout(std430, set = 0, binding = 0) buffer Particles
+{
+    Particle particles[];
+};
+
+layout(push_constant) uniform Simulation
+{
+    vec4 attractor_a;
+    vec4 attractor_b;
+    float delta_time;
+} simulation;
+
+void main()
+{
+    uint index = gl_GlobalInvocationID.x;
+    vec2 position = particles[index].position.xy;
+    vec2 acceleration = vec2(0.0);
+    vec2 attractors[2] = vec2[](simulation.attractor_a.xy, simulation.attractor_b.xy);
+    for (int i = 0; i != 2; ++i)
+    {
+        vec2 offset = attractors[i] - position;
+        float distance_squared = max(dot(offset, offset), 0.0025);
+        acceleration += normalize(offset) * 0.08 / distance_squared;
+    }
+    particles[index].velocity.xy += acceleration * simulation.delta_time;
+    particles[index].velocity.xy *= 0.9995;
+    particles[index].position.xy += particles[index].velocity.xy * simulation.delta_time;
+}

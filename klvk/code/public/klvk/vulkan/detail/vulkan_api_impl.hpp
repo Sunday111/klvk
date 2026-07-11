@@ -394,6 +394,43 @@ std::vector<VkPipeline> Vulkan::CreateGraphicsPipelines(
     return Internal::TakeValue(CreateGraphicsPipelinesCE(device, pipeline_cache, create_infos, allocator));
 }
 
+VkCallResult<std::vector<VkPipeline>> Vulkan::CreateComputePipelinesNE(
+    VkDevice device,
+    VkPipelineCache pipeline_cache,
+    std::span<const VkComputePipelineCreateInfo> create_infos,
+    const VkAllocationCallbacks* allocator) noexcept
+{
+    std::vector<VkPipeline> pipelines(create_infos.size());
+    const VkResult result = vkCreateComputePipelines(
+        device,
+        pipeline_cache,
+        Internal::Count(create_infos.size()),
+        create_infos.data(),
+        allocator,
+        pipelines.data());
+    return {.result = result, .value = std::move(pipelines)};
+}
+
+tl::expected<std::vector<VkPipeline>, VulkanError> Vulkan::CreateComputePipelinesCE(
+    VkDevice device,
+    VkPipelineCache pipeline_cache,
+    std::span<const VkComputePipelineCreateInfo> create_infos,
+    const VkAllocationCallbacks* allocator) noexcept
+{
+    auto call_result = CreateComputePipelinesNE(device, pipeline_cache, create_infos, allocator);
+    if (call_result.result == VK_SUCCESS) return std::move(call_result.value);
+    return Internal::Unexpected(call_result.result, "vkCreateComputePipelines");
+}
+
+std::vector<VkPipeline> Vulkan::CreateComputePipelines(
+    VkDevice device,
+    VkPipelineCache pipeline_cache,
+    std::span<const VkComputePipelineCreateInfo> create_infos,
+    const VkAllocationCallbacks* allocator)
+{
+    return Internal::TakeValue(CreateComputePipelinesCE(device, pipeline_cache, create_infos, allocator));
+}
+
 VkResult Vulkan::DeviceWaitIdleNE(VkDevice device) noexcept
 {
     return vkDeviceWaitIdle(device);
@@ -889,6 +926,24 @@ void Vulkan::CmdDraw(
     uint32_t first_instance) noexcept
 {
     CmdDrawNE(command_buffer, vertex_count, instance_count, first_vertex, first_instance);
+}
+
+void Vulkan::CmdDispatchNE(
+    VkCommandBuffer command_buffer,
+    uint32_t group_count_x,
+    uint32_t group_count_y,
+    uint32_t group_count_z) noexcept
+{
+    vkCmdDispatch(command_buffer, group_count_x, group_count_y, group_count_z);
+}
+
+void Vulkan::CmdDispatch(
+    VkCommandBuffer command_buffer,
+    uint32_t group_count_x,
+    uint32_t group_count_y,
+    uint32_t group_count_z) noexcept
+{
+    CmdDispatchNE(command_buffer, group_count_x, group_count_y, group_count_z);
 }
 
 void Vulkan::CmdEndRenderingNE(VkCommandBuffer command_buffer) noexcept
