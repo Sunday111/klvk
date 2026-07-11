@@ -7,6 +7,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/os/os.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/rendering/instanced_sprite_renderer_2d.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/texture/procedural_texture_generator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/simple_imgui_combo.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/type_id_widget.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/device_context.cpp
@@ -38,6 +39,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/on_scope_leave.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/tagged_id_hash.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/tuple_type_by_index.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/texture/procedural_texture_generator.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/imgui_helpers.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/imgui_value_combo.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/simple_imgui_combo.hpp
