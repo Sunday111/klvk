@@ -42,6 +42,9 @@ public:
     [[nodiscard]] uint32_t GetGraphicsQueueFamily() const noexcept { return graphics_queue_family_; }
     [[nodiscard]] VmaAllocator GetAllocator() const noexcept { return allocator_; }
 
+    // True when the geometryShader feature was available and enabled on the device.
+    [[nodiscard]] bool IsGeometryShaderEnabled() const noexcept { return geometry_shader_enabled_; }
+
     void WaitIdle() const;
 
     // Records commands into a temporary command buffer, submits it to the graphics queue and waits for completion.
@@ -74,6 +77,7 @@ private:
     uint32_t graphics_queue_family_ = 0;
     VmaAllocator allocator_ = VK_NULL_HANDLE;
     VkCommandPool one_time_pool_ = VK_NULL_HANDLE;
+    bool geometry_shader_enabled_ = false;
 };
 
 }  // namespace klvk

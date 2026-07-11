@@ -16,6 +16,7 @@ if(NOT COMMAND klvk_compile_shaders)
 
         file(GLOB_RECURSE shader_sources
             "${shaders_src_dir}/*.vert"
+            "${shaders_src_dir}/*.geom"
             "${shaders_src_dir}/*.frag"
             "${shaders_src_dir}/*.comp")
 

@@ -221,9 +221,17 @@ void DeviceContext::CreateDevice()
         .synchronization2 = VK_TRUE,
         .dynamicRendering = VK_TRUE,
     };
+
+    // Optional features are enabled when the hardware has them; users query the
+    // corresponding accessors before creating pipelines that need them.
+    VkPhysicalDeviceFeatures supported_features{};
+    vkGetPhysicalDeviceFeatures(physical_device_, &supported_features);
+    geometry_shader_enabled_ = supported_features.geometryShader == VK_TRUE;
+
     const VkPhysicalDeviceFeatures2 features2{
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         .pNext = &features13,
+        .features = {.geometryShader = supported_features.geometryShader},
     };
 
     std::vector<const char*> extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
