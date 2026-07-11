@@ -25,7 +25,7 @@ public:
         Vec2f translation{};
         Vec2f scale{};
         Vec4u8 color{};
-        uint32_t padding = 0;
+        float rotation_radians = 0.f;
     };
 
     static_assert(sizeof(Instance) == 24);  // must match the std430 layout in the shader
@@ -37,9 +37,10 @@ public:
 
     void Clear() { instances_.clear(); }
 
-    void Add(const Vec2f& translation, const Vec4u8& color, const Vec2f& scale)
+    void Add(const Vec2f& translation, const Vec4u8& color, const Vec2f& scale, float rotation_radians = 0.f)
     {
-        instances_.push_back({.translation = translation, .scale = scale, .color = color});
+        instances_.push_back(
+            {.translation = translation, .scale = scale, .color = color, .rotation_radians = rotation_radians});
     }
 
     [[nodiscard]] size_t GetInstanceCount() const noexcept { return instances_.size(); }

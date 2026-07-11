@@ -8,7 +8,7 @@ struct Instance
     vec2 translation;
     vec2 scale;
     uint color;  // packed rgba8
-    uint padding;
+    float rotation_radians;
 };
 
 layout(std430, set = 0, binding = 1) readonly buffer Instances
@@ -35,10 +35,12 @@ void main()
     mat3 world_to_view = mat3(pc.col0.xyz, pc.col1.xyz, pc.col2.xyz);
     Instance instance = instances[gl_InstanceIndex];
 
-    vec2 corner = kCorners[gl_VertexIndex];
-    vec2 view_pos = (world_to_view * vec3(instance.translation, 1)).xy;
-    vec2 view_size = (world_to_view * vec3(instance.scale, 0)).xy;
-    gl_Position = vec4(corner * view_size + view_pos, 0.0, 1.0);
+    vec2 corner = kCorners[gl_VertexIndex] * instance.scale;
+    float sine = sin(instance.rotation_radians);
+    float cosine = cos(instance.rotation_radians);
+    corner = mat2(cosine, sine, -sine, cosine) * corner;
+    vec2 view_position = (world_to_view * vec3(instance.translation + corner, 1)).xy;
+    gl_Position = vec4(view_position, 0.0, 1.0);
 
     out_color = unpackUnorm4x8(instance.color);
     out_tex_coord = corner * 0.5 + 0.5;
