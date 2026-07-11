@@ -36,6 +36,7 @@ public:
     virtual void Initialize();
     virtual void Run();
     virtual void PreTick();
+    virtual void BeforeSwapchainRender(VkCommandBuffer command_buffer);
     virtual void Tick();
     virtual void PostTick();
     virtual void MainLoop();

@@ -372,6 +372,8 @@ void Application::PreTick()
     Vulkan::BeginCommandBuffer(frame.command_buffer, begin_info);
     state_->frame_active_ = true;
 
+    BeforeSwapchainRender(frame.command_buffer);
+
     // undefined -> color attachment
     {
         const VkImageMemoryBarrier2 barrier{
@@ -467,6 +469,8 @@ void Application::PreTick()
 }
 
 void Application::Tick() {}
+
+void Application::BeforeSwapchainRender([[maybe_unused]] VkCommandBuffer command_buffer) {}
 
 void Application::PostTick()
 {

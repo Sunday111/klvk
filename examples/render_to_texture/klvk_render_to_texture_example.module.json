@@ -1,0 +1,11 @@
+{
+    "ModuleType": "Executable",
+    "ExtraCMakeFiles": [
+        "compile_shaders"
+    ],
+    "Dependencies": {
+        "Public": [
+            "klvk"
+        ]
+    }
+}
