@@ -39,10 +39,9 @@ class CurveApp : public klvk::Application
                      edt::Math::GetRainbowColors(10.f * static_cast<float>(i) / static_cast<float>(points.size()))
                              .Cast<float>() /
                          255.f,
-                     0.55f)});
+                     1.f)});
         }
         spiral_->SetPoints(spiral_points);
-        spiral_->thickness_ = 2.f;
 
         const std::array secondary_points{
             klvk::CurveRenderer2d::ControlPoint{{-1.f, -1.f}, {1.f, 0.f, 0.f, 1.f}},

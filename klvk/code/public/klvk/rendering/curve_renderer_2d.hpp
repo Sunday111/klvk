@@ -29,8 +29,9 @@ public:
     void SetPoints(std::span<const ControlPoint> points);
     void Draw(Vec2f viewport_size, const Mat3f& world_to_view);
 
-    float thickness_ = 2.f;
-    float segment_pixel_length_ = 10.f;
+    // Same defaults as klgl's CurveRenderer2d.
+    float thickness_ = 5.f;
+    float segment_pixel_length_ = 8.f;
 
 private:
     struct Vertex
