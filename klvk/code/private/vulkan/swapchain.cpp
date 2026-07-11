@@ -1,5 +1,7 @@
 #include "klvk/vulkan/swapchain.hpp"
 
+#include <vk_mem_alloc.h>
+
 #include <algorithm>
 
 #include "klvk/error_handling.hpp"
@@ -129,6 +131,47 @@ void Swapchain::Create(edt::Vec2<uint32_t> framebuffer_size, VkSwapchainKHR old_
         };
         image_views_.push_back(Vulkan::CreateImageView(context_->GetDevice(), view_info));
     }
+
+    depth_images_.resize(images_.size(), VK_NULL_HANDLE);
+    depth_allocations_.resize(images_.size(), VK_NULL_HANDLE);
+    depth_image_views_.reserve(images_.size());
+    for (size_t index = 0; index != images_.size(); ++index)
+    {
+        const VkImageCreateInfo image_info{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .imageType = VK_IMAGE_TYPE_2D,
+            .format = kDepthFormat,
+            .extent = {extent_.width, extent_.height, 1},
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        };
+        const VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+        CheckVkResult(
+            vmaCreateImage(
+                context_->GetAllocator(),
+                &image_info,
+                &allocation_info,
+                &depth_images_[index],
+                &depth_allocations_[index],
+                nullptr),
+            "vmaCreateImage(depth)");
+
+        depth_image_views_.push_back(
+            Vulkan::CreateImageView(
+                context_->GetDevice(),
+                {
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                    .image = depth_images_[index],
+                    .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                    .format = kDepthFormat,
+                    .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT, .levelCount = 1, .layerCount = 1},
+                }));
+    }
 }
 
 void Swapchain::DestroyImageViews()
@@ -138,6 +181,21 @@ void Swapchain::DestroyImageViews()
         Vulkan::DestroyImageViewNE(context_->GetDevice(), view);
     }
     image_views_.clear();
+
+    for (VkImageView view : depth_image_views_)
+    {
+        Vulkan::DestroyImageViewNE(context_->GetDevice(), view);
+    }
+    depth_image_views_.clear();
+    for (size_t index = 0; index != depth_images_.size(); ++index)
+    {
+        if (depth_images_[index])
+        {
+            vmaDestroyImage(context_->GetAllocator(), depth_images_[index], depth_allocations_[index]);
+        }
+    }
+    depth_images_.clear();
+    depth_allocations_.clear();
 }
 
 }  // namespace klvk

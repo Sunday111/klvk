@@ -67,10 +67,12 @@ public:
     void SetTargetFramerate(std::optional<float> framerate);
 
     void SetClearColor(const edt::Vec4f& color);
+    void SetDepthBufferEnabled(bool enabled);
 
     // Vulkan accessors for renderers.
     [[nodiscard]] DeviceContext& GetDeviceContext();
     [[nodiscard]] VkFormat GetSwapchainFormat() const;
+    [[nodiscard]] VkFormat GetDepthFormat() const;
 
     // Valid between PreTick and PostTick: the command buffer of the frame being recorded
     // (inside an active dynamic rendering pass targeting the swapchain image)

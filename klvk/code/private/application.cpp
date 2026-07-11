@@ -61,6 +61,7 @@ struct Application::State
     size_t frame_index_ = 0;
     uint32_t image_index_ = 0;
     bool frame_active_ = false;
+    bool depth_buffer_enabled_ = false;
 
     void InitTime()
     {
@@ -394,6 +395,30 @@ void Application::PreTick()
         Vulkan::CmdPipelineBarrier2(frame.command_buffer, dependency);
     }
 
+    if (state_->depth_buffer_enabled_)
+    {
+        const VkImageMemoryBarrier2 barrier{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask = VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+            .dstAccessMask =
+                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = state_->swapchain_->GetDepthImage(state_->image_index_),
+            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT, .levelCount = 1, .layerCount = 1},
+        };
+        const VkDependencyInfo dependency{
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &barrier,
+        };
+        Vulkan::CmdPipelineBarrier2(frame.command_buffer, dependency);
+    }
+
     const auto extent = state_->swapchain_->GetExtent();
     const auto& c = state_->clear_color_;
     const VkRenderingAttachmentInfo color_attachment{
@@ -404,12 +429,22 @@ void Application::PreTick()
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue = {.color = {.float32 = {c.x(), c.y(), c.z(), c.w()}}},
     };
+    const VkRenderingAttachmentInfo depth_attachment{
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = state_->depth_buffer_enabled_ ? state_->swapchain_->GetDepthImageView(state_->image_index_)
+                                                   : VK_NULL_HANDLE,
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .clearValue = {.depthStencil = {.depth = 1.f}},
+    };
     const VkRenderingInfo rendering_info{
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
         .renderArea = {.offset = {0, 0}, .extent = extent},
         .layerCount = 1,
         .colorAttachmentCount = 1,
         .pColorAttachments = &color_attachment,
+        .pDepthAttachment = state_->depth_buffer_enabled_ ? &depth_attachment : nullptr,
     };
     Vulkan::CmdBeginRendering(frame.command_buffer, rendering_info);
 
@@ -436,6 +471,28 @@ void Application::Tick() {}
 void Application::PostTick()
 {
     auto& frame = state_->CurrentFrame();
+
+    // ImGui's pipeline is color-only. End an application's depth-enabled pass and
+    // resume rendering the same color image without a depth attachment for the UI.
+    if (state_->depth_buffer_enabled_)
+    {
+        Vulkan::CmdEndRendering(frame.command_buffer);
+        const VkRenderingAttachmentInfo color_attachment{
+            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .imageView = state_->swapchain_->GetImageView(state_->image_index_),
+            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        };
+        const VkRenderingInfo rendering_info{
+            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+            .renderArea = {.offset = {0, 0}, .extent = state_->swapchain_->GetExtent()},
+            .layerCount = 1,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &color_attachment,
+        };
+        Vulkan::CmdBeginRendering(frame.command_buffer, rendering_info);
+    }
 
     ImGui::Render();
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), frame.command_buffer);
@@ -595,6 +652,11 @@ void Application::SetClearColor(const edt::Vec4f& color)
     state_->clear_color_ = color;
 }
 
+void Application::SetDepthBufferEnabled(bool enabled)
+{
+    state_->depth_buffer_enabled_ = enabled;
+}
+
 DeviceContext& Application::GetDeviceContext()
 {
     return *state_->device_context_;
@@ -603,6 +665,11 @@ DeviceContext& Application::GetDeviceContext()
 VkFormat Application::GetSwapchainFormat() const
 {
     return state_->swapchain_->GetFormat();
+}
+
+VkFormat Application::GetDepthFormat() const
+{
+    return Swapchain::kDepthFormat;
 }
 
 VkCommandBuffer Application::GetCurrentCommandBuffer() const

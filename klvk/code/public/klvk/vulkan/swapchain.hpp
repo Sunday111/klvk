@@ -5,6 +5,8 @@
 #include "EverydayTools/Math/Matrix.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
+VK_DEFINE_HANDLE(VmaAllocation)
+
 namespace klvk
 {
 
@@ -13,6 +15,8 @@ class DeviceContext;
 class Swapchain
 {
 public:
+    static constexpr VkFormat kDepthFormat = VK_FORMAT_D32_SFLOAT;
+
     Swapchain(DeviceContext& context, edt::Vec2<uint32_t> framebuffer_size);
     Swapchain(const Swapchain&) = delete;
     Swapchain(Swapchain&&) = delete;
@@ -26,6 +30,8 @@ public:
     [[nodiscard]] size_t GetImageCount() const noexcept { return images_.size(); }
     [[nodiscard]] VkImage GetImage(size_t index) const { return images_[index]; }
     [[nodiscard]] VkImageView GetImageView(size_t index) const { return image_views_[index]; }
+    [[nodiscard]] VkImage GetDepthImage(size_t index) const { return depth_images_[index]; }
+    [[nodiscard]] VkImageView GetDepthImageView(size_t index) const { return depth_image_views_[index]; }
 
 private:
     void Create(edt::Vec2<uint32_t> framebuffer_size, VkSwapchainKHR old_swapchain);
@@ -37,6 +43,9 @@ private:
     VkExtent2D extent_{};
     std::vector<VkImage> images_;
     std::vector<VkImageView> image_views_;
+    std::vector<VkImage> depth_images_;
+    std::vector<VmaAllocation> depth_allocations_;
+    std::vector<VkImageView> depth_image_views_;
 };
 
 }  // namespace klvk
