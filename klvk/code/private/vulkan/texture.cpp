@@ -5,6 +5,7 @@
 #include "klvk/error_handling.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
+#include "klvk/vulkan/vulkan_api.hpp"
 
 // Vulkan create-info structs are designed for partial designated initialization;
 // unlisted fields must be zero.
@@ -12,14 +13,11 @@
 #pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
 #endif
 
-
 namespace klvk
 {
 
-std::unique_ptr<Texture> Texture::CreateR8(
-    DeviceContext& context,
-    edt::Vec2<uint32_t> size,
-    std::span<const uint8_t> pixels)
+std::unique_ptr<Texture>
+Texture::CreateR8(DeviceContext& context, edt::Vec2<uint32_t> size, std::span<const uint8_t> pixels)
 {
     ErrorHandling::Ensure(
         pixels.size() == static_cast<size_t>(size.x()) * size.y(),
@@ -81,19 +79,18 @@ std::unique_ptr<Texture> Texture::CreateR8(
                 .imageMemoryBarrierCount = 1,
                 .pImageMemoryBarriers = &barrier,
             };
-            vkCmdPipelineBarrier2(command_buffer, &dependency);
+            Vulkan::CmdPipelineBarrier2NE(command_buffer, dependency);
 
             const VkBufferImageCopy region{
                 .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1},
                 .imageExtent = {size.x(), size.y(), 1},
             };
-            vkCmdCopyBufferToImage(
+            Vulkan::CmdCopyBufferToImageNE(
                 command_buffer,
                 staging.GetHandle(),
                 texture->image_,
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                1,
-                &region);
+                std::span{&region, 1});
 
             barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
             barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
@@ -101,7 +98,7 @@ std::unique_ptr<Texture> Texture::CreateR8(
             barrier.dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
             barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            vkCmdPipelineBarrier2(command_buffer, &dependency);
+            Vulkan::CmdPipelineBarrier2NE(command_buffer, dependency);
         });
 
     const VkImageViewCreateInfo view_info{
@@ -111,7 +108,7 @@ std::unique_ptr<Texture> Texture::CreateR8(
         .format = format,
         .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
     };
-    CheckVkResult(vkCreateImageView(context.GetDevice(), &view_info, nullptr, &texture->view_), "vkCreateImageView");
+    texture->view_ = Vulkan::CreateImageView(context.GetDevice(), view_info);
 
     // Same filtering verlet uses for the circle mask: nearest when minified, linear when magnified.
     const VkSamplerCreateInfo sampler_info{
@@ -124,7 +121,7 @@ std::unique_ptr<Texture> Texture::CreateR8(
         .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
         .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
     };
-    CheckVkResult(vkCreateSampler(context.GetDevice(), &sampler_info, nullptr, &texture->sampler_), "vkCreateSampler");
+    texture->sampler_ = Vulkan::CreateSampler(context.GetDevice(), sampler_info);
 
     return texture;
 }
@@ -132,8 +129,8 @@ std::unique_ptr<Texture> Texture::CreateR8(
 Texture::~Texture()
 {
     if (!context_) return;
-    if (sampler_) vkDestroySampler(context_->GetDevice(), sampler_, nullptr);
-    if (view_) vkDestroyImageView(context_->GetDevice(), view_, nullptr);
+    if (sampler_) Vulkan::DestroySamplerNE(context_->GetDevice(), sampler_);
+    if (view_) Vulkan::DestroyImageViewNE(context_->GetDevice(), view_);
     if (image_) vmaDestroyImage(context_->GetAllocator(), image_, allocation_);
 }
 

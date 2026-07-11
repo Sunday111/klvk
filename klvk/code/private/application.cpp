@@ -8,6 +8,7 @@
 #include <array>
 #include <chrono>
 #include <concepts>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -18,6 +19,7 @@
 #include "klvk/reflection/register_types.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/swapchain.hpp"
+#include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
 #include "platform/glfw/glfw_state.hpp"
 
@@ -121,7 +123,7 @@ struct Application::State
                 .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
                 .queueFamilyIndex = device_context_->GetGraphicsQueueFamily(),
             };
-            CheckVkResult(vkCreateCommandPool(device, &pool_info, nullptr, &frame.command_pool), "vkCreateCommandPool");
+            frame.command_pool = Vulkan::CreateCommandPool(device, pool_info);
 
             const VkCommandBufferAllocateInfo allocate_info{
                 .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -129,20 +131,16 @@ struct Application::State
                 .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
                 .commandBufferCount = 1,
             };
-            CheckVkResult(
-                vkAllocateCommandBuffers(device, &allocate_info, &frame.command_buffer),
-                "vkAllocateCommandBuffers");
+            frame.command_buffer = Vulkan::AllocateCommandBuffers(device, allocate_info).front();
 
             const VkSemaphoreCreateInfo semaphore_info{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-            CheckVkResult(
-                vkCreateSemaphore(device, &semaphore_info, nullptr, &frame.image_available),
-                "vkCreateSemaphore");
+            frame.image_available = Vulkan::CreateSemaphore(device, semaphore_info);
 
             const VkFenceCreateInfo fence_info{
                 .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
                 .flags = VK_FENCE_CREATE_SIGNALED_BIT,
             };
-            CheckVkResult(vkCreateFence(device, &fence_info, nullptr, &frame.in_flight), "vkCreateFence");
+            frame.in_flight = Vulkan::CreateFence(device, fence_info);
         }
 
         CreateRenderFinishedSemaphores();
@@ -153,13 +151,13 @@ struct Application::State
         VkDevice device = device_context_->GetDevice();
         for (VkSemaphore semaphore : render_finished_)
         {
-            vkDestroySemaphore(device, semaphore, nullptr);
+            Vulkan::DestroySemaphoreNE(device, semaphore);
         }
         render_finished_.assign(swapchain_->GetImageCount(), VK_NULL_HANDLE);
         for (VkSemaphore& semaphore : render_finished_)
         {
             const VkSemaphoreCreateInfo semaphore_info{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-            CheckVkResult(vkCreateSemaphore(device, &semaphore_info, nullptr, &semaphore), "vkCreateSemaphore");
+            semaphore = Vulkan::CreateSemaphore(device, semaphore_info);
         }
     }
 
@@ -168,14 +166,14 @@ struct Application::State
         VkDevice device = device_context_->GetDevice();
         for (VkSemaphore semaphore : render_finished_)
         {
-            vkDestroySemaphore(device, semaphore, nullptr);
+            Vulkan::DestroySemaphoreNE(device, semaphore);
         }
         render_finished_.clear();
         for (FrameInFlight& frame : frames_)
         {
-            if (frame.in_flight) vkDestroyFence(device, frame.in_flight, nullptr);
-            if (frame.image_available) vkDestroySemaphore(device, frame.image_available, nullptr);
-            if (frame.command_pool) vkDestroyCommandPool(device, frame.command_pool, nullptr);
+            if (frame.in_flight) Vulkan::DestroyFenceNE(device, frame.in_flight);
+            if (frame.image_available) Vulkan::DestroySemaphoreNE(device, frame.image_available);
+            if (frame.command_pool) Vulkan::DestroyCommandPoolNE(device, frame.command_pool);
             frame = {};
         }
     }
@@ -218,7 +216,7 @@ Application::~Application()
         ImGui_ImplVulkan_Shutdown();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
-        vkDestroyDescriptorPool(state_->device_context_->GetDevice(), state_->imgui_descriptor_pool_, nullptr);
+        Vulkan::DestroyDescriptorPoolNE(state_->device_context_->GetDevice(), state_->imgui_descriptor_pool_);
         state_->DestroyFrames();
         state_->swapchain_.reset();
         state_->device_context_.reset();
@@ -271,9 +269,7 @@ void Application::Initialize()
             .poolSizeCount = static_cast<uint32_t>(pool_sizes.size()),
             .pPoolSizes = pool_sizes.data(),
         };
-        CheckVkResult(
-            vkCreateDescriptorPool(device, &pool_info, nullptr, &state_->imgui_descriptor_pool_),
-            "vkCreateDescriptorPool");
+        state_->imgui_descriptor_pool_ = Vulkan::CreateDescriptorPool(device, pool_info);
 
         const VkFormat color_format = state_->swapchain_->GetFormat();
         ImGui_ImplVulkan_InitInfo init_info{};
@@ -334,38 +330,45 @@ void Application::PreTick()
     auto& frame = state_->CurrentFrame();
     VkDevice device = state_->device_context_->GetDevice();
 
-    CheckVkResult(
-        vkWaitForFences(device, 1, &frame.in_flight, VK_TRUE, std::numeric_limits<uint64_t>::max()),
-        "vkWaitForFences");
+    const WaitStatus wait_status =
+        Vulkan::WaitForFences(device, std::span{&frame.in_flight, 1}, true, std::numeric_limits<uint64_t>::max());
+    ErrorHandling::Ensure(wait_status == WaitStatus::Complete, "Timed out waiting for the frame fence");
 
     // Acquire the next swapchain image, recreating the swapchain when it is out of date.
     for (;;)
     {
-        const VkResult result = vkAcquireNextImageKHR(
+        const AcquireNextImageOutcome outcome = Vulkan::AcquireNextImageKHR(
             device,
             state_->swapchain_->GetHandle(),
             std::numeric_limits<uint64_t>::max(),
-            frame.image_available,
-            VK_NULL_HANDLE,
-            &state_->image_index_);
+            frame.image_available);
 
-        if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) break;
-        if (result == VK_ERROR_OUT_OF_DATE_KHR)
+        if (outcome.status == AcquireNextImageStatus::Acquired || outcome.status == AcquireNextImageStatus::Suboptimal)
+        {
+            state_->image_index_ = *outcome.image_index;
+            break;
+        }
+        if (outcome.status == AcquireNextImageStatus::OutOfDate)
         {
             state_->RecreateSwapchain();
             continue;
         }
-        CheckVkResult(result, "vkAcquireNextImageKHR");
+        ErrorHandling::Ensure(
+            outcome.status != AcquireNextImageStatus::NotReady,
+            "No swapchain image was ready despite an infinite acquisition timeout");
+        ErrorHandling::Ensure(
+            outcome.status != AcquireNextImageStatus::Timeout,
+            "Timed out acquiring a swapchain image despite an infinite timeout");
     }
 
-    CheckVkResult(vkResetFences(device, 1, &frame.in_flight), "vkResetFences");
-    CheckVkResult(vkResetCommandPool(device, frame.command_pool, 0), "vkResetCommandPool");
+    Vulkan::ResetFences(device, std::span{&frame.in_flight, 1});
+    Vulkan::ResetCommandPool(device, frame.command_pool);
 
     const VkCommandBufferBeginInfo begin_info{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     };
-    CheckVkResult(vkBeginCommandBuffer(frame.command_buffer, &begin_info), "vkBeginCommandBuffer");
+    Vulkan::BeginCommandBuffer(frame.command_buffer, begin_info);
     state_->frame_active_ = true;
 
     // undefined -> color attachment
@@ -388,7 +391,7 @@ void Application::PreTick()
             .imageMemoryBarrierCount = 1,
             .pImageMemoryBarriers = &barrier,
         };
-        vkCmdPipelineBarrier2(frame.command_buffer, &dependency);
+        Vulkan::CmdPipelineBarrier2(frame.command_buffer, dependency);
     }
 
     const auto extent = state_->swapchain_->GetExtent();
@@ -408,7 +411,7 @@ void Application::PreTick()
         .colorAttachmentCount = 1,
         .pColorAttachments = &color_attachment,
     };
-    vkCmdBeginRendering(frame.command_buffer, &rendering_info);
+    Vulkan::CmdBeginRendering(frame.command_buffer, rendering_info);
 
     // GL-style viewport (y up) so view matrices keep working unchanged after the klgl port.
     const VkViewport viewport{
@@ -419,9 +422,9 @@ void Application::PreTick()
         .minDepth = 0.f,
         .maxDepth = 1.f,
     };
-    vkCmdSetViewport(frame.command_buffer, 0, 1, &viewport);
+    Vulkan::CmdSetViewport(frame.command_buffer, 0, std::span{&viewport, 1});
     const VkRect2D scissor{.offset = {0, 0}, .extent = extent};
-    vkCmdSetScissor(frame.command_buffer, 0, 1, &scissor);
+    Vulkan::CmdSetScissor(frame.command_buffer, 0, std::span{&scissor, 1});
 
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -437,7 +440,7 @@ void Application::PostTick()
     ImGui::Render();
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), frame.command_buffer);
 
-    vkCmdEndRendering(frame.command_buffer);
+    Vulkan::CmdEndRendering(frame.command_buffer);
 
     // color attachment -> present
     {
@@ -459,10 +462,10 @@ void Application::PostTick()
             .imageMemoryBarrierCount = 1,
             .pImageMemoryBarriers = &barrier,
         };
-        vkCmdPipelineBarrier2(frame.command_buffer, &dependency);
+        Vulkan::CmdPipelineBarrier2(frame.command_buffer, dependency);
     }
 
-    CheckVkResult(vkEndCommandBuffer(frame.command_buffer), "vkEndCommandBuffer");
+    Vulkan::EndCommandBuffer(frame.command_buffer);
     state_->frame_active_ = false;
 
     VkSemaphore render_finished = state_->render_finished_[state_->image_index_];
@@ -490,9 +493,7 @@ void Application::PostTick()
             .signalSemaphoreInfoCount = 1,
             .pSignalSemaphoreInfos = &signal_info,
         };
-        CheckVkResult(
-            vkQueueSubmit2(state_->device_context_->GetGraphicsQueue(), 1, &submit_info, frame.in_flight),
-            "vkQueueSubmit2");
+        Vulkan::QueueSubmit2(state_->device_context_->GetGraphicsQueue(), std::span{&submit_info, 1}, frame.in_flight);
     }
 
     {
@@ -505,14 +506,10 @@ void Application::PostTick()
             .pSwapchains = &swapchain,
             .pImageIndices = &state_->image_index_,
         };
-        const VkResult result = vkQueuePresentKHR(state_->device_context_->GetGraphicsQueue(), &present_info);
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+        const PresentStatus status = Vulkan::QueuePresentKHR(state_->device_context_->GetGraphicsQueue(), present_info);
+        if (status == PresentStatus::OutOfDate || status == PresentStatus::Suboptimal)
         {
             state_->RecreateSwapchain();
-        }
-        else
-        {
-            CheckVkResult(result, "vkQueuePresentKHR");
         }
     }
 

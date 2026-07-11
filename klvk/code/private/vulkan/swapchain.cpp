@@ -4,13 +4,13 @@
 
 #include "klvk/error_handling.hpp"
 #include "klvk/vulkan/device_context.hpp"
+#include "klvk/vulkan/vulkan_api.hpp"
 
 // Vulkan create-info structs are designed for partial designated initialization;
 // unlisted fields must be zero.
 #ifdef __clang__
 #pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
 #endif
-
 
 namespace klvk
 {
@@ -20,10 +20,7 @@ namespace
 
 VkSurfaceFormatKHR ChooseSurfaceFormat(VkPhysicalDevice device, VkSurfaceKHR surface)
 {
-    uint32_t count = 0;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &count, nullptr);
-    std::vector<VkSurfaceFormatKHR> formats(count);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &count, formats.data());
+    const std::vector<VkSurfaceFormatKHR> formats = Vulkan::GetPhysicalDeviceSurfaceFormatsKHR(device, surface);
     ErrorHandling::Ensure(!formats.empty(), "Surface reports no formats");
 
     for (const auto& format : formats)
@@ -38,10 +35,7 @@ VkSurfaceFormatKHR ChooseSurfaceFormat(VkPhysicalDevice device, VkSurfaceKHR sur
 
 VkPresentModeKHR ChoosePresentMode(VkPhysicalDevice device, VkSurfaceKHR surface)
 {
-    uint32_t count = 0;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &count, nullptr);
-    std::vector<VkPresentModeKHR> modes(count);
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &count, modes.data());
+    const std::vector<VkPresentModeKHR> modes = Vulkan::GetPhysicalDeviceSurfacePresentModesKHR(device, surface);
 
     // Application paces frames itself (SetTargetFramerate), so prefer modes that do not block on vsync
     // to mirror klgl's glfwSwapInterval(0) behavior.
@@ -62,7 +56,7 @@ Swapchain::Swapchain(DeviceContext& context, edt::Vec2<uint32_t> framebuffer_siz
 Swapchain::~Swapchain()
 {
     DestroyImageViews();
-    if (swapchain_) vkDestroySwapchainKHR(context_->GetDevice(), swapchain_, nullptr);
+    if (swapchain_) Vulkan::DestroySwapchainKHRNE(context_->GetDevice(), swapchain_);
 }
 
 void Swapchain::Recreate(edt::Vec2<uint32_t> framebuffer_size)
@@ -71,7 +65,7 @@ void Swapchain::Recreate(edt::Vec2<uint32_t> framebuffer_size)
     DestroyImageViews();
     VkSwapchainKHR old_swapchain = swapchain_;
     Create(framebuffer_size, old_swapchain);
-    if (old_swapchain) vkDestroySwapchainKHR(context_->GetDevice(), old_swapchain, nullptr);
+    if (old_swapchain) Vulkan::DestroySwapchainKHRNE(context_->GetDevice(), old_swapchain);
 }
 
 void Swapchain::Create(edt::Vec2<uint32_t> framebuffer_size, VkSwapchainKHR old_swapchain)
@@ -79,10 +73,8 @@ void Swapchain::Create(edt::Vec2<uint32_t> framebuffer_size, VkSwapchainKHR old_
     VkPhysicalDevice physical_device = context_->GetPhysicalDevice();
     VkSurfaceKHR surface = context_->GetSurface();
 
-    VkSurfaceCapabilitiesKHR capabilities{};
-    CheckVkResult(
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &capabilities),
-        "vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
+    const VkSurfaceCapabilitiesKHR capabilities =
+        Vulkan::GetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface);
 
     format_ = ChooseSurfaceFormat(physical_device, surface);
 
@@ -121,16 +113,11 @@ void Swapchain::Create(edt::Vec2<uint32_t> framebuffer_size, VkSwapchainKHR old_
         .oldSwapchain = old_swapchain,
     };
 
-    CheckVkResult(
-        vkCreateSwapchainKHR(context_->GetDevice(), &create_info, nullptr, &swapchain_),
-        "vkCreateSwapchainKHR");
+    swapchain_ = Vulkan::CreateSwapchainKHR(context_->GetDevice(), create_info);
+    images_ = Vulkan::GetSwapchainImagesKHR(context_->GetDevice(), swapchain_);
 
-    uint32_t actual_count = 0;
-    vkGetSwapchainImagesKHR(context_->GetDevice(), swapchain_, &actual_count, nullptr);
-    images_.resize(actual_count);
-    vkGetSwapchainImagesKHR(context_->GetDevice(), swapchain_, &actual_count, images_.data());
-
-    image_views_.resize(actual_count);
+    image_views_.clear();
+    image_views_.reserve(images_.size());
     for (size_t index = 0; index != images_.size(); ++index)
     {
         const VkImageViewCreateInfo view_info{
@@ -140,9 +127,7 @@ void Swapchain::Create(edt::Vec2<uint32_t> framebuffer_size, VkSwapchainKHR old_
             .format = format_.format,
             .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
         };
-        CheckVkResult(
-            vkCreateImageView(context_->GetDevice(), &view_info, nullptr, &image_views_[index]),
-            "vkCreateImageView");
+        image_views_.push_back(Vulkan::CreateImageView(context_->GetDevice(), view_info));
     }
 }
 
@@ -150,7 +135,7 @@ void Swapchain::DestroyImageViews()
 {
     for (VkImageView view : image_views_)
     {
-        vkDestroyImageView(context_->GetDevice(), view, nullptr);
+        Vulkan::DestroyImageViewNE(context_->GetDevice(), view);
     }
     image_views_.clear();
 }

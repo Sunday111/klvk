@@ -15,6 +15,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/swapchain.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/texture.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/vma_usage.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/vulkan_api.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/vulkan_common.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/window.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/application.hpp
@@ -45,10 +46,13 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/simple_imgui_combo.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/simple_type_widget.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/type_id_widget_minimal.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/detail/settings.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/detail/vulkan_api_impl.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/device_context.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/gpu_buffer.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/swapchain.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/texture.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan_api.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan_common.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/window.hpp)
 add_library(klvk STATIC ${module_source_files})
@@ -58,6 +62,7 @@ target_link_libraries(klvk PUBLIC ass
                                   fmt
                                   CppReflection
                                   cpptrace::cpptrace
+                                  expected
                                   magic_enum
                                   unordered_dense
                                   glfw
@@ -68,6 +73,7 @@ target_link_libraries(klvk PUBLIC ass
 target_include_directories(klvk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/code/public)
 target_include_directories(klvk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/code/private)
 include(${CMAKE_CURRENT_SOURCE_DIR}/compile_shaders.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/vulkan_api.cmake)
 add_custom_target(klvk_copy_files ALL
     ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/content" ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/content
 )

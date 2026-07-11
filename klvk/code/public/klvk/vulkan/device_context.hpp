@@ -49,7 +49,7 @@ public:
     void SubmitOneTimeCommands(F&& record) const
     {
         VkCommandBuffer command_buffer = BeginOneTimeCommands();
-        record(command_buffer);
+        std::forward<F>(record)(command_buffer);
         EndOneTimeCommands(command_buffer);
     }
 

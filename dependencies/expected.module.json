@@ -1,0 +1,14 @@
+{
+    "ModuleType": "GitClone",
+    "GitUrl": "https://github.com/TartanLlama/expected",
+    "GitTag": "v1.1.0",
+    "TargetName": "expected",
+    "LocalPath": "TartanLlama/expected",
+    "Dependencies": {
+        "Public": [],
+        "Private": []
+    },
+    "CMakeOptions": {
+        "EXPECTED_BUILD_TESTS": false
+    }
+}
