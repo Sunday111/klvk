@@ -2,8 +2,11 @@ cmake_minimum_required(VERSION 3.20)
 include(set_compiler_options)
 set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/camera/camera_3d.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/events/event_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/filesystem/filesystem.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/math/transform.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/mesh/procedural_mesh_generator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/os/os.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/rendering/instanced_sprite_renderer_2d.cpp
@@ -19,6 +22,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/vulkan_common.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/window.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/application.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/camera/camera_3d.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/error_handling.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/detail.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/event_listener.hpp
@@ -29,6 +33,9 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/window_events.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/filesystem/filesystem.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/macro/ensure_enum_size.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/math/rotator.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/math/transform.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/mesh/procedural_mesh_generator.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/platform/os/os.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/reflection/matrix_reflect.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/reflection/register_types.hpp

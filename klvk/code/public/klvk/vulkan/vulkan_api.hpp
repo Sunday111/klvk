@@ -446,6 +446,17 @@ public:
         std::span<const VkDescriptorSet> descriptor_sets,
         std::span<const uint32_t> dynamic_offsets = {}) noexcept;
 
+    KLVK_VK_INLINE static void CmdBindIndexBufferNE(
+        VkCommandBuffer command_buffer,
+        VkBuffer buffer,
+        VkDeviceSize offset,
+        VkIndexType index_type) noexcept;
+    KLVK_VK_INLINE static void CmdBindIndexBuffer(
+        VkCommandBuffer command_buffer,
+        VkBuffer buffer,
+        VkDeviceSize offset,
+        VkIndexType index_type) noexcept;
+
     KLVK_VK_INLINE static void CmdBindPipelineNE(
         VkCommandBuffer command_buffer,
         VkPipelineBindPoint pipeline_bind_point,
@@ -454,6 +465,18 @@ public:
         VkCommandBuffer command_buffer,
         VkPipelineBindPoint pipeline_bind_point,
         VkPipeline pipeline) noexcept;
+
+    // buffers and offsets must have the same size.
+    KLVK_VK_INLINE static void CmdBindVertexBuffersNE(
+        VkCommandBuffer command_buffer,
+        uint32_t first_binding,
+        std::span<const VkBuffer> buffers,
+        std::span<const VkDeviceSize> offsets) noexcept;
+    KLVK_VK_INLINE static void CmdBindVertexBuffers(
+        VkCommandBuffer command_buffer,
+        uint32_t first_binding,
+        std::span<const VkBuffer> buffers,
+        std::span<const VkDeviceSize> offsets) noexcept;
 
     KLVK_VK_INLINE static void CmdCopyBufferToImageNE(
         VkCommandBuffer command_buffer,
@@ -479,6 +502,21 @@ public:
         uint32_t vertex_count,
         uint32_t instance_count,
         uint32_t first_vertex,
+        uint32_t first_instance) noexcept;
+
+    KLVK_VK_INLINE static void CmdDrawIndexedNE(
+        VkCommandBuffer command_buffer,
+        uint32_t index_count,
+        uint32_t instance_count,
+        uint32_t first_index,
+        int32_t vertex_offset,
+        uint32_t first_instance) noexcept;
+    KLVK_VK_INLINE static void CmdDrawIndexed(
+        VkCommandBuffer command_buffer,
+        uint32_t index_count,
+        uint32_t instance_count,
+        uint32_t first_index,
+        int32_t vertex_offset,
         uint32_t first_instance) noexcept;
 
     KLVK_VK_INLINE static void CmdEndRenderingNE(VkCommandBuffer command_buffer) noexcept;

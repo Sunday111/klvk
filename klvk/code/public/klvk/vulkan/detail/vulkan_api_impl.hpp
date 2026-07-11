@@ -807,6 +807,70 @@ void Vulkan::CmdCopyBufferToImage(
     CmdCopyBufferToImageNE(command_buffer, source, destination, destination_layout, regions);
 }
 
+void Vulkan::CmdBindIndexBufferNE(
+    VkCommandBuffer command_buffer,
+    VkBuffer buffer,
+    VkDeviceSize offset,
+    VkIndexType index_type) noexcept
+{
+    vkCmdBindIndexBuffer(command_buffer, buffer, offset, index_type);
+}
+
+void Vulkan::CmdBindIndexBuffer(
+    VkCommandBuffer command_buffer,
+    VkBuffer buffer,
+    VkDeviceSize offset,
+    VkIndexType index_type) noexcept
+{
+    CmdBindIndexBufferNE(command_buffer, buffer, offset, index_type);
+}
+
+void Vulkan::CmdBindVertexBuffersNE(
+    VkCommandBuffer command_buffer,
+    uint32_t first_binding,
+    std::span<const VkBuffer> buffers,
+    std::span<const VkDeviceSize> offsets) noexcept
+{
+    assert(buffers.size() == offsets.size());
+    vkCmdBindVertexBuffers(
+        command_buffer,
+        first_binding,
+        Internal::Count(buffers.size()),
+        buffers.data(),
+        offsets.data());
+}
+
+void Vulkan::CmdBindVertexBuffers(
+    VkCommandBuffer command_buffer,
+    uint32_t first_binding,
+    std::span<const VkBuffer> buffers,
+    std::span<const VkDeviceSize> offsets) noexcept
+{
+    CmdBindVertexBuffersNE(command_buffer, first_binding, buffers, offsets);
+}
+
+void Vulkan::CmdDrawIndexedNE(
+    VkCommandBuffer command_buffer,
+    uint32_t index_count,
+    uint32_t instance_count,
+    uint32_t first_index,
+    int32_t vertex_offset,
+    uint32_t first_instance) noexcept
+{
+    vkCmdDrawIndexed(command_buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
+}
+
+void Vulkan::CmdDrawIndexed(
+    VkCommandBuffer command_buffer,
+    uint32_t index_count,
+    uint32_t instance_count,
+    uint32_t first_index,
+    int32_t vertex_offset,
+    uint32_t first_instance) noexcept
+{
+    CmdDrawIndexedNE(command_buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
+}
+
 void Vulkan::CmdDrawNE(
     VkCommandBuffer command_buffer,
     uint32_t vertex_count,
