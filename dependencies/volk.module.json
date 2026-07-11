@@ -3,9 +3,6 @@
     "GitUrl": "https://github.com/zeux/volk",
     "GitTag": "vulkan-sdk-1.4.350.1",
     "TargetName": "volk",
-    "CMakeOptions": {
-        "VOLK_PULL_IN_VULKAN": false
-    },
     "Dependencies": {
         "Public": [
             "vulkan_headers"
