@@ -20,18 +20,24 @@ std::filesystem::path GetExecutableDir()
 
 #ifdef __unix__
 
-#include <stdio.h>
 #include <unistd.h>
+
+#include <string_view>
+
+#include "klvk/error_handling.hpp"
 
 namespace klvk::os
 {
 std::filesystem::path GetExecutableDir()
 {
+    // readlink does not null-terminate; the buffer is only valid up to the returned length.
     char path[1024];  // NOLINT
-    readlink("/proc/self/exe", path, sizeof(path) - 1);
-    const size_t index = std::string_view(path).find_last_of("\\/");
-    path[index] = '\0';
-    return path;
+    const ssize_t length = readlink("/proc/self/exe", path, sizeof(path));
+    ErrorHandling::Ensure(
+        length > 0 && length < static_cast<ssize_t>(sizeof(path)),
+        "Failed to read /proc/self/exe (readlink returned {})",
+        length);
+    return std::filesystem::path(std::string_view(path, static_cast<size_t>(length))).parent_path();
 }
 }  // namespace klvk::os
 #endif
