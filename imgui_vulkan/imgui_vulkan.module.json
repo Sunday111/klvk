@@ -1,0 +1,14 @@
+{
+    "ModuleType": "Library",
+    "GenerateCMakeFile": false,
+    "Dependencies": {
+        "GitPackages": [],
+        "Public": [
+            "imgui_sources",
+            "glfw",
+            "volk",
+            "vulkan_headers"
+        ],
+        "Private": []
+    }
+}

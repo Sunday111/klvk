@@ -1,0 +1,16 @@
+{
+    "ModuleType": "GitClone",
+    "GitUrl": "https://github.com/glfw/glfw",
+    "GitTag": "master",
+    "TargetName": "glfw",
+    "LocalPath": "glfw/glfw",
+    "CMakeOptions": {
+        "GLFW_BUILD_EXAMPLES": false,
+        "GLFW_BUILD_TESTS": false,
+        "GLFW_BUILD_DOCS": false
+    },
+    "Dependencies": {
+        "Public": [],
+        "Private": []
+    }
+}

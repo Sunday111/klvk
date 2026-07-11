@@ -1,0 +1,12 @@
+{
+    "dependencies": {
+        "packages": [
+            {
+                "link": "https://github.com/Sunday111/imgui_glfw_cmake yae",
+                "packages": [
+                    "imgui_glfw_cmake"
+                ]
+            }
+        ]
+    }
+}

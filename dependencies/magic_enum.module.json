@@ -1,0 +1,7 @@
+{
+    "ModuleType": "GitClone",
+    "GitUrl": "https://github.com/Neargye/magic_enum",
+    "GitTag": "v0.9.7",
+    "TargetName": "magic_enum",
+    "LocalPath": "Neargye/magic_enum"
+}

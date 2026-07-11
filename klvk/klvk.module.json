@@ -1,0 +1,24 @@
+{
+    "ModuleType": "Library",
+    "Dependencies": {
+        "Public": [
+            "edt",
+            "fmtlib",
+            "cpptrace",
+            "magic_enum",
+            "unordered_dense",
+            "glfw",
+            "vulkan_headers",
+            "volk",
+            "vma",
+            "imgui_vulkan"
+        ],
+        "Private": []
+    },
+    "ExtraCMakeFiles": [
+        "compile_shaders"
+    ],
+    "CopyDirectoriesAfterBuild": [
+        "content"
+    ]
+}

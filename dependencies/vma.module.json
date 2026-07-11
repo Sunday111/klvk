@@ -1,0 +1,13 @@
+{
+    "ModuleType": "GitClone",
+    "GitUrl": "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator",
+    "GitTag": "v3.4.0",
+    "TargetName": "VulkanMemoryAllocator",
+    "CMakeOptions": {},
+    "Dependencies": {
+        "Public": [
+            "vulkan_headers"
+        ],
+        "Private": []
+    }
+}
