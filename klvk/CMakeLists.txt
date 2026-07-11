@@ -1,13 +1,21 @@
 cmake_minimum_required(VERSION 3.20)
 include(set_compiler_options)
 set(module_source_files
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/events/event_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/filesystem/filesystem.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/os/os.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/simple_imgui_combo.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/type_id_widget.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/device_context.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/gpu_buffer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/swapchain.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/texture.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/vma_usage.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/vulkan_common.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/window.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/application.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/error_handling.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/detail.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/event_listener.hpp
@@ -33,7 +41,12 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/simple_imgui_combo.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/simple_type_widget.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/type_id_widget_minimal.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan_common.hpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/device_context.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/gpu_buffer.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/swapchain.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/texture.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan_common.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/window.hpp)
 add_library(klvk STATIC ${module_source_files})
 set_generic_compiler_options(klvk PRIVATE)
 target_link_libraries(klvk PUBLIC ass

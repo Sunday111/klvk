@@ -7,6 +7,8 @@
 namespace klvk
 {
 
+using namespace edt::lazy_matrix_aliases;  // NOLINT
+
 inline void RegisterReflectionTypes()
 {
     [[maybe_unused]] const cppreflection::Type* t{};
