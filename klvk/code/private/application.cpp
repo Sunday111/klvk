@@ -319,6 +319,18 @@ void Application::Run()
 
 void Application::PreTick()
 {
+    // Recreate the swapchain when the window size changes. Cannot rely on
+    // VK_ERROR_OUT_OF_DATE_KHR alone: on Wayland the compositor silently
+    // stretches the presented image instead of invalidating the swapchain.
+    {
+        const auto framebuffer_size = state_->window_->GetFramebufferSize();
+        const VkExtent2D extent = state_->swapchain_->GetExtent();
+        if (framebuffer_size.x() != extent.width || framebuffer_size.y() != extent.height)
+        {
+            state_->RecreateSwapchain();
+        }
+    }
+
     auto& frame = state_->CurrentFrame();
     VkDevice device = state_->device_context_->GetDevice();
 
