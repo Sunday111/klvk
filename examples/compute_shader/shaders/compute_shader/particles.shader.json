@@ -1,0 +1,9 @@
+{
+    "definitions": [
+        {
+            "name": "COLOR_FUNCTION",
+            "type": "int",
+            "default": 0
+        }
+    ]
+}

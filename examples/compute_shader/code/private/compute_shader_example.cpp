@@ -11,6 +11,7 @@
 #include "klvk/events/event_manager.hpp"
 #include "klvk/events/mouse_events.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/shader/shader.hpp"
 #include "klvk/math/rotator.hpp"
 #include "klvk/template/on_scope_leave.hpp"
 #include "klvk/vulkan/device_context.hpp"
@@ -156,25 +157,26 @@ class ComputeShaderApp : public klvk::Application
         return context.CreateShaderModule(data, name);
     }
 
-    VkPipeline CreateGraphicsPipeline(
-        klvk::DeviceContext& context,
-        VkShaderModule vertex,
-        VkShaderModule fragment,
-        const VkSpecializationInfo* vertex_specialization = nullptr)
+    VkPipeline CreateGraphicsPipeline(klvk::DeviceContext& context, VkShaderModule vertex, VkShaderModule fragment)
     {
-        const std::array stages{
+        const std::vector<VkPipelineShaderStageCreateInfo> stages{
             VkPipelineShaderStageCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                 .stage = VK_SHADER_STAGE_VERTEX_BIT,
                 .module = vertex,
-                .pName = "main",
-                .pSpecializationInfo = vertex_specialization},
+                .pName = "main"},
             VkPipelineShaderStageCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                 .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
                 .module = fragment,
                 .pName = "main"},
         };
+        return CreateGraphicsPipeline(context, stages);
+    }
+
+    VkPipeline
+    CreateGraphicsPipeline(klvk::DeviceContext& context, const std::vector<VkPipelineShaderStageCreateInfo>& stages)
+    {
         const VkPipelineVertexInputStateCreateInfo vertex_input{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
         const VkPipelineInputAssemblyStateCreateInfo assembly{
@@ -257,38 +259,29 @@ class ComputeShaderApp : public klvk::Application
             .layout = pipeline_layout_};
         compute_pipeline_ = klvk::Vulkan::CreateComputePipelines(device, {}, std::span{&compute_info, 1}).front();
         bodies_pipeline_ = CreateGraphicsPipeline(context, bodies_vertex, fragment);
+
+        klvk::Shader::shaders_dir_ = GetShaderDir();
+        particles_shader_ = std::make_unique<klvk::Shader>(context, "compute_shader/particles");
+        color_function_define_ = particles_shader_->GetDefine("COLOR_FUNCTION");
         RebuildParticlesPipeline();
     }
 
     // klgl recompiles the particle shader when COLOR_FUNCTION changes; the
-    // specialization constant requires a pipeline rebuild the same way.
+    // specialization constants in klvk::Shader require a pipeline rebuild the same way.
     void RebuildParticlesPipeline()
     {
         auto& context = GetDeviceContext();
-        const VkDevice device = context.GetDevice();
         if (particles_pipeline_)
         {
             context.WaitIdle();
-            klvk::Vulkan::DestroyPipelineNE(device, particles_pipeline_);
+            klvk::Vulkan::DestroyPipelineNE(context.GetDevice(), particles_pipeline_);
         }
 
-        const VkShaderModule vertex = Load(context, "particles.vert.spv");
-        const VkShaderModule fragment = Load(context, "particles.frag.spv");
-        auto cleanup = klvk::OnScopeLeave(
-            [&]
-            {
-                klvk::Vulkan::DestroyShaderModuleNE(device, vertex);
-                klvk::Vulkan::DestroyShaderModuleNE(device, fragment);
-            });
-
-        const int32_t color_function = color_function_;
-        const VkSpecializationMapEntry entry{.constantID = 0, .offset = 0, .size = sizeof(color_function)};
-        const VkSpecializationInfo specialization{
-            .mapEntryCount = 1,
-            .pMapEntries = &entry,
-            .dataSize = sizeof(color_function),
-            .pData = &color_function};
-        particles_pipeline_ = CreateGraphicsPipeline(context, vertex, fragment, &specialization);
+        // The .comp stage belongs to the simulation pipeline, not this one.
+        const auto stages = particles_shader_->MakeShaderStages(
+            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+        particles_pipeline_ = CreateGraphicsPipeline(context, stages);
+        particles_pipeline_shader_version_ = particles_shader_->GetVersion();
     }
 
     std::array<Vec4f, 2> UpdateBodies()
@@ -324,10 +317,8 @@ class ComputeShaderApp : public klvk::Application
     {
         klvk::Application::Tick();
         HandleInput();
-        if (pending_color_function_)
+        if (particles_pipeline_shader_version_ != particles_shader_->GetVersion())
         {
-            color_function_ = *pending_color_function_;
-            pending_color_function_.reset();
             RebuildParticlesPipeline();
         }
 
@@ -433,10 +424,12 @@ class ComputeShaderApp : public klvk::Application
 
         if (ImGui::CollapsingHeader("Shader"))
         {
-            int color_function = pending_color_function_.value_or(color_function_);
+            int color_function = particles_shader_->GetDefineValue<int32_t>(color_function_define_);
             if (ImGui::SliderInt("COLOR_FUNCTION", &color_function, 0, 2))
             {
-                pending_color_function_ = color_function;
+                // Applied at the start of the next frame: this frame's command
+                // buffer still references the current pipeline.
+                particles_shader_->SetDefineValue(color_function_define_, color_function);
             }
         }
         ImGui::End();
@@ -474,6 +467,7 @@ public:
         auto& context = GetDeviceContext();
         context.WaitIdle();
         const VkDevice device = context.GetDevice();
+        particles_shader_.reset();
         klvk::Vulkan::DestroyPipelineNE(device, compute_pipeline_);
         klvk::Vulkan::DestroyPipelineNE(device, particles_pipeline_);
         klvk::Vulkan::DestroyPipelineNE(device, bodies_pipeline_);
@@ -509,8 +503,9 @@ private:
     float camera_speed_ = 5.f;
     float time_step_ = 0.f;
     float particle_alpha_ = 0.1f;
-    int color_function_ = 0;
-    std::optional<int> pending_color_function_;
+    std::unique_ptr<klvk::Shader> particles_shader_;
+    klvk::DefineHandle color_function_define_;
+    size_t particles_pipeline_shader_version_ = 0;
 };
 
 void Main()

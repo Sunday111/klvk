@@ -10,6 +10,7 @@
             "expected",
             "magic_enum",
             "unordered_dense",
+            "nlohmann_json",
             "glfw",
             "vulkan_headers",
             "volk",

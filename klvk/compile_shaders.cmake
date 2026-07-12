@@ -34,6 +34,21 @@ if(NOT COMMAND klvk_compile_shaders)
             list(APPEND spirv_outputs "${shader_output}")
         endforeach()
 
+        # Shader configs (specialization constant definitions) ship next to the bytecode.
+        file(GLOB_RECURSE shader_configs "${shaders_src_dir}/*.shader.json")
+        foreach(shader_config ${shader_configs})
+            file(RELATIVE_PATH config_rel "${shaders_src_dir}" "${shader_config}")
+            set(config_output "${shaders_out_dir}/${config_rel}")
+            get_filename_component(config_output_dir "${config_output}" DIRECTORY)
+            add_custom_command(
+                OUTPUT "${config_output}"
+                COMMAND ${CMAKE_COMMAND} -E make_directory "${config_output_dir}"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${shader_config}" "${config_output}"
+                DEPENDS "${shader_config}"
+                COMMENT "copy ${config_rel}")
+            list(APPEND spirv_outputs "${config_output}")
+        endforeach()
+
         add_custom_target(${target}_compile_shaders DEPENDS ${spirv_outputs})
         add_dependencies(${target} ${target}_compile_shaders)
     endfunction()

@@ -11,6 +11,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/os/os.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/rendering/curve_renderer_2d.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/rendering/instanced_sprite_renderer_2d.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/texture/procedural_texture_generator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/simple_imgui_combo.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/type_id_widget.cpp
@@ -44,6 +45,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/reflection/register_types.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/rendering/curve_renderer_2d.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/rendering/instanced_sprite_renderer_2d.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/define_handle.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/shader.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/class_member_traits.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/constexpr_string_hash.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/get_enum_underlying.hpp
@@ -76,6 +79,7 @@ target_link_libraries(klvk PUBLIC ass
                                   expected
                                   magic_enum
                                   unordered_dense
+                                  nlohmann_json
                                   glfw
                                   Vulkan-Headers
                                   volk
