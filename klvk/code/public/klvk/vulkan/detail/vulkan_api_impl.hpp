@@ -38,7 +38,7 @@ struct Vulkan::Internal
     {
         if (call_result.result == VK_SUCCESS)
         {
-            return std::move(call_result.value);
+            return std::move(call_result).value;
         }
 
         return tl::unexpected{MakeError(call_result.result, function_name, cpptrace::generate_raw_trace(1))};
@@ -68,7 +68,7 @@ struct Vulkan::Internal
     {
         if (expected.has_value())
         {
-            return std::move(expected.value());
+            return std::move(expected).value();
         }
 
         throw std::move(expected.error());
@@ -78,7 +78,7 @@ struct Vulkan::Internal
     {
         if (error.has_value())
         {
-            throw std::move(error.value());
+            throw std::move(error).value();
         }
     }
 
@@ -88,7 +88,7 @@ struct Vulkan::Internal
         for (;;)
         {
             uint32_t count = 0;
-            VkResult result = enumerate(count, nullptr);
+            VkResult result = std::forward<Enumerator>(enumerate)(count, nullptr);
             if (result != VK_SUCCESS && result != VK_INCOMPLETE)
             {
                 return {.result = result};
