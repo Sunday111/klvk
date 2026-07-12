@@ -134,6 +134,12 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::AlphaBlend()
     return *this;
 }
 
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::Blend(const VkPipelineColorBlendAttachmentState& attachment)
+{
+    blend_attachment_ = attachment;
+    return *this;
+}
+
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::DepthTest(VkCompareOp compare_op)
 {
     depth_test_ = true;

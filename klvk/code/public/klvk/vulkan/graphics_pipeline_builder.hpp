@@ -50,8 +50,10 @@ public:
     GraphicsPipelineBuilder& VertexAttribute(uint32_t location, uint32_t binding, VkFormat format, uint32_t offset);
 
     // No blending is the default. AlphaBlend() sets the usual straight-alpha
-    // over-operator used by the 2d/sprite examples.
+    // over-operator used by the 2d/sprite examples; Blend() takes an explicit
+    // attachment state for anything that does not fit the preset.
     GraphicsPipelineBuilder& AlphaBlend();
+    GraphicsPipelineBuilder& Blend(const VkPipelineColorBlendAttachmentState& attachment);
 
     // Enables depth testing and writing and pulls the depth attachment format
     // from the application (or the format given here).

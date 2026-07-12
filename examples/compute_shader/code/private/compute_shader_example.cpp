@@ -16,6 +16,7 @@
 #include "klvk/ui/simple_type_widget.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
+#include "klvk/vulkan/graphics_pipeline_builder.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
 
@@ -156,7 +157,7 @@ class ComputeShaderApp : public klvk::Application
 
     VkPipeline CreateGraphicsPipeline(klvk::DeviceContext& context, VkShaderModule vertex, VkShaderModule fragment)
     {
-        const std::vector<VkPipelineShaderStageCreateInfo> stages{
+        const std::array<VkPipelineShaderStageCreateInfo, 2> stages{
             VkPipelineShaderStageCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                 .stage = VK_SHADER_STAGE_VERTEX_BIT,
@@ -173,25 +174,11 @@ class ComputeShaderApp : public klvk::Application
 
     VkPipeline CreateGraphicsPipeline(
         klvk::DeviceContext& context,
-        const std::vector<VkPipelineShaderStageCreateInfo>& stages)
+        std::span<const VkPipelineShaderStageCreateInfo> stages)
     {
-        const VkPipelineVertexInputStateCreateInfo vertex_input{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-        const VkPipelineInputAssemblyStateCreateInfo assembly{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-            .topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST};
-        const VkPipelineViewportStateCreateInfo viewport{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-            .viewportCount = 1,
-            .scissorCount = 1};
-        const VkPipelineRasterizationStateCreateInfo raster{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-            .polygonMode = VK_POLYGON_MODE_FILL,
-            .cullMode = VK_CULL_MODE_NONE,
-            .lineWidth = 1.f};
-        const VkPipelineMultisampleStateCreateInfo multisample{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT};
+        // Straight-alpha color blend but with the destination alpha left untouched
+        // (dstAlpha = ZERO), so this needs an explicit attachment rather than the
+        // AlphaBlend() preset.
         const VkPipelineColorBlendAttachmentState attachment{
             .blendEnable = VK_TRUE,
             .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
@@ -202,34 +189,13 @@ class ComputeShaderApp : public klvk::Application
             .alphaBlendOp = VK_BLEND_OP_ADD,
             .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
                               VK_COLOR_COMPONENT_A_BIT};
-        const VkPipelineColorBlendStateCreateInfo blend{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-            .attachmentCount = 1,
-            .pAttachments = &attachment};
-        const std::array states{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-        const VkPipelineDynamicStateCreateInfo dynamic{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-            .dynamicStateCount = static_cast<uint32_t>(states.size()),
-            .pDynamicStates = states.data()};
-        const VkFormat format = GetSwapchainFormat();
-        const VkPipelineRenderingCreateInfo rendering{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-            .colorAttachmentCount = 1,
-            .pColorAttachmentFormats = &format};
-        const VkGraphicsPipelineCreateInfo info{
-            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .pNext = &rendering,
-            .stageCount = static_cast<uint32_t>(stages.size()),
-            .pStages = stages.data(),
-            .pVertexInputState = &vertex_input,
-            .pInputAssemblyState = &assembly,
-            .pViewportState = &viewport,
-            .pRasterizationState = &raster,
-            .pMultisampleState = &multisample,
-            .pColorBlendState = &blend,
-            .pDynamicState = &dynamic,
-            .layout = pipeline_layout_};
-        return klvk::Vulkan::CreateGraphicsPipelines(context.GetDevice(), {}, std::span{&info, 1}).front();
+        return klvk::GraphicsPipelineBuilder(context)
+            .Layout(pipeline_layout_)
+            .Stages(stages)
+            .Topology(VK_PRIMITIVE_TOPOLOGY_POINT_LIST)
+            .Blend(attachment)
+            .ColorFormat(GetSwapchainFormat())
+            .Build();
     }
 
     void CreatePipelines(klvk::DeviceContext& context)
