@@ -3,8 +3,8 @@
 #include <algorithm>
 
 #include "klvk/filesystem/filesystem.hpp"
-#include "klvk/template/on_scope_leave.hpp"
 #include "klvk/vulkan/device_context.hpp"
+#include "klvk/vulkan/graphics_pipeline_builder.hpp"
 #include "klvk/vulkan/texture.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 
@@ -117,105 +117,12 @@ InstancedSpriteRenderer2d::InstancedSpriteRenderer2d(Application& app, const Tex
     }
 
     {
-        auto load_shader = [&](const char* name)
-        {
-            return context.CreateShaderModuleFromSource(app.GetShaderDir() / name);
-        };
-
-        VkShaderModule vertex_shader = load_shader("klvk/instanced_sprite.vert");
-        VkShaderModule fragment_shader = load_shader("klvk/instanced_sprite.frag");
-        auto destroy_modules = OnScopeLeave(
-            [&]
-            {
-                Vulkan::DestroyShaderModuleNE(device, vertex_shader);
-                Vulkan::DestroyShaderModuleNE(device, fragment_shader);
-            });
-
-        const std::array<VkPipelineShaderStageCreateInfo, 2> stages{
-            VkPipelineShaderStageCreateInfo{
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                .stage = VK_SHADER_STAGE_VERTEX_BIT,
-                .module = vertex_shader,
-                .pName = "main",
-            },
-            VkPipelineShaderStageCreateInfo{
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .module = fragment_shader,
-                .pName = "main",
-            },
-        };
-
-        const VkPipelineVertexInputStateCreateInfo vertex_input{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        };
-        const VkPipelineInputAssemblyStateCreateInfo input_assembly{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        };
-        const VkPipelineViewportStateCreateInfo viewport_state{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-            .viewportCount = 1,
-            .scissorCount = 1,
-        };
-        const VkPipelineRasterizationStateCreateInfo rasterization{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-            .polygonMode = VK_POLYGON_MODE_FILL,
-            .cullMode = VK_CULL_MODE_NONE,
-            .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-            .lineWidth = 1.f,
-        };
-        const VkPipelineMultisampleStateCreateInfo multisample{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-        };
-        const VkPipelineColorBlendAttachmentState blend_attachment{
-            .blendEnable = VK_TRUE,
-            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-            .colorBlendOp = VK_BLEND_OP_ADD,
-            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-            .alphaBlendOp = VK_BLEND_OP_ADD,
-            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
-                              VK_COLOR_COMPONENT_A_BIT,
-        };
-        const VkPipelineColorBlendStateCreateInfo color_blend{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-            .attachmentCount = 1,
-            .pAttachments = &blend_attachment,
-        };
-        const std::array dynamic_states{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-        const VkPipelineDynamicStateCreateInfo dynamic_state{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-            .dynamicStateCount = static_cast<uint32_t>(dynamic_states.size()),
-            .pDynamicStates = dynamic_states.data(),
-        };
-
-        const VkFormat color_format = app.GetSwapchainFormat();
-        const VkPipelineRenderingCreateInfo rendering_info{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-            .colorAttachmentCount = 1,
-            .pColorAttachmentFormats = &color_format,
-        };
-
-        const VkGraphicsPipelineCreateInfo pipeline_info{
-            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .pNext = &rendering_info,
-            .stageCount = static_cast<uint32_t>(stages.size()),
-            .pStages = stages.data(),
-            .pVertexInputState = &vertex_input,
-            .pInputAssemblyState = &input_assembly,
-            .pViewportState = &viewport_state,
-            .pRasterizationState = &rasterization,
-            .pMultisampleState = &multisample,
-            .pColorBlendState = &color_blend,
-            .pDynamicState = &dynamic_state,
-            .layout = pipeline_layout_,
-        };
-        const std::vector<VkPipeline> pipelines =
-            Vulkan::CreateGraphicsPipelines(device, VK_NULL_HANDLE, std::span{&pipeline_info, 1});
-        pipeline_ = pipelines.front();
+        pipeline_ = GraphicsPipelineBuilder(app)
+                        .Layout(pipeline_layout_)
+                        .VertexShaderFile(app.GetShaderDir() / "klvk/instanced_sprite.vert")
+                        .FragmentShaderFile(app.GetShaderDir() / "klvk/instanced_sprite.frag")
+                        .AlphaBlend()
+                        .Build();
     }
 }
 

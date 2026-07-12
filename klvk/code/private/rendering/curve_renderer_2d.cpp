@@ -4,8 +4,8 @@
 
 #include "EverydayTools/Math/Math.hpp"
 #include "klvk/filesystem/filesystem.hpp"
-#include "klvk/template/on_scope_leave.hpp"
 #include "klvk/vulkan/device_context.hpp"
+#include "klvk/vulkan/graphics_pipeline_builder.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 
 #ifdef __clang__
@@ -103,104 +103,16 @@ CurveRenderer2d::CurveRenderer2d(Application& app, VkFormat color_format) : app_
     auto& context = app.GetDeviceContext();
     const VkDevice device = context.GetDevice();
     pipeline_layout_ = Vulkan::CreatePipelineLayout(device, {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO});
-    auto load = [&](const char* name)
-    {
-        return context.CreateShaderModuleFromSource(app.GetShaderDir() / "klvk" / name);
-    };
-    const VkShaderModule vs = load("curve2d.vert");
-    const VkShaderModule fs = load("curve2d.frag");
-    auto cleanup = OnScopeLeave(
-        [&]
-        {
-            Vulkan::DestroyShaderModuleNE(device, vs);
-            Vulkan::DestroyShaderModuleNE(device, fs);
-        });
-    const std::array stages{
-        VkPipelineShaderStageCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .stage = VK_SHADER_STAGE_VERTEX_BIT,
-            .module = vs,
-            .pName = "main"},
-        VkPipelineShaderStageCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-            .module = fs,
-            .pName = "main"},
-    };
-    const VkVertexInputBindingDescription binding{
-        .binding = 0,
-        .stride = sizeof(Vertex),
-        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX};
-    const std::array attributes{
-        VkVertexInputAttributeDescription{
-            .location = 0,
-            .binding = 0,
-            .format = VK_FORMAT_R32G32_SFLOAT,
-            .offset = offsetof(Vertex, position)},
-        VkVertexInputAttributeDescription{
-            .location = 1,
-            .binding = 0,
-            .format = VK_FORMAT_R8G8B8A8_UNORM,
-            .offset = offsetof(Vertex, color)},
-    };
-    const VkPipelineVertexInputStateCreateInfo vertex_input{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .vertexBindingDescriptionCount = 1,
-        .pVertexBindingDescriptions = &binding,
-        .vertexAttributeDescriptionCount = static_cast<uint32_t>(attributes.size()),
-        .pVertexAttributeDescriptions = attributes.data()};
-    const VkPipelineInputAssemblyStateCreateInfo assembly{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
-    const VkPipelineViewportStateCreateInfo viewport{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-        .viewportCount = 1,
-        .scissorCount = 1};
-    const VkPipelineRasterizationStateCreateInfo raster{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-        .polygonMode = VK_POLYGON_MODE_FILL,
-        .cullMode = VK_CULL_MODE_NONE,
-        .lineWidth = 1.f};
-    const VkPipelineMultisampleStateCreateInfo multisample{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT};
-    const VkPipelineColorBlendAttachmentState attachment{
-        .blendEnable = VK_TRUE,
-        .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-        .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-        .colorBlendOp = VK_BLEND_OP_ADD,
-        .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-        .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-        .alphaBlendOp = VK_BLEND_OP_ADD,
-        .colorWriteMask =
-            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT};
-    const VkPipelineColorBlendStateCreateInfo blend{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-        .attachmentCount = 1,
-        .pAttachments = &attachment};
-    const std::array dynamics{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-    const VkPipelineDynamicStateCreateInfo dynamic{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        .dynamicStateCount = static_cast<uint32_t>(dynamics.size()),
-        .pDynamicStates = dynamics.data()};
-    const VkPipelineRenderingCreateInfo rendering{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-        .colorAttachmentCount = 1,
-        .pColorAttachmentFormats = &color_format};
-    const VkGraphicsPipelineCreateInfo info{
-        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .pNext = &rendering,
-        .stageCount = static_cast<uint32_t>(stages.size()),
-        .pStages = stages.data(),
-        .pVertexInputState = &vertex_input,
-        .pInputAssemblyState = &assembly,
-        .pViewportState = &viewport,
-        .pRasterizationState = &raster,
-        .pMultisampleState = &multisample,
-        .pColorBlendState = &blend,
-        .pDynamicState = &dynamic,
-        .layout = pipeline_layout_};
-    pipeline_ = Vulkan::CreateGraphicsPipelines(device, {}, std::span{&info, 1}).front();
+    pipeline_ = GraphicsPipelineBuilder(app)
+                    .Layout(pipeline_layout_)
+                    .VertexShaderFile(app.GetShaderDir() / "klvk" / "curve2d.vert")
+                    .FragmentShaderFile(app.GetShaderDir() / "klvk" / "curve2d.frag")
+                    .VertexBinding(0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX)
+                    .VertexAttribute(0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, position))
+                    .VertexAttribute(1, 0, VK_FORMAT_R8G8B8A8_UNORM, offsetof(Vertex, color))
+                    .AlphaBlend()
+                    .ColorFormat(color_format)
+                    .Build();
 }
 
 CurveRenderer2d::~CurveRenderer2d()
