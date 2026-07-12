@@ -2,6 +2,8 @@
 
 #include <EverydayTools/Math/Math.hpp>
 
+#include <optional>
+
 #include "klvk/application.hpp"
 #include "klvk/camera/camera_3d.hpp"
 #include "klvk/error_handling.hpp"
@@ -14,6 +16,7 @@
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/ui/simple_type_widget.hpp"
 #include "klvk/window.hpp"
 
 #ifdef __clang__
@@ -41,17 +44,21 @@ struct SimulationPushConstants
 
 struct GraphicsPushConstants
 {
-    std::array<Vec4f, 4> mvp_columns{};
+    Mat4f mvp{};
     Vec4f color{};
     Vec4f body_a{};
     Vec4f body_b{};
 };
 
+static_assert(sizeof(GraphicsPushConstants) == 112);
+
 struct Body
 {
+    Vec3f orbit_center{};
     float orbit_radius = 5.f;
-    klvk::Rotator rotation{};
+    klvk::Rotator initial_rotation{};
     klvk::Rotator rotation_per_second{};
+    klvk::Rotator rotation{};
 };
 
 class ComputeShaderApp : public klvk::Application
@@ -64,7 +71,8 @@ class ComputeShaderApp : public klvk::Application
         klvk::Application::Initialize();
         SetClearColor({});
         GetWindow().SetSize(1000, 1000);
-        GetWindow().SetTitle("Compute shader particles");
+        // Same title as the klgl version of this example.
+        GetWindow().SetTitle("Painter 2d");
         SetTargetFramerate(60.f);
         listener_ = klvk::events::EventListenerMethodCallbacks<&ComputeShaderApp::OnMouseMove>::CreatePtr(this);
         GetEventManager().AddEventListener(*listener_);
@@ -79,40 +87,36 @@ class ComputeShaderApp : public klvk::Application
         set_layout_ = klvk::Vulkan::CreateDescriptorSetLayout(
             device,
             {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 1, .pBindings = &binding});
-        const VkDescriptorPoolSize pool_size{
-            .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            .descriptorCount = kFramesInFlight};
+        const VkDescriptorPoolSize pool_size{.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1};
         descriptor_pool_ = klvk::Vulkan::CreateDescriptorPool(
             device,
             {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-             .maxSets = kFramesInFlight,
+             .maxSets = 1,
              .poolSizeCount = 1,
              .pPoolSizes = &pool_size});
-        const std::array layouts{set_layout_, set_layout_};
-        const auto sets = klvk::Vulkan::AllocateDescriptorSets(
-            device,
-            {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-             .descriptorPool = descriptor_pool_,
-             .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
-             .pSetLayouts = layouts.data()});
+        set_ = klvk::Vulkan::AllocateDescriptorSets(
+                   device,
+                   {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                    .descriptorPool = descriptor_pool_,
+                    .descriptorSetCount = 1,
+                    .pSetLayouts = &set_layout_})
+                   .front();
 
+        // The particle state persists across frames (klgl keeps one SSBO), so a
+        // single buffer serves every frame; barriers order the accesses.
         const std::vector particles = MakeParticles();
         const VkDeviceSize bytes = particles.size() * sizeof(Particle);
-        for (size_t i = 0; i != kFramesInFlight; ++i)
-        {
-            sets_[i] = sets[i];
-            buffers_[i] = klvk::GpuBuffer(context, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, bytes, true);
-            buffers_[i].Write(std::as_bytes(std::span{particles}));
-            const VkDescriptorBufferInfo buffer{.buffer = buffers_[i].GetHandle(), .range = bytes};
-            const VkWriteDescriptorSet write{
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstSet = sets_[i],
-                .dstBinding = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &buffer};
-            klvk::Vulkan::UpdateDescriptorSets(device, std::span{&write, 1});
-        }
+        buffer_ = klvk::GpuBuffer(context, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, bytes, true);
+        buffer_.Write(std::as_bytes(std::span{particles}));
+        const VkDescriptorBufferInfo buffer{.buffer = buffer_.GetHandle(), .range = bytes};
+        const VkWriteDescriptorSet write{
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = set_,
+            .dstBinding = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .pBufferInfo = &buffer};
+        klvk::Vulkan::UpdateDescriptorSets(device, std::span{&write, 1});
         const std::array ranges{
             VkPushConstantRange{.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .size = sizeof(SimulationPushConstants)},
             VkPushConstantRange{.stageFlags = VK_SHADER_STAGE_VERTEX_BIT, .size = sizeof(GraphicsPushConstants)},
@@ -125,6 +129,8 @@ class ComputeShaderApp : public klvk::Application
              .pushConstantRangeCount = static_cast<uint32_t>(ranges.size()),
              .pPushConstantRanges = ranges.data()});
         CreatePipelines(context);
+
+        for (Body& body : bodies_) body.rotation = body.initial_rotation;
     }
 
     static std::vector<Particle> MakeParticles()
@@ -150,14 +156,19 @@ class ComputeShaderApp : public klvk::Application
         return context.CreateShaderModule(data, name);
     }
 
-    VkPipeline CreateGraphicsPipeline(klvk::DeviceContext& context, VkShaderModule vertex, VkShaderModule fragment)
+    VkPipeline CreateGraphicsPipeline(
+        klvk::DeviceContext& context,
+        VkShaderModule vertex,
+        VkShaderModule fragment,
+        const VkSpecializationInfo* vertex_specialization = nullptr)
     {
         const std::array stages{
             VkPipelineShaderStageCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                 .stage = VK_SHADER_STAGE_VERTEX_BIT,
                 .module = vertex,
-                .pName = "main"},
+                .pName = "main",
+                .pSpecializationInfo = vertex_specialization},
             VkPipelineShaderStageCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                 .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -245,8 +256,39 @@ class ComputeShaderApp : public klvk::Application
                  .pName = "main"},
             .layout = pipeline_layout_};
         compute_pipeline_ = klvk::Vulkan::CreateComputePipelines(device, {}, std::span{&compute_info, 1}).front();
-        particles_pipeline_ = CreateGraphicsPipeline(context, particles_vertex, fragment);
         bodies_pipeline_ = CreateGraphicsPipeline(context, bodies_vertex, fragment);
+        RebuildParticlesPipeline();
+    }
+
+    // klgl recompiles the particle shader when COLOR_FUNCTION changes; the
+    // specialization constant requires a pipeline rebuild the same way.
+    void RebuildParticlesPipeline()
+    {
+        auto& context = GetDeviceContext();
+        const VkDevice device = context.GetDevice();
+        if (particles_pipeline_)
+        {
+            context.WaitIdle();
+            klvk::Vulkan::DestroyPipelineNE(device, particles_pipeline_);
+        }
+
+        const VkShaderModule vertex = Load(context, "particles.vert.spv");
+        const VkShaderModule fragment = Load(context, "particles.frag.spv");
+        auto cleanup = klvk::OnScopeLeave(
+            [&]
+            {
+                klvk::Vulkan::DestroyShaderModuleNE(device, vertex);
+                klvk::Vulkan::DestroyShaderModuleNE(device, fragment);
+            });
+
+        const int32_t color_function = color_function_;
+        const VkSpecializationMapEntry entry{.constantID = 0, .offset = 0, .size = sizeof(color_function)};
+        const VkSpecializationInfo specialization{
+            .mapEntryCount = 1,
+            .pMapEntries = &entry,
+            .dataSize = sizeof(color_function),
+            .pData = &color_function};
+        particles_pipeline_ = CreateGraphicsPipeline(context, vertex, fragment, &specialization);
     }
 
     std::array<Vec4f, 2> UpdateBodies()
@@ -268,23 +310,28 @@ class ComputeShaderApp : public klvk::Application
 
     GraphicsPushConstants MakeGraphicsConstants(const std::array<Vec4f, 2>& bodies) const
     {
-        const Mat4f view = camera_.GetViewMatrix().Transposed();
-        const Mat4f projection = camera_.GetProjectionMatrix(GetWindow().GetAspect()).Transposed();
-        const Mat4f mvp = projection.MatMul(view);
-        GraphicsPushConstants constants{
+        // Camera matrices are stored transposed (column-major of the true matrix),
+        // so multiplying them in reverse order yields the column-major projection *
+        // view product that the shader's mat4 reads directly - same idiom as klgl.
+        return GraphicsPushConstants{
+            .mvp = camera_.GetViewMatrix().MatMul(camera_.GetProjectionMatrix(GetWindow().GetAspect())),
             .color = {1.f, 1.f, 1.f, particle_alpha_},
             .body_a = bodies[0],
             .body_b = bodies[1]};
-        for (size_t i = 0; i != 4; ++i) constants.mvp_columns[i] = mvp.GetColumn(i);
-        return constants;
     }
 
     void Tick() override
     {
         klvk::Application::Tick();
         HandleInput();
-        const size_t frame = GetFrameInFlightIndex();
-        const VkDescriptorSet set = sets_[frame];
+        if (pending_color_function_)
+        {
+            color_function_ = *pending_color_function_;
+            pending_color_function_.reset();
+            RebuildParticlesPipeline();
+        }
+
+        const VkDescriptorSet set = set_;
         const VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
         std::array<Vec4f, 2> bodies{};
         klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline_);
@@ -320,7 +367,7 @@ class ComputeShaderApp : public klvk::Application
                                      : VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .buffer = buffers_[frame].GetHandle(),
+                .buffer = buffer_.GetHandle(),
                 .size = VK_WHOLE_SIZE};
             const VkDependencyInfo dependency{
                 .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
@@ -356,6 +403,42 @@ class ComputeShaderApp : public klvk::Application
         ImGui::SliderFloat("Time step", &time_step_, 0.f, 0.0001f, "%.6f");
         ImGui::SliderInt("Time steps per frame", &time_steps_per_frame_, 0, 40);
         ImGui::SliderFloat("Particle alpha", &particle_alpha_, 0.0001f, 1.f, "%.4f");
+
+        if (ImGui::CollapsingHeader("Bodies"))
+        {
+            auto rotator_widget = [](std::string_view title, klvk::Rotator& rotator)
+            {
+                if (ImGui::CollapsingHeader(title.data()))
+                {
+                    klvk::SimpleTypeWidget("yaw", rotator.yaw);
+                    klvk::SimpleTypeWidget("pitch", rotator.pitch);
+                    klvk::SimpleTypeWidget("roll", rotator.roll);
+                }
+            };
+
+            for (Body& body : bodies_)
+            {
+                ImGui::PushID(&body);
+                if (ImGui::CollapsingHeader("Body"))
+                {
+                    klvk::SimpleTypeWidget("Orbit center", body.orbit_center);
+                    klvk::SimpleTypeWidget("Orbit radius", body.orbit_radius);
+                    rotator_widget("Initial rotation", body.initial_rotation);
+                    rotator_widget("Rotation per second", body.rotation_per_second);
+                    rotator_widget("Current rotation", body.rotation);
+                }
+                ImGui::PopID();
+            }
+        }
+
+        if (ImGui::CollapsingHeader("Shader"))
+        {
+            int color_function = pending_color_function_.value_or(color_function_);
+            if (ImGui::SliderInt("COLOR_FUNCTION", &color_function, 0, 2))
+            {
+                pending_color_function_ = color_function;
+            }
+        }
         ImGui::End();
     }
 
@@ -406,24 +489,28 @@ private:
     VkPipeline compute_pipeline_ = VK_NULL_HANDLE;
     VkPipeline particles_pipeline_ = VK_NULL_HANDLE;
     VkPipeline bodies_pipeline_ = VK_NULL_HANDLE;
-    std::array<VkDescriptorSet, kFramesInFlight> sets_{};
-    std::array<klvk::GpuBuffer, kFramesInFlight> buffers_{};
+    VkDescriptorSet set_ = VK_NULL_HANDLE;
+    klvk::GpuBuffer buffer_;
     std::unique_ptr<klvk::events::IEventListener> listener_;
     klvk::Camera3d camera_{Vec3f{0.f, 15.f, 0.f}, {.yaw = -90.f}};
     std::array<Body, 2> bodies_{
         Body{
+            .orbit_center{0, 0, 0},
             .orbit_radius = 5.f,
-            .rotation = {.pitch = 0.f},
+            .initial_rotation = {.pitch = 0.f},
             .rotation_per_second = {.yaw = 500.f, .pitch = 600.f, .roll = 700.f}},
         Body{
+            .orbit_center{0, 0, 0},
             .orbit_radius = 5.f,
-            .rotation = {.pitch = 180.f},
+            .initial_rotation = {.pitch = 180.f},
             .rotation_per_second = {.yaw = 500.f, .pitch = 600.f, .roll = 700.f}},
     };
     int time_steps_per_frame_ = 30;
     float camera_speed_ = 5.f;
-    float time_step_ = 0.000005f;
+    float time_step_ = 0.f;
     float particle_alpha_ = 0.1f;
+    int color_function_ = 0;
+    std::optional<int> pending_color_function_;
 };
 
 void Main()
