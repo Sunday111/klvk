@@ -951,6 +951,26 @@ void Vulkan::CmdEndRenderingNE(VkCommandBuffer command_buffer) noexcept
     vkCmdEndRendering(command_buffer);
 }
 
+void Vulkan::CmdFillBufferNE(
+    VkCommandBuffer command_buffer,
+    VkBuffer buffer,
+    VkDeviceSize offset,
+    VkDeviceSize size,
+    uint32_t data) noexcept
+{
+    vkCmdFillBuffer(command_buffer, buffer, offset, size, data);
+}
+
+void Vulkan::CmdFillBuffer(
+    VkCommandBuffer command_buffer,
+    VkBuffer buffer,
+    VkDeviceSize offset,
+    VkDeviceSize size,
+    uint32_t data) noexcept
+{
+    CmdFillBufferNE(command_buffer, buffer, offset, size, data);
+}
+
 void Vulkan::CmdEndRendering(VkCommandBuffer command_buffer) noexcept
 {
     CmdEndRenderingNE(command_buffer);

@@ -549,6 +549,19 @@ public:
     KLVK_VK_INLINE static void CmdEndRenderingNE(VkCommandBuffer command_buffer) noexcept;
     KLVK_VK_INLINE static void CmdEndRendering(VkCommandBuffer command_buffer) noexcept;
 
+    KLVK_VK_INLINE static void CmdFillBufferNE(
+        VkCommandBuffer command_buffer,
+        VkBuffer buffer,
+        VkDeviceSize offset,
+        VkDeviceSize size,
+        uint32_t data) noexcept;
+    KLVK_VK_INLINE static void CmdFillBuffer(
+        VkCommandBuffer command_buffer,
+        VkBuffer buffer,
+        VkDeviceSize offset,
+        VkDeviceSize size,
+        uint32_t data) noexcept;
+
     KLVK_VK_INLINE static void CmdPipelineBarrier2NE(
         VkCommandBuffer command_buffer,
         const VkDependencyInfo& dependency_info) noexcept;

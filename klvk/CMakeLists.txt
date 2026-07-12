@@ -23,7 +23,9 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/vulkan_common.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/window.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/application.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/camera/camera_2d.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/camera/camera_3d.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/camera/viewport.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/error_handling.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/detail.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/event_listener.hpp

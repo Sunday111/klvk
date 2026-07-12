@@ -1,0 +1,72 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(constant_id = 0) const int MAX_ITERATIONS = 200;
+layout(constant_id = 1) const int INSIDE_OUT_SPACE = 1;
+
+// Bind pixel counter buffer
+layout(std430, set = 0, binding = 0) buffer PixelBuffer {
+    uint visit_counts[];
+};
+
+layout(push_constant) uniform PushConstants
+{
+    vec4 s2w_col0;  // columns of the screen-to-world matrix
+    vec4 s2w_col1;
+    vec4 s2w_col2;
+    vec2 u_resolution;
+    vec2 u_julia_constant;
+    vec2 u_fractal_power;
+} pc;
+
+vec2 insideOutWarp(vec2 pos, vec2 center, float strength) {
+    vec2 dir = pos - center;
+    float dist = length(dir);
+    if (dist < 0.001) return pos;
+    float invertedDist = strength / dist;
+    return center + normalize(dir) * invertedDist;
+}
+
+vec2 screen_point_to_world(vec2 screen) {
+    mat3 u_screen_to_world = mat3(pc.s2w_col0.xyz, pc.s2w_col1.xyz, pc.s2w_col2.xyz);
+    return (u_screen_to_world * vec3(screen, 1)).xy;
+}
+
+void main() {
+    ivec2 start_pixel = ivec2(gl_GlobalInvocationID.xy);
+
+    // Guard against overflow
+    if (start_pixel.x >= pc.u_resolution.x || start_pixel.y >= pc.u_resolution.y) return;
+
+    // Julia constant
+    vec2 c = pc.u_julia_constant;
+
+    // The counter buffer is indexed with the y-down pixel (like gl_FragCoord in the
+    // draw shader), so the world position for it comes from the y-flipped coordinate.
+    vec2 frag_coord = vec2(
+        float(start_pixel.x) + 0.5f,
+        pc.u_resolution.y - (float(start_pixel.y) + 0.5f));
+    vec2 world = screen_point_to_world(frag_coord);
+
+    vec2 z = world;
+    if (INSIDE_OUT_SPACE != 0)
+    {
+        vec2 world_center = screen_point_to_world(pc.u_resolution / 2);
+        z = insideOutWarp(world, world_center, 1);
+    }
+
+    // Julia set iteration
+    uint i = 0;
+    for (; i != MAX_ITERATIONS; ++i) {
+        vec2 p = c + vec2(
+            z.x * z.x - z.y * z.y,
+            2 * z.x * z.y);
+
+        z = p;
+        if (dot(p, p) > 4) break;
+    }
+
+    int index = int(start_pixel.y * pc.u_resolution.x + start_pixel.x);
+    atomicAdd(visit_counts[index], i);
+}
