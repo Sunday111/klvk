@@ -1,6 +1,6 @@
 #pragma once
 
-#include <string_view>
+#include <span>
 
 #include "klvk/application.hpp"
 #include "klvk/camera/viewport.hpp"
@@ -21,16 +21,13 @@ static_assert(sizeof(FractalPushConstants) == 72);
 [[nodiscard]] FractalPushConstants
 MakeFractalPushConstants(const class FractalSettings& settings, const edt::Mat3f& screen_to_world);
 
-[[nodiscard]] VkShaderModule LoadShaderModule(klvk::Application& app, std::string_view name);
-
 // Fullscreen triangle list (6 vertices, no vertex buffers), no blending, dynamic
-// viewport and scissor, targeting the swapchain format.
+// viewport and scissor, targeting the swapchain format. Stages usually come from
+// klvk::Shader::MakeShaderStages.
 [[nodiscard]] VkPipeline CreateFullscreenPipeline(
     klvk::Application& app,
     VkPipelineLayout pipeline_layout,
-    VkShaderModule vertex_shader,
-    VkShaderModule fragment_shader,
-    const VkSpecializationInfo* fragment_specialization);
+    std::span<const VkPipelineShaderStageCreateInfo> stages);
 
 // Applies a viewport given in klgl's convention (origin at the bottom-left corner of the
 // window) by flipping it the same way the application flips the default viewport.

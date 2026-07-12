@@ -1,0 +1,9 @@
+{
+    "definitions": [
+        {
+            "name": "COLORS_COUNT",
+            "type": "int",
+            "default": 201
+        }
+    ]
+}

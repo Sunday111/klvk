@@ -4,6 +4,7 @@
 #include <klvk/template/on_scope_leave.hpp>
 
 #include "clipboard.hpp"
+#include "klvk/shader/shader.hpp"
 #include "imgui.h"
 #include "interpolation_widget.hpp"
 #include "klvk/events/event_listener_method.hpp"
@@ -28,6 +29,7 @@ void FractalApp::Initialize()
     GetWindow().SetTitle("Fractal");
     SetTargetFramerate(30.f);
 
+    klvk::Shader::shaders_dir_ = GetShaderDir();
     renderer_ = std::make_unique<SimpleGpuRenderer>(*this, kMaxIterations);
     interpolation_widget_ = std::make_unique<InterpolationWidget>(*this, kMaxIterations + 1);
 

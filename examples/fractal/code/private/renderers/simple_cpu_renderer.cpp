@@ -15,13 +15,12 @@
 
 SimpleCpuRenderer::SimpleCpuRenderer(klvk::Application& app, size_t max_iterations_)
     : app_(&app),
-      max_iterations(max_iterations_)
+      max_iterations(max_iterations_),
+      fullscreen_shader_(app.GetDeviceContext(), "fractal_example/fullscreen"),
+      textured_quad_shader_(app.GetDeviceContext(), "fractal_example/textured_quad")
 {
     klvk::DeviceContext& context = app.GetDeviceContext();
     VkDevice device = context.GetDevice();
-
-    vertex_shader_ = LoadShaderModule(app, "fullscreen.vert.spv");
-    fragment_shader_ = LoadShaderModule(app, "textured_quad.frag.spv");
 
     const VkSamplerCreateInfo sampler_info{
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -74,7 +73,10 @@ SimpleCpuRenderer::SimpleCpuRenderer(klvk::Application& app, size_t max_iteratio
             .setLayoutCount = 1,
             .pSetLayouts = &set_layout_,
         });
-    pipeline_ = CreateFullscreenPipeline(*app_, pipeline_layout_, vertex_shader_, fragment_shader_, nullptr);
+    auto stages = fullscreen_shader_.MakeShaderStages();
+    const auto fragment_stages = textured_quad_shader_.MakeShaderStages();
+    stages.insert(stages.end(), fragment_stages.begin(), fragment_stages.end());
+    pipeline_ = CreateFullscreenPipeline(*app_, pipeline_layout_, stages);
 }
 
 SimpleCpuRenderer::~SimpleCpuRenderer() noexcept
@@ -88,8 +90,6 @@ SimpleCpuRenderer::~SimpleCpuRenderer() noexcept
     klvk::Vulkan::DestroyDescriptorPoolNE(device, descriptor_pool_);
     klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, set_layout_);
     klvk::Vulkan::DestroySamplerNE(device, sampler_);
-    klvk::Vulkan::DestroyShaderModuleNE(device, fragment_shader_);
-    klvk::Vulkan::DestroyShaderModuleNE(device, vertex_shader_);
 }
 
 void SimpleCpuRenderer::DestroyImage()

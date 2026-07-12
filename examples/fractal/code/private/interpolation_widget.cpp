@@ -11,13 +11,14 @@
 
 InterpolationWidget::InterpolationWidget(klvk::Application& app, size_t num_colors)
     : app_(&app),
-      num_colors_(num_colors)
+      num_colors_(num_colors),
+      fullscreen_shader_(app.GetDeviceContext(), "fractal_example/fullscreen"),
+      widget_shader_(app.GetDeviceContext(), "fractal_example/interpolation_widget")
 {
     klvk::DeviceContext& context = app.GetDeviceContext();
     VkDevice device = context.GetDevice();
 
-    vertex_shader_ = LoadShaderModule(app, "fullscreen.vert.spv");
-    fragment_shader_ = LoadShaderModule(app, "interpolation_widget.frag.spv");
+    widget_shader_.SetDefineValue(widget_shader_.GetDefine("COLORS_COUNT"), static_cast<int32_t>(num_colors));
 
     const VkDescriptorSetLayoutBinding binding{
         .binding = 0,
@@ -84,15 +85,10 @@ InterpolationWidget::InterpolationWidget(klvk::Application& app, size_t num_colo
             .pSetLayouts = &set_layout_,
         });
 
-    const auto colors_count = static_cast<int32_t>(num_colors_);
-    const VkSpecializationMapEntry spec_entry{.constantID = 0, .offset = 0, .size = sizeof(int32_t)};
-    const VkSpecializationInfo spec_info{
-        .mapEntryCount = 1,
-        .pMapEntries = &spec_entry,
-        .dataSize = sizeof(colors_count),
-        .pData = &colors_count,
-    };
-    pipeline_ = CreateFullscreenPipeline(*app_, pipeline_layout_, vertex_shader_, fragment_shader_, &spec_info);
+    auto stages = fullscreen_shader_.MakeShaderStages();
+    const auto fragment_stages = widget_shader_.MakeShaderStages();
+    stages.insert(stages.end(), fragment_stages.begin(), fragment_stages.end());
+    pipeline_ = CreateFullscreenPipeline(*app_, pipeline_layout_, stages);
 }
 
 InterpolationWidget::~InterpolationWidget() noexcept
@@ -104,8 +100,6 @@ InterpolationWidget::~InterpolationWidget() noexcept
     klvk::Vulkan::DestroyPipelineLayoutNE(device, pipeline_layout_);
     klvk::Vulkan::DestroyDescriptorPoolNE(device, descriptor_pool_);
     klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, set_layout_);
-    klvk::Vulkan::DestroyShaderModuleNE(device, fragment_shader_);
-    klvk::Vulkan::DestroyShaderModuleNE(device, vertex_shader_);
 }
 
 void InterpolationWidget::Render(

@@ -11,13 +11,16 @@
 
 SimpleGpuRenderer::SimpleGpuRenderer(klvk::Application& app, size_t max_iterations_)
     : app_(&app),
-      max_iterations(max_iterations_)
+      max_iterations(max_iterations_),
+      fullscreen_shader_(app.GetDeviceContext(), "fractal_example/fullscreen"),
+      fractal_shader_(app.GetDeviceContext(), "fractal_example/fractal")
 {
     klvk::DeviceContext& context = app.GetDeviceContext();
     VkDevice device = context.GetDevice();
 
-    vertex_shader_ = LoadShaderModule(app, "fullscreen.vert.spv");
-    fragment_shader_ = LoadShaderModule(app, "fractal.frag.spv");
+    fractal_shader_.SetDefineValue(fractal_shader_.GetDefine("MAX_ITERATIONS"), static_cast<int32_t>(max_iterations));
+    def_inside_out_space_ = fractal_shader_.GetDefine("INSIDE_OUT_SPACE");
+    def_color_mode_ = fractal_shader_.GetDefine("COLOR_MODE");
 
     color_table_ = klvk::GpuBuffer(
         context,
@@ -94,42 +97,26 @@ SimpleGpuRenderer::~SimpleGpuRenderer() noexcept
     klvk::Vulkan::DestroyPipelineLayoutNE(device, pipeline_layout_);
     klvk::Vulkan::DestroyDescriptorPoolNE(device, descriptor_pool_);
     klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, set_layout_);
-    klvk::Vulkan::DestroyShaderModuleNE(device, fragment_shader_);
-    klvk::Vulkan::DestroyShaderModuleNE(device, vertex_shader_);
 }
 
 void SimpleGpuRenderer::ApplySettings(const FractalSettings& settings)
 {
-    klvk::DeviceContext& context = app_->GetDeviceContext();
+    fractal_shader_.SetDefineValue(def_inside_out_space_, settings.inside_out_space ? 1 : 0);
+    fractal_shader_.SetDefineValue(def_color_mode_, settings.color_mode);
 
-    // The old pipeline may still be referenced by the frame in flight.
-    context.WaitIdle();
-    klvk::Vulkan::DestroyPipelineNE(context.GetDevice(), pipeline_);
-
-    // klgl recompiles the shader with new defines here; specialization
-    // constants with a pipeline rebuild are the Vulkan equivalent.
-    const struct
+    // Rebuild only when a define actually changed - color edits skip the wait.
+    if (pipeline_ == VK_NULL_HANDLE || pipeline_shader_version_ != fractal_shader_.GetVersion())
     {
-        int32_t max_iterations;
-        int32_t inside_out_space;
-        int32_t color_mode;
-    } spec_data{
-        static_cast<int32_t>(max_iterations),
-        settings.inside_out_space ? 1 : 0,
-        settings.color_mode,
-    };
-    const std::array<VkSpecializationMapEntry, 3> spec_entries{
-        VkSpecializationMapEntry{.constantID = 0, .offset = 0, .size = sizeof(int32_t)},
-        VkSpecializationMapEntry{.constantID = 1, .offset = 4, .size = sizeof(int32_t)},
-        VkSpecializationMapEntry{.constantID = 2, .offset = 8, .size = sizeof(int32_t)},
-    };
-    const VkSpecializationInfo spec_info{
-        .mapEntryCount = static_cast<uint32_t>(spec_entries.size()),
-        .pMapEntries = spec_entries.data(),
-        .dataSize = sizeof(spec_data),
-        .pData = &spec_data,
-    };
-    pipeline_ = CreateFullscreenPipeline(*app_, pipeline_layout_, vertex_shader_, fragment_shader_, &spec_info);
+        klvk::DeviceContext& context = app_->GetDeviceContext();
+        context.WaitIdle();  // the old pipeline may still be referenced by the frame in flight
+        klvk::Vulkan::DestroyPipelineNE(context.GetDevice(), pipeline_);
+
+        auto stages = fullscreen_shader_.MakeShaderStages();
+        const auto fragment_stages = fractal_shader_.MakeShaderStages();
+        stages.insert(stages.end(), fragment_stages.begin(), fragment_stages.end());
+        pipeline_ = CreateFullscreenPipeline(*app_, pipeline_layout_, stages);
+        pipeline_shader_version_ = fractal_shader_.GetVersion();
+    }
 
     std::vector<edt::Vec4f> colors(max_iterations + 1);
     settings.ComputeColors(

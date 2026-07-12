@@ -22,14 +22,18 @@ struct DrawPushConstants
 
 CountingRenderer::CountingRenderer(klvk::Application& app, size_t max_iterations_)
     : app_(&app),
-      max_iterations(max_iterations_)
+      max_iterations(max_iterations_),
+      fullscreen_shader_(app.GetDeviceContext(), "fractal_example/fullscreen"),
+      draw_shader_(app.GetDeviceContext(), "fractal_example/counting_draw"),
+      compute_shader_(app.GetDeviceContext(), "fractal_example/counting_compute")
 {
     klvk::DeviceContext& context = app.GetDeviceContext();
     VkDevice device = context.GetDevice();
 
-    vertex_shader_ = LoadShaderModule(app, "fullscreen.vert.spv");
-    fragment_shader_ = LoadShaderModule(app, "counting_draw.frag.spv");
-    compute_shader_ = LoadShaderModule(app, "counting_compute.comp.spv");
+    const auto iterations = static_cast<int32_t>(max_iterations);
+    draw_shader_.SetDefineValue(draw_shader_.GetDefine("MAX_ITERATIONS"), iterations);
+    compute_shader_.SetDefineValue(compute_shader_.GetDefine("MAX_ITERATIONS"), iterations);
+    def_compute_inside_out_space_ = compute_shader_.GetDefine("INSIDE_OUT_SPACE");
 
     color_table_ = klvk::GpuBuffer(
         context,
@@ -146,9 +150,6 @@ CountingRenderer::~CountingRenderer() noexcept
     klvk::Vulkan::DestroyDescriptorPoolNE(device, descriptor_pool_);
     klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, draw_set_layout_);
     klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, compute_set_layout_);
-    klvk::Vulkan::DestroyShaderModuleNE(device, compute_shader_);
-    klvk::Vulkan::DestroyShaderModuleNE(device, fragment_shader_);
-    klvk::Vulkan::DestroyShaderModuleNE(device, vertex_shader_);
 }
 
 void CountingRenderer::ApplySettings(const FractalSettings& settings)
@@ -156,52 +157,30 @@ void CountingRenderer::ApplySettings(const FractalSettings& settings)
     klvk::DeviceContext& context = app_->GetDeviceContext();
     VkDevice device = context.GetDevice();
 
-    // Old pipelines and buffers may still be referenced by the frame in flight.
-    context.WaitIdle();
-    klvk::Vulkan::DestroyPipelineNE(device, compute_pipeline_);
-    klvk::Vulkan::DestroyPipelineNE(device, draw_pipeline_);
+    compute_shader_.SetDefineValue(def_compute_inside_out_space_, settings.inside_out_space ? 1 : 0);
 
-    const struct
+    // Rebuild only when a define actually changed - color edits skip the wait.
+    if (compute_pipeline_ == VK_NULL_HANDLE || pipelines_shader_version_ != compute_shader_.GetVersion())
     {
-        int32_t max_iterations;
-        int32_t inside_out_space;
-    } spec_data{
-        static_cast<int32_t>(max_iterations),
-        settings.inside_out_space ? 1 : 0,
-    };
-    const std::array<VkSpecializationMapEntry, 2> spec_entries{
-        VkSpecializationMapEntry{.constantID = 0, .offset = 0, .size = sizeof(int32_t)},
-        VkSpecializationMapEntry{.constantID = 1, .offset = 4, .size = sizeof(int32_t)},
-    };
-    const VkSpecializationInfo compute_spec{
-        .mapEntryCount = static_cast<uint32_t>(spec_entries.size()),
-        .pMapEntries = spec_entries.data(),
-        .dataSize = sizeof(spec_data),
-        .pData = &spec_data,
-    };
+        // Old pipelines may still be referenced by the frame in flight.
+        context.WaitIdle();
+        klvk::Vulkan::DestroyPipelineNE(device, compute_pipeline_);
+        klvk::Vulkan::DestroyPipelineNE(device, draw_pipeline_);
 
-    const VkComputePipelineCreateInfo compute_info{
-        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-        .stage =
-            {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-                .module = compute_shader_,
-                .pName = "main",
-                .pSpecializationInfo = &compute_spec,
-            },
-        .layout = compute_pipeline_layout_,
-    };
-    compute_pipeline_ =
-        klvk::Vulkan::CreateComputePipelines(device, VK_NULL_HANDLE, std::span{&compute_info, 1}).front();
+        const VkComputePipelineCreateInfo compute_info{
+            .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+            .stage = compute_shader_.MakeShaderStages().front(),
+            .layout = compute_pipeline_layout_,
+        };
+        compute_pipeline_ =
+            klvk::Vulkan::CreateComputePipelines(device, VK_NULL_HANDLE, std::span{&compute_info, 1}).front();
 
-    const VkSpecializationInfo draw_spec{
-        .mapEntryCount = 1,
-        .pMapEntries = spec_entries.data(),
-        .dataSize = sizeof(int32_t),
-        .pData = &spec_data,
-    };
-    draw_pipeline_ = CreateFullscreenPipeline(*app_, draw_pipeline_layout_, vertex_shader_, fragment_shader_, &draw_spec);
+        auto stages = fullscreen_shader_.MakeShaderStages();
+        const auto fragment_stages = draw_shader_.MakeShaderStages();
+        stages.insert(stages.end(), fragment_stages.begin(), fragment_stages.end());
+        draw_pipeline_ = CreateFullscreenPipeline(*app_, draw_pipeline_layout_, stages);
+        pipelines_shader_version_ = compute_shader_.GetVersion();
+    }
 
     const auto resolution = settings.viewport.size.Cast<size_t>();
     const size_t num_pixels = resolution.x() * resolution.y();

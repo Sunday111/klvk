@@ -5,6 +5,7 @@
 #include "../graphics_utils.hpp"
 #include "fractal_renderer.hpp"
 #include "klvk/camera/camera_2d.hpp"
+#include "klvk/shader/shader.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 
 VK_DEFINE_HANDLE(VmaAllocation)
@@ -38,8 +39,8 @@ private:
 
     std::array<klvk::GpuBuffer, klvk::Application::kFramesInFlight> staging_buffers_{};
 
-    VkShaderModule vertex_shader_ = VK_NULL_HANDLE;
-    VkShaderModule fragment_shader_ = VK_NULL_HANDLE;
+    klvk::Shader fullscreen_shader_;
+    klvk::Shader textured_quad_shader_;
     VkDescriptorSetLayout set_layout_ = VK_NULL_HANDLE;
     VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
     VkDescriptorSet descriptor_set_ = VK_NULL_HANDLE;

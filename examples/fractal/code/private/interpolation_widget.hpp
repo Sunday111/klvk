@@ -2,6 +2,7 @@
 
 #include "graphics_utils.hpp"
 #include "klvk/camera/camera_2d.hpp"
+#include "klvk/shader/shader.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 
 class FractalSettings;
@@ -21,8 +22,8 @@ private:
     std::array<klvk::GpuBuffer, klvk::Application::kFramesInFlight> color_buffers_{};
     std::array<VkDescriptorSet, klvk::Application::kFramesInFlight> descriptor_sets_{};
 
-    VkShaderModule vertex_shader_ = VK_NULL_HANDLE;
-    VkShaderModule fragment_shader_ = VK_NULL_HANDLE;
+    klvk::Shader fullscreen_shader_;
+    klvk::Shader widget_shader_;
     VkDescriptorSetLayout set_layout_ = VK_NULL_HANDLE;
     VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
     VkPipelineLayout pipeline_layout_ = VK_NULL_HANDLE;

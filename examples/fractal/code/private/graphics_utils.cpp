@@ -1,7 +1,6 @@
 #include "graphics_utils.hpp"
 
 #include "fractal_settings.hpp"
-#include "klvk/filesystem/filesystem.hpp"
 #include "klvk/vulkan/device_context.hpp"
 
 // Vulkan create-info structs are designed for partial designated initialization;
@@ -26,36 +25,11 @@ FractalPushConstants MakeFractalPushConstants(const FractalSettings& settings, c
     return push_constants;
 }
 
-VkShaderModule LoadShaderModule(klvk::Application& app, std::string_view name)
-{
-    std::string spirv;
-    klvk::Filesystem::ReadFile(app.GetShaderDir() / "fractal_example" / name, spirv);
-    return app.GetDeviceContext().CreateShaderModule(spirv, name);
-}
-
 VkPipeline CreateFullscreenPipeline(
     klvk::Application& app,
     VkPipelineLayout pipeline_layout,
-    VkShaderModule vertex_shader,
-    VkShaderModule fragment_shader,
-    const VkSpecializationInfo* fragment_specialization)
+    std::span<const VkPipelineShaderStageCreateInfo> stages)
 {
-    const std::array<VkPipelineShaderStageCreateInfo, 2> stages{
-        VkPipelineShaderStageCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .stage = VK_SHADER_STAGE_VERTEX_BIT,
-            .module = vertex_shader,
-            .pName = "main",
-        },
-        VkPipelineShaderStageCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-            .module = fragment_shader,
-            .pName = "main",
-            .pSpecializationInfo = fragment_specialization,
-        },
-    };
-
     const VkPipelineVertexInputStateCreateInfo vertex_input{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
     };

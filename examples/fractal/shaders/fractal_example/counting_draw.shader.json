@@ -1,0 +1,9 @@
+{
+    "definitions": [
+        {
+            "name": "MAX_ITERATIONS",
+            "type": "int",
+            "default": 200
+        }
+    ]
+}

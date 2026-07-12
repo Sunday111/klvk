@@ -40,7 +40,7 @@ public:
 
     template <typename T>
         requires(sizeof(T) == sizeof(uint32_t))
-    void SetDefineValue(DefineHandle& handle, const T& value)
+    void SetDefineValue(const DefineHandle& handle, const T& value)
     {
         ErrorHandling::Ensure(handle.index < define_values_.size(), "Unknown define '{}'", handle.name);
         uint32_t raw = 0;

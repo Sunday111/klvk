@@ -3,6 +3,7 @@
 #include "../graphics_utils.hpp"
 #include "fractal_renderer.hpp"
 #include "klvk/camera/camera_2d.hpp"
+#include "klvk/shader/shader.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 
 class CountingRenderer : public FractalRenderer
@@ -24,9 +25,11 @@ private:
     klvk::GpuBuffer counters_;
     size_t current_counters_size_ = 0;
 
-    VkShaderModule vertex_shader_ = VK_NULL_HANDLE;
-    VkShaderModule fragment_shader_ = VK_NULL_HANDLE;
-    VkShaderModule compute_shader_ = VK_NULL_HANDLE;
+    klvk::Shader fullscreen_shader_;
+    klvk::Shader draw_shader_;
+    klvk::Shader compute_shader_;
+    klvk::DefineHandle def_compute_inside_out_space_;
+    size_t pipelines_shader_version_ = 0;
 
     VkDescriptorSetLayout compute_set_layout_ = VK_NULL_HANDLE;
     VkDescriptorSetLayout draw_set_layout_ = VK_NULL_HANDLE;
