@@ -1,0 +1,1 @@
+klvk_compile_shaders(klvk_curve_fractal_example)

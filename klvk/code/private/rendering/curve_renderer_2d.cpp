@@ -96,7 +96,9 @@ Vec4u8 PackColor(Vec4f color)
 
 }  // namespace
 
-CurveRenderer2d::CurveRenderer2d(Application& app) : app_(&app)
+CurveRenderer2d::CurveRenderer2d(Application& app) : CurveRenderer2d(app, app.GetSwapchainFormat()) {}
+
+CurveRenderer2d::CurveRenderer2d(Application& app, VkFormat color_format) : app_(&app)
 {
     auto& context = app.GetDeviceContext();
     const VkDevice device = context.GetDevice();
@@ -181,11 +183,10 @@ CurveRenderer2d::CurveRenderer2d(Application& app) : app_(&app)
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         .dynamicStateCount = static_cast<uint32_t>(dynamics.size()),
         .pDynamicStates = dynamics.data()};
-    const VkFormat format = app.GetSwapchainFormat();
     const VkPipelineRenderingCreateInfo rendering{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .colorAttachmentCount = 1,
-        .pColorAttachmentFormats = &format};
+        .pColorAttachmentFormats = &color_format};
     const VkGraphicsPipelineCreateInfo info{
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
         .pNext = &rendering,

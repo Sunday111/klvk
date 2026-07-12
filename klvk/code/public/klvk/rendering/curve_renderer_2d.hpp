@@ -22,6 +22,7 @@ public:
     };
 
     explicit CurveRenderer2d(Application& app);
+    CurveRenderer2d(Application& app, VkFormat color_format);
     CurveRenderer2d(const CurveRenderer2d&) = delete;
     CurveRenderer2d(CurveRenderer2d&&) = delete;
     ~CurveRenderer2d();
