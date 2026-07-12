@@ -112,11 +112,11 @@ class RenderToTextureApp : public klvk::Application
                 .pSetLayouts = &descriptor_set_layout_,
             });
         color_pipeline_ =
-            CreatePipeline(context, "color.vert.spv", "color.frag.spv", color_pipeline_layout_, kOffscreenFormat);
+            CreatePipeline(context, "color.vert", "color.frag", color_pipeline_layout_, kOffscreenFormat);
         texture_pipeline_ = CreatePipeline(
             context,
-            "textured_quad.vert.spv",
-            "textured_quad.frag.spv",
+            "textured_quad.vert",
+            "textured_quad.frag",
             texture_pipeline_layout_,
             GetSwapchainFormat());
     }
@@ -131,9 +131,7 @@ class RenderToTextureApp : public klvk::Application
         VkDevice device = context.GetDevice();
         auto load_shader = [&](const char* name)
         {
-            std::string spirv;
-            klvk::Filesystem::ReadFile(GetShaderDir() / "render_to_texture" / name, spirv);
-            return context.CreateShaderModule(spirv, name);
+            return context.CreateShaderModuleFromSource(GetShaderDir() / "render_to_texture" / name);
         };
         VkShaderModule vertex_shader = load_shader(vertex_name);
         VkShaderModule fragment_shader = load_shader(fragment_name);

@@ -179,12 +179,10 @@ class SimpleLitCubeApp : public klvk::Application
 
         auto load_shader = [&](const char* name)
         {
-            std::string spirv;
-            klvk::Filesystem::ReadFile(GetShaderDir() / "basic_light_3d" / name, spirv);
-            return context.CreateShaderModule(spirv, name);
+            return context.CreateShaderModuleFromSource(GetShaderDir() / "basic_light_3d" / name);
         };
-        VkShaderModule vertex_shader = load_shader("basic_light_3d.vert.spv");
-        VkShaderModule fragment_shader = load_shader("basic_light_3d.frag.spv");
+        VkShaderModule vertex_shader = load_shader("basic_light_3d.vert");
+        VkShaderModule fragment_shader = load_shader("basic_light_3d.frag");
         auto destroy_shaders = klvk::OnScopeLeave(
             [&]
             {

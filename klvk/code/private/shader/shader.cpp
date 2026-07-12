@@ -1,8 +1,7 @@
 #include "klvk/shader/shader.hpp"
 
-#include <nlohmann/json.hpp>
-
 #include <cstring>
+#include <nlohmann/json.hpp>
 
 #include "klvk/filesystem/filesystem.hpp"
 #include "klvk/vulkan/device_context.hpp"
@@ -21,12 +20,12 @@ namespace
 {
 
 constexpr std::pair<std::string_view, VkShaderStageFlagBits> kStageExtensions[] = {
-    {".vert.spv", VK_SHADER_STAGE_VERTEX_BIT},
-    {".frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT},
-    {".geom.spv", VK_SHADER_STAGE_GEOMETRY_BIT},
-    {".comp.spv", VK_SHADER_STAGE_COMPUTE_BIT},
-    {".tesc.spv", VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT},
-    {".tese.spv", VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT},
+    {".vert", VK_SHADER_STAGE_VERTEX_BIT},
+    {".frag", VK_SHADER_STAGE_FRAGMENT_BIT},
+    {".geom", VK_SHADER_STAGE_GEOMETRY_BIT},
+    {".comp", VK_SHADER_STAGE_COMPUTE_BIT},
+    {".tesc", VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT},
+    {".tese", VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT},
 };
 
 uint32_t DefaultValueBits(const nlohmann::json& definition)
@@ -70,11 +69,9 @@ Shader::Shader(DeviceContext& context, std::string_view name) : context_(&contex
         path += extension;
         if (!std::filesystem::exists(path)) continue;
 
-        std::string spirv;
-        Filesystem::ReadFile(path, spirv);
-        stages_.emplace_back(stage, context.CreateShaderModule(spirv, path.filename().string()));
+        stages_.emplace_back(stage, context.CreateShaderModuleFromSource(path));
     }
-    ErrorHandling::Ensure(!stages_.empty(), "Shader '{}': no compiled stages found at {}", name_, base.string());
+    ErrorHandling::Ensure(!stages_.empty(), "Shader '{}': no GLSL stages found at {}", name_, base.string());
 
     std::filesystem::path config_path = base;
     config_path += ".shader.json";
@@ -132,8 +129,7 @@ std::vector<VkPipelineShaderStageCreateInfo> Shader::MakeShaderStages(VkShaderSt
         .dataSize = define_values_.size() * sizeof(uint32_t),
         .pData = define_values_.data(),
     };
-    const VkSpecializationInfo* specialization =
-        specialization_entries_.empty() ? nullptr : &specialization_info_;
+    const VkSpecializationInfo* specialization = specialization_entries_.empty() ? nullptr : &specialization_info_;
 
     std::vector<VkPipelineShaderStageCreateInfo> result;
     for (const auto& [stage, module] : stages_)

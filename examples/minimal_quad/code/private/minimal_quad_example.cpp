@@ -49,13 +49,11 @@ class QuadApp : public klvk::Application
 
         auto load_shader = [&](const char* name)
         {
-            std::string spirv;
-            klvk::Filesystem::ReadFile(GetShaderDir() / "just_color_2d" / name, spirv);
-            return context.CreateShaderModule(spirv, name);
+            return context.CreateShaderModuleFromSource(GetShaderDir() / "just_color_2d" / name);
         };
 
-        VkShaderModule vertex_shader = load_shader("just_color_2d.vert.spv");
-        VkShaderModule fragment_shader = load_shader("just_color_2d.frag.spv");
+        VkShaderModule vertex_shader = load_shader("just_color_2d.vert");
+        VkShaderModule fragment_shader = load_shader("just_color_2d.frag");
         auto destroy_modules = klvk::OnScopeLeave(
             [&]
             {
@@ -161,12 +159,7 @@ class QuadApp : public klvk::Application
 
         VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
         klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-        klvk::Vulkan::CmdPushConstants(
-            command_buffer,
-            pipeline_layout_,
-            VK_SHADER_STAGE_VERTEX_BIT,
-            0,
-            push_constants);
+        klvk::Vulkan::CmdPushConstants(command_buffer, pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, push_constants);
         klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
     }
 

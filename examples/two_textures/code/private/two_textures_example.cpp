@@ -165,13 +165,11 @@ class TwoTexturesApp : public klvk::Application
 
         auto load_shader = [&](const char* name)
         {
-            std::string spirv;
-            klvk::Filesystem::ReadFile(GetShaderDir() / "two_textures_2d" / name, spirv);
-            return context.CreateShaderModule(spirv, name);
+            return context.CreateShaderModuleFromSource(GetShaderDir() / "two_textures_2d" / name);
         };
 
-        VkShaderModule vertex_shader = load_shader("two_textures_2d.vert.spv");
-        VkShaderModule fragment_shader = load_shader("two_textures_2d.frag.spv");
+        VkShaderModule vertex_shader = load_shader("two_textures_2d.vert");
+        VkShaderModule fragment_shader = load_shader("two_textures_2d.frag");
         auto destroy_modules = klvk::OnScopeLeave(
             [&]
             {

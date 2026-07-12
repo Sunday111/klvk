@@ -5,7 +5,10 @@ API (`Application`, `Window`, events, camera) built on Vulkan 1.3 with dynamic r
 
 - Function loading via [volk](https://github.com/zeux/volk).
 - Memory management via [VulkanMemoryAllocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator).
-- Shaders are compiled to SPIR-V at build time with `glslc`.
+- GLSL is staged at build time and compiled to SPIR-V on demand with `shaderc`.
+- `ShaderCacheManager` coalesces concurrent requests, retains SPIR-V in memory, and periodically persists validated,
+  content-addressed entries from its worker thread. By default the persistent `shader_cache` directory is created next
+  to the executable's `content` directory; embedders may provide an explicit path.
 - ImGui with the GLFW + Vulkan backends.
 
 This is a [yae](https://github.com/Sunday111/yae) package: add it as a package dependency and link the `klvk` module.

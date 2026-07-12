@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "klvk/error_handling.hpp"
+#include "klvk/shader/shader_cache_manager.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 
 // Vulkan create-info structs are designed for partial designated initialization;
@@ -94,6 +95,7 @@ DeviceContext::DeviceContext(GLFWwindow* window, const Settings& settings)
 
 DeviceContext::~DeviceContext()
 {
+    shader_cache_.reset();
     if (device_) (void)Vulkan::DeviceWaitIdleNE(device_);
     if (one_time_pool_) Vulkan::DestroyCommandPool(device_, one_time_pool_);
     if (allocator_) vmaDestroyAllocator(allocator_);
@@ -101,6 +103,28 @@ DeviceContext::~DeviceContext()
     if (surface_) Vulkan::DestroySurfaceKHR(instance_, surface_);
     if (debug_messenger_) Vulkan::DestroyDebugUtilsMessengerEXT(instance_, debug_messenger_);
     if (instance_) Vulkan::DestroyInstance(instance_);
+}
+
+void DeviceContext::InitializeShaderCache(
+    const std::filesystem::path& source_root,
+    const std::filesystem::path& cache_root)
+{
+    ErrorHandling::Ensure(!shader_cache_, "Shader cache is already initialized");
+    shader_cache_ = std::make_unique<ShaderCacheManager>(source_root, cache_root);
+}
+
+ShaderCacheManager& DeviceContext::GetShaderCacheManager() const
+{
+    ErrorHandling::Ensure(shader_cache_ != nullptr, "Shader cache is not initialized");
+    return *shader_cache_;
+}
+
+VkShaderModule DeviceContext::CreateShaderModuleFromSource(const std::filesystem::path& source_path) const
+{
+    const auto spirv = GetShaderCacheManager().GetOrCompile(source_path);
+    return CreateShaderModule(
+        std::string_view(reinterpret_cast<const char*>(spirv->data()), spirv->size() * sizeof(uint32_t)),
+        source_path.filename().string());
 }
 
 void DeviceContext::CreateInstance(const Settings& settings)

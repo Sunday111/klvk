@@ -103,12 +103,10 @@ CurveRenderer2d::CurveRenderer2d(Application& app) : app_(&app)
     pipeline_layout_ = Vulkan::CreatePipelineLayout(device, {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO});
     auto load = [&](const char* name)
     {
-        std::string data;
-        Filesystem::ReadFile(app.GetShaderDir() / "klvk" / name, data);
-        return context.CreateShaderModule(data, name);
+        return context.CreateShaderModuleFromSource(app.GetShaderDir() / "klvk" / name);
     };
-    const VkShaderModule vs = load("curve2d.vert.spv");
-    const VkShaderModule fs = load("curve2d.frag.spv");
+    const VkShaderModule vs = load("curve2d.vert");
+    const VkShaderModule fs = load("curve2d.frag");
     auto cleanup = OnScopeLeave(
         [&]
         {

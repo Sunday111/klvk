@@ -106,11 +106,8 @@ class GeometryShaderApp : public klvk::Application
             for (size_t index = 0; index != kFramesInFlight; ++index)
             {
                 descriptor_sets_[index] = sets[index];
-                object_buffers_[index] = klvk::GpuBuffer(
-                    context,
-                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                    kMaxObjects * sizeof(Object),
-                    true);
+                object_buffers_[index] =
+                    klvk::GpuBuffer(context, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, kMaxObjects * sizeof(Object), true);
 
                 const VkDescriptorBufferInfo buffer_info{
                     .buffer = object_buffers_[index].GetHandle(),
@@ -148,14 +145,12 @@ class GeometryShaderApp : public klvk::Application
 
             auto load_shader = [&](const char* name)
             {
-                std::string spirv;
-                klvk::Filesystem::ReadFile(GetShaderDir() / "points_to_quads_2d" / name, spirv);
-                return context.CreateShaderModule(spirv, name);
+                return context.CreateShaderModuleFromSource(GetShaderDir() / "points_to_quads_2d" / name);
             };
 
-            VkShaderModule vertex_shader = load_shader("points_to_quads_2d.vert.spv");
-            VkShaderModule geometry_shader = load_shader("points_to_quads_2d.geom.spv");
-            VkShaderModule fragment_shader = load_shader("points_to_quads_2d.frag.spv");
+            VkShaderModule vertex_shader = load_shader("points_to_quads_2d.vert");
+            VkShaderModule geometry_shader = load_shader("points_to_quads_2d.geom");
+            VkShaderModule fragment_shader = load_shader("points_to_quads_2d.frag");
             auto destroy_modules = klvk::OnScopeLeave(
                 [&]
                 {
@@ -290,8 +285,8 @@ class GeometryShaderApp : public klvk::Application
                 objects_[i].transform_columns[column] =
                     edt::Vec4f{matrix_column.x(), matrix_column.y(), matrix_column.z(), 0.f};
             }
-            objects_[i].color = edt::Math::GetRainbowColorsA(
-                (std::clamp(k, p - color_width, p + color_width) + color_width - p) * 6);
+            objects_[i].color =
+                edt::Math::GetRainbowColorsA((std::clamp(k, p - color_width, p + color_width) + color_width - p) * 6);
         }
 
         const size_t frame_index = GetFrameInFlightIndex();

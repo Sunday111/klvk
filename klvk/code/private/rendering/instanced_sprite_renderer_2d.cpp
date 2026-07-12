@@ -119,13 +119,11 @@ InstancedSpriteRenderer2d::InstancedSpriteRenderer2d(Application& app, const Tex
     {
         auto load_shader = [&](const char* name)
         {
-            std::string spirv;
-            Filesystem::ReadFile(app.GetShaderDir() / name, spirv);
-            return context.CreateShaderModule(spirv, name);
+            return context.CreateShaderModuleFromSource(app.GetShaderDir() / name);
         };
 
-        VkShaderModule vertex_shader = load_shader("klvk/instanced_sprite.vert.spv");
-        VkShaderModule fragment_shader = load_shader("klvk/instanced_sprite.frag.spv");
+        VkShaderModule vertex_shader = load_shader("klvk/instanced_sprite.vert");
+        VkShaderModule fragment_shader = load_shader("klvk/instanced_sprite.frag");
         auto destroy_modules = OnScopeLeave(
             [&]
             {

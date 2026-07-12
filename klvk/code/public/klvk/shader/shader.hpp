@@ -16,11 +16,12 @@ namespace klvk
 class DeviceContext;
 
 // The klvk counterpart of klgl's Shader: given a name it loads every present
-// SPIR-V stage (<name>.vert.spv, .frag.spv, .geom.spv, .comp.spv, .tesc.spv,
-// .tese.spv) and the <name>.shader.json config whose "definitions" become
+// GLSL stage (<name>.vert, .frag, .geom, .comp, .tesc, .tese), compiling it
+// through DeviceContext's memory/persistent cache, and the <name>.shader.json
+// config whose "definitions" become
 // specialization constants (constant_id = index in the array).
 //
-// klgl recompiles GLSL when a define changes; with precompiled SPIR-V the new
+// klgl recompiles GLSL when a define changes; with specialization constants the new
 // values take effect through a pipeline rebuild instead. Changing a define
 // bumps GetVersion(): every pipeline remembers the version it was built from
 // and rebuilds with fresh MakeShaderStages() when the versions differ, so any

@@ -1,7 +1,6 @@
 #include <imgui.h>
 
 #include <EverydayTools/Math/Math.hpp>
-
 #include <optional>
 
 #include "klvk/application.hpp"
@@ -11,13 +10,13 @@
 #include "klvk/events/event_manager.hpp"
 #include "klvk/events/mouse_events.hpp"
 #include "klvk/filesystem/filesystem.hpp"
-#include "klvk/shader/shader.hpp"
 #include "klvk/math/rotator.hpp"
+#include "klvk/shader/shader.hpp"
 #include "klvk/template/on_scope_leave.hpp"
+#include "klvk/ui/simple_type_widget.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
-#include "klvk/ui/simple_type_widget.hpp"
 #include "klvk/window.hpp"
 
 #ifdef __clang__
@@ -152,9 +151,7 @@ class ComputeShaderApp : public klvk::Application
 
     VkShaderModule Load(klvk::DeviceContext& context, const char* name)
     {
-        std::string data;
-        klvk::Filesystem::ReadFile(GetShaderDir() / "compute_shader" / name, data);
-        return context.CreateShaderModule(data, name);
+        return context.CreateShaderModuleFromSource(GetShaderDir() / "compute_shader" / name);
     }
 
     VkPipeline CreateGraphicsPipeline(klvk::DeviceContext& context, VkShaderModule vertex, VkShaderModule fragment)
@@ -174,8 +171,9 @@ class ComputeShaderApp : public klvk::Application
         return CreateGraphicsPipeline(context, stages);
     }
 
-    VkPipeline
-    CreateGraphicsPipeline(klvk::DeviceContext& context, const std::vector<VkPipelineShaderStageCreateInfo>& stages)
+    VkPipeline CreateGraphicsPipeline(
+        klvk::DeviceContext& context,
+        const std::vector<VkPipelineShaderStageCreateInfo>& stages)
     {
         const VkPipelineVertexInputStateCreateInfo vertex_input{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
@@ -237,10 +235,10 @@ class ComputeShaderApp : public klvk::Application
     void CreatePipelines(klvk::DeviceContext& context)
     {
         const VkDevice device = context.GetDevice();
-        const VkShaderModule compute = Load(context, "particles.comp.spv");
-        const VkShaderModule particles_vertex = Load(context, "particles.vert.spv");
-        const VkShaderModule bodies_vertex = Load(context, "bodies.vert.spv");
-        const VkShaderModule fragment = Load(context, "particles.frag.spv");
+        const VkShaderModule compute = Load(context, "particles.comp");
+        const VkShaderModule particles_vertex = Load(context, "particles.vert");
+        const VkShaderModule bodies_vertex = Load(context, "bodies.vert");
+        const VkShaderModule fragment = Load(context, "particles.frag");
         auto cleanup = klvk::OnScopeLeave(
             [&]
             {
@@ -278,8 +276,8 @@ class ComputeShaderApp : public klvk::Application
         }
 
         // The .comp stage belongs to the simulation pipeline, not this one.
-        const auto stages = particles_shader_->MakeShaderStages(
-            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+        const auto stages =
+            particles_shader_->MakeShaderStages(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
         particles_pipeline_ = CreateGraphicsPipeline(context, stages);
         particles_pipeline_shader_version_ = particles_shader_->GetVersion();
     }

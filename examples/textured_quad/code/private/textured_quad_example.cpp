@@ -118,13 +118,11 @@ class TexturedQuadApp : public klvk::Application
 
             auto load_shader = [&](const char* name)
             {
-                std::string spirv;
-                klvk::Filesystem::ReadFile(GetShaderDir() / "textured_quad_2d" / name, spirv);
-                return context.CreateShaderModule(spirv, name);
+                return context.CreateShaderModuleFromSource(GetShaderDir() / "textured_quad_2d" / name);
             };
 
-            VkShaderModule vertex_shader = load_shader("textured_quad_2d.vert.spv");
-            VkShaderModule fragment_shader = load_shader("textured_quad_2d.frag.spv");
+            VkShaderModule vertex_shader = load_shader("textured_quad_2d.vert");
+            VkShaderModule fragment_shader = load_shader("textured_quad_2d.frag");
             auto destroy_modules = klvk::OnScopeLeave(
                 [&]
                 {
@@ -235,12 +233,7 @@ class TexturedQuadApp : public klvk::Application
         const PushConstants push_constants{
             .color = edt::Math::GetRainbowColorsA(GetTimeSeconds()).Cast<float>() / 255.f,
         };
-        klvk::Vulkan::CmdPushConstants(
-            command_buffer,
-            pipeline_layout_,
-            VK_SHADER_STAGE_VERTEX_BIT,
-            0,
-            push_constants);
+        klvk::Vulkan::CmdPushConstants(command_buffer, pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, push_constants);
 
         klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
     }

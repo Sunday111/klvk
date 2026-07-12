@@ -249,6 +249,7 @@ void Application::Initialize()
     }
 
     state_->device_context_ = std::make_unique<DeviceContext>(state_->window_->GetGlfwWindow());
+    state_->device_context_->InitializeShaderCache(GetShaderDir());
     state_->swapchain_ = std::make_unique<Swapchain>(*state_->device_context_, state_->window_->GetFramebufferSize());
     state_->CreateFrames();
 

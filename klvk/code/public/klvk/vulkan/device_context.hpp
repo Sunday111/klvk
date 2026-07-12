@@ -1,5 +1,7 @@
 #pragma once
 
+#include <filesystem>
+#include <memory>
 #include <string>
 
 #include "klvk/vulkan/vulkan_common.hpp"
@@ -10,6 +12,8 @@ VK_DEFINE_HANDLE(VmaAllocator)
 
 namespace klvk
 {
+
+class ShaderCacheManager;
 
 #ifdef NDEBUG
 inline constexpr bool kDebugBuild = false;
@@ -57,6 +61,9 @@ public:
     }
 
     [[nodiscard]] VkShaderModule CreateShaderModule(std::string_view spirv_bytes, std::string_view debug_name) const;
+    void InitializeShaderCache(const std::filesystem::path& source_root, const std::filesystem::path& cache_root = {});
+    [[nodiscard]] VkShaderModule CreateShaderModuleFromSource(const std::filesystem::path& source_path) const;
+    [[nodiscard]] ShaderCacheManager& GetShaderCacheManager() const;
 
 private:
     [[nodiscard]] VkCommandBuffer BeginOneTimeCommands() const;
@@ -78,6 +85,7 @@ private:
     VmaAllocator allocator_ = VK_NULL_HANDLE;
     VkCommandPool one_time_pool_ = VK_NULL_HANDLE;
     bool geometry_shader_enabled_ = false;
+    std::unique_ptr<ShaderCacheManager> shader_cache_;
 };
 
 }  // namespace klvk
