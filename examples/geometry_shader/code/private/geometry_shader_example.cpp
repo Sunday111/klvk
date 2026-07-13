@@ -5,9 +5,11 @@
 #include "klvk/error_handling.hpp"
 #include "klvk/filesystem/filesystem.hpp"
 #include "klvk/ui/imgui_helpers.hpp"
+#include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
+#include "klvk/vulkan/vk_object.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
 
@@ -63,67 +65,14 @@ class GeometryShaderApp : public klvk::Application
         }
 
         // One storage buffer and descriptor set per frame in flight
+        descriptor_sets_ = klvk::DescriptorSets::Builder(context)
+                               .Binding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
+                               .Build(kFramesInFlight);
+        for (size_t index = 0; index != kFramesInFlight; ++index)
         {
-            const VkDescriptorSetLayoutBinding binding{
-                .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-            };
-            set_layout_ = klvk::Vulkan::CreateDescriptorSetLayout(
-                device,
-                {
-                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                    .bindingCount = 1,
-                    .pBindings = &binding,
-                });
-
-            constexpr auto frames = static_cast<uint32_t>(kFramesInFlight);
-            const VkDescriptorPoolSize pool_size{
-                .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .descriptorCount = frames,
-            };
-            descriptor_pool_ = klvk::Vulkan::CreateDescriptorPool(
-                device,
-                {
-                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-                    .maxSets = frames,
-                    .poolSizeCount = 1,
-                    .pPoolSizes = &pool_size,
-                });
-
-            std::array<VkDescriptorSetLayout, kFramesInFlight> layouts{};
-            layouts.fill(set_layout_);
-            const std::vector<VkDescriptorSet> sets = klvk::Vulkan::AllocateDescriptorSets(
-                device,
-                {
-                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-                    .descriptorPool = descriptor_pool_,
-                    .descriptorSetCount = frames,
-                    .pSetLayouts = layouts.data(),
-                });
-
-            for (size_t index = 0; index != kFramesInFlight; ++index)
-            {
-                descriptor_sets_[index] = sets[index];
-                object_buffers_[index] =
-                    klvk::GpuBuffer(context, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, kMaxObjects * sizeof(Object), true);
-
-                const VkDescriptorBufferInfo buffer_info{
-                    .buffer = object_buffers_[index].GetHandle(),
-                    .offset = 0,
-                    .range = VK_WHOLE_SIZE,
-                };
-                const VkWriteDescriptorSet write{
-                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                    .dstSet = descriptor_sets_[index],
-                    .dstBinding = 0,
-                    .descriptorCount = 1,
-                    .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                    .pBufferInfo = &buffer_info,
-                };
-                klvk::Vulkan::UpdateDescriptorSets(device, std::span{&write, 1});
-            }
+            object_buffers_[index] =
+                klvk::GpuBuffer(context, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, kMaxObjects * sizeof(Object), true);
+            descriptor_sets_.WriteBuffer(index, 0, object_buffers_[index].GetHandle(), VK_WHOLE_SIZE);
         }
 
         // Pipeline with a geometry stage
@@ -133,25 +82,30 @@ class GeometryShaderApp : public klvk::Application
                 .offset = 0,
                 .size = sizeof(float),
             };
-            pipeline_layout_ = klvk::Vulkan::CreatePipelineLayout(
+            const VkDescriptorSetLayout set_layout = descriptor_sets_.GetLayout();
+            pipeline_layout_ = klvk::VkObject<VkPipelineLayout>{
                 device,
-                {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                    .setLayoutCount = 1,
-                    .pSetLayouts = &set_layout_,
-                    .pushConstantRangeCount = 1,
-                    .pPushConstantRanges = &push_constant_range,
-                });
+                klvk::Vulkan::CreatePipelineLayout(
+                    device,
+                    {
+                        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                        .setLayoutCount = 1,
+                        .pSetLayouts = &set_layout,
+                        .pushConstantRangeCount = 1,
+                        .pPushConstantRanges = &push_constant_range,
+                    })};
 
             const std::filesystem::path shader_dir = GetShaderDir() / "points_to_quads_2d";
-            pipeline_ = klvk::GraphicsPipelineBuilder(*this)
-                            .Layout(pipeline_layout_)
-                            .VertexShaderFile(shader_dir / "points_to_quads_2d.vert")
-                            .GeometryShaderFile(shader_dir / "points_to_quads_2d.geom")
-                            .FragmentShaderFile(shader_dir / "points_to_quads_2d.frag")
-                            .Topology(VK_PRIMITIVE_TOPOLOGY_POINT_LIST)
-                            .AlphaBlend()
-                            .Build();
+            pipeline_ = klvk::VkObject<VkPipeline>{
+                device,
+                klvk::GraphicsPipelineBuilder(*this)
+                    .Layout(pipeline_layout_)
+                    .VertexShaderFile(shader_dir / "points_to_quads_2d.vert")
+                    .GeometryShaderFile(shader_dir / "points_to_quads_2d.geom")
+                    .FragmentShaderFile(shader_dir / "points_to_quads_2d.frag")
+                    .Topology(VK_PRIMITIVE_TOPOLOGY_POINT_LIST)
+                    .AlphaBlend()
+                    .Build()};
         }
     }
 
@@ -196,13 +150,14 @@ class GeometryShaderApp : public klvk::Application
         object_buffers_[frame_index].Write(std::as_bytes(std::span{objects_}.first(n)));
 
         VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
+        const VkDescriptorSet descriptor_set = descriptor_sets_.Get(frame_index);
         klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
         klvk::Vulkan::CmdBindDescriptorSets(
             command_buffer,
             VK_PIPELINE_BIND_POINT_GRAPHICS,
             pipeline_layout_,
             0,
-            std::span{&descriptor_sets_[frame_index], 1});
+            std::span{&descriptor_set, 1});
         klvk::Vulkan::CmdPushConstants(
             command_buffer,
             pipeline_layout_,
@@ -212,30 +167,13 @@ class GeometryShaderApp : public klvk::Application
         klvk::Vulkan::CmdDraw(command_buffer, static_cast<uint32_t>(n), 1, 0, 0);
     }
 
-public:
-    ~GeometryShaderApp() override
-    {
-        // Initialize either succeeded entirely or threw before creating the pipeline.
-        if (pipeline_ == VK_NULL_HANDLE) return;
-
-        klvk::DeviceContext& context = GetDeviceContext();
-        context.WaitIdle();
-        VkDevice device = context.GetDevice();
-        klvk::Vulkan::DestroyPipelineNE(device, pipeline_);
-        klvk::Vulkan::DestroyPipelineLayoutNE(device, pipeline_layout_);
-        klvk::Vulkan::DestroyDescriptorPoolNE(device, descriptor_pool_);
-        klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, set_layout_);
-    }
-
 private:
     float figure_border_ = 0.05f;
     std::vector<Object> objects_;
-    VkDescriptorSetLayout set_layout_ = VK_NULL_HANDLE;
-    VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
-    std::array<VkDescriptorSet, kFramesInFlight> descriptor_sets_{};
+    klvk::DescriptorSets descriptor_sets_;
     std::array<klvk::GpuBuffer, kFramesInFlight> object_buffers_{};
-    VkPipelineLayout pipeline_layout_ = VK_NULL_HANDLE;
-    VkPipeline pipeline_ = VK_NULL_HANDLE;
+    klvk::VkObject<VkPipelineLayout> pipeline_layout_;
+    klvk::VkObject<VkPipeline> pipeline_;
 };
 
 void Main()
