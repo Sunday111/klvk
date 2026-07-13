@@ -7,8 +7,10 @@
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
+#include "klvk/vulkan/vk_object.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
 
@@ -44,60 +46,46 @@ class PostProcessingApp : public klvk::Application
         auto& context = GetDeviceContext();
         const VkDevice device = context.GetDevice();
 
-        const VkDescriptorSetLayoutBinding binding{
-            .binding = 0,
-            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .descriptorCount = 1,
-            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-        };
-        set_layout_ = klvk::Vulkan::CreateDescriptorSetLayout(
+        descriptor_sets_ = klvk::DescriptorSets::Builder(context)
+                               .Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+                               .Build(kFramesInFlight);
+        sampler_ = klvk::VkObject<VkSampler>{
             device,
-            {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 1, .pBindings = &binding});
-        const VkDescriptorPoolSize pool_size{
-            .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .descriptorCount = kFramesInFlight,
-        };
-        descriptor_pool_ = klvk::Vulkan::CreateDescriptorPool(
-            device,
-            {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-             .maxSets = kFramesInFlight,
-             .poolSizeCount = 1,
-             .pPoolSizes = &pool_size});
-        const std::array layouts{set_layout_, set_layout_};
-        const auto sets = klvk::Vulkan::AllocateDescriptorSets(
-            device,
-            {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-             .descriptorPool = descriptor_pool_,
-             .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
-             .pSetLayouts = layouts.data()});
-        for (size_t i = 0; i != sets_.size(); ++i) sets_[i] = sets[i];
-        sampler_ = klvk::Vulkan::CreateSampler(
-            device,
-            {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-             .magFilter = VK_FILTER_LINEAR,
-             .minFilter = VK_FILTER_LINEAR,
-             .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-             .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-             .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-             .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE});
+            klvk::Vulkan::CreateSampler(
+                device,
+                {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+                 .magFilter = VK_FILTER_LINEAR,
+                 .minFilter = VK_FILTER_LINEAR,
+                 .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+                 .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                 .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                 .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE})};
 
         const VkPushConstantRange scene_range{
             .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
             .size = sizeof(PushConstants)};
-        scene_layout_ = klvk::Vulkan::CreatePipelineLayout(
+        scene_layout_ = klvk::VkObject<VkPipelineLayout>{
             device,
-            {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-             .pushConstantRangeCount = 1,
-             .pPushConstantRanges = &scene_range});
-        blur_layout_ = klvk::Vulkan::CreatePipelineLayout(
+            klvk::Vulkan::CreatePipelineLayout(
+                device,
+                {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                 .pushConstantRangeCount = 1,
+                 .pPushConstantRanges = &scene_range})};
+        const VkDescriptorSetLayout set_layout = descriptor_sets_.GetLayout();
+        blur_layout_ = klvk::VkObject<VkPipelineLayout>{
             device,
-            {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-             .setLayoutCount = 1,
-             .pSetLayouts = &set_layout_,
-             .pushConstantRangeCount = 1,
-             .pPushConstantRanges = &scene_range});
-        scene_pipeline_ = CreatePipeline(context, "scene.frag", scene_layout_, kTargetFormat);
-        blur_pipeline_ = CreatePipeline(context, "blur.frag", blur_layout_, GetSwapchainFormat());
+            klvk::Vulkan::CreatePipelineLayout(
+                device,
+                {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                 .setLayoutCount = 1,
+                 .pSetLayouts = &set_layout,
+                 .pushConstantRangeCount = 1,
+                 .pPushConstantRanges = &scene_range})};
+        scene_pipeline_ =
+            klvk::VkObject<VkPipeline>{device, CreatePipeline(context, "scene.frag", scene_layout_, kTargetFormat)};
+        blur_pipeline_ = klvk::VkObject<VkPipeline>{
+            device,
+            CreatePipeline(context, "blur.frag", blur_layout_, GetSwapchainFormat())};
     }
 
     VkPipeline
@@ -151,18 +139,7 @@ class PostProcessingApp : public klvk::Application
                  .viewType = VK_IMAGE_VIEW_TYPE_2D,
                  .format = kTargetFormat,
                  .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1}});
-            const VkDescriptorImageInfo image{
-                .sampler = sampler_,
-                .imageView = target.view,
-                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-            const VkWriteDescriptorSet write{
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstSet = sets_[i],
-                .dstBinding = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .pImageInfo = &image};
-            klvk::Vulkan::UpdateDescriptorSets(context.GetDevice(), std::span{&write, 1});
+            descriptor_sets_.WriteImage(i, 0, target.view, sampler_);
         }
     }
 
@@ -233,7 +210,7 @@ class PostProcessingApp : public klvk::Application
         ImGui::SliderFloat("Blur spread", &spread_, 0.5f, 30.f);
         ImGui::SliderFloat("Blur mix", &mix_, 0.f, 1.f);
         const VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
-        const VkDescriptorSet set = sets_[GetFrameInFlightIndex()];
+        const VkDescriptorSet set = descriptor_sets_.Get(GetFrameInFlightIndex());
         klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, blur_pipeline_);
         klvk::Vulkan::CmdBindDescriptorSets(
             command_buffer,
@@ -259,29 +236,20 @@ class PostProcessingApp : public klvk::Application
 public:
     ~PostProcessingApp() override
     {
-        if (!scene_pipeline_) return;
-        auto& context = GetDeviceContext();
-        context.WaitIdle();
+        // The offscreen targets are raw VMA allocations with no RAII wrapper; the
+        // sampler, pipelines, layouts and descriptor sets are VkObject /
+        // DescriptorSets members that clean up themselves. Application::Run has
+        // already waited for the device to go idle.
         DestroyTargets();
-        const VkDevice device = context.GetDevice();
-        klvk::Vulkan::DestroyPipelineNE(device, scene_pipeline_);
-        klvk::Vulkan::DestroyPipelineNE(device, blur_pipeline_);
-        klvk::Vulkan::DestroyPipelineLayoutNE(device, scene_layout_);
-        klvk::Vulkan::DestroyPipelineLayoutNE(device, blur_layout_);
-        klvk::Vulkan::DestroySamplerNE(device, sampler_);
-        klvk::Vulkan::DestroyDescriptorPoolNE(device, descriptor_pool_);
-        klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, set_layout_);
     }
 
 private:
-    VkDescriptorSetLayout set_layout_ = VK_NULL_HANDLE;
-    VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
-    VkSampler sampler_ = VK_NULL_HANDLE;
-    VkPipelineLayout scene_layout_ = VK_NULL_HANDLE;
-    VkPipelineLayout blur_layout_ = VK_NULL_HANDLE;
-    VkPipeline scene_pipeline_ = VK_NULL_HANDLE;
-    VkPipeline blur_pipeline_ = VK_NULL_HANDLE;
-    std::array<VkDescriptorSet, kFramesInFlight> sets_{};
+    klvk::DescriptorSets descriptor_sets_;
+    klvk::VkObject<VkSampler> sampler_;
+    klvk::VkObject<VkPipelineLayout> scene_layout_;
+    klvk::VkObject<VkPipelineLayout> blur_layout_;
+    klvk::VkObject<VkPipeline> scene_pipeline_;
+    klvk::VkObject<VkPipeline> blur_pipeline_;
     std::array<Target, kFramesInFlight> targets_{};
     edt::Vec2<uint32_t> size_{};
     int radius_ = 4;
