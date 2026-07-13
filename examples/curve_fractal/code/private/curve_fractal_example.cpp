@@ -20,8 +20,10 @@
 #include "klvk/events/mouse_events.hpp"
 #include "klvk/filesystem/filesystem.hpp"
 #include "klvk/rendering/curve_renderer_2d.hpp"
+#include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
+#include "klvk/vulkan/vk_object.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
 
@@ -228,43 +230,29 @@ class CurveFractalApp : public klvk::Application
     {
         auto& context = GetDeviceContext();
         const VkDevice device = context.GetDevice();
-        const VkDescriptorSetLayoutBinding binding{
-            .binding = 0,
-            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .descriptorCount = 1,
-            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT};
-        descriptor_set_layout_ = klvk::Vulkan::CreateDescriptorSetLayout(
+        descriptor_sets_ = klvk::DescriptorSets::Builder(context)
+                               .Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+                               .Build();
+        sampler_ = klvk::VkObject<VkSampler>{
             device,
-            {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 1, .pBindings = &binding});
-        const VkDescriptorPoolSize pool_size{.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1};
-        descriptor_pool_ = klvk::Vulkan::CreateDescriptorPool(
+            klvk::Vulkan::CreateSampler(
+                device,
+                {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+                 .magFilter = VK_FILTER_LINEAR,
+                 .minFilter = VK_FILTER_LINEAR,
+                 .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+                 .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+                 .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+                 .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER})};
+        const VkDescriptorSetLayout set_layout = descriptor_sets_.GetLayout();
+        pipeline_layout_ = klvk::VkObject<VkPipelineLayout>{
             device,
-            {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-             .maxSets = 1,
-             .poolSizeCount = 1,
-             .pPoolSizes = &pool_size});
-        descriptor_set_ = klvk::Vulkan::AllocateDescriptorSets(
-                              device,
-                              {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-                               .descriptorPool = descriptor_pool_,
-                               .descriptorSetCount = 1,
-                               .pSetLayouts = &descriptor_set_layout_})
-                              .front();
-        sampler_ = klvk::Vulkan::CreateSampler(
-            device,
-            {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-             .magFilter = VK_FILTER_LINEAR,
-             .minFilter = VK_FILTER_LINEAR,
-             .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-             .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-             .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-             .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER});
-        pipeline_layout_ = klvk::Vulkan::CreatePipelineLayout(
-            device,
-            {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-             .setLayoutCount = 1,
-             .pSetLayouts = &descriptor_set_layout_});
-        pipeline_ = CreateDisplayPipeline(context);
+            klvk::Vulkan::CreatePipelineLayout(
+                device,
+                {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                 .setLayoutCount = 1,
+                 .pSetLayouts = &set_layout})};
+        pipeline_ = klvk::VkObject<VkPipeline>{device, CreateDisplayPipeline(context)};
     }
 
     [[nodiscard]] VkPipeline CreateDisplayPipeline(klvk::DeviceContext&)
@@ -309,18 +297,7 @@ class CurveFractalApp : public klvk::Application
              .viewType = VK_IMAGE_VIEW_TYPE_2D,
              .format = kOffscreenFormat,
              .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1}});
-        const VkDescriptorImageInfo image_info_descriptor{
-            .sampler = sampler_,
-            .imageView = target_.view,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        const VkWriteDescriptorSet write{
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = descriptor_set_,
-            .dstBinding = 0,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .pImageInfo = &image_info_descriptor};
-        klvk::Vulkan::UpdateDescriptorSets(context.GetDevice(), std::span{&write, 1});
+        descriptor_sets_.WriteImage(0, 0, target_.view, sampler_);
     }
 
     size_t DrainProducedCurves()
@@ -402,13 +379,14 @@ class CurveFractalApp : public klvk::Application
     {
         klvk::Application::Tick();
         const VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
+        const VkDescriptorSet descriptor_set = descriptor_sets_.Get(0);
         klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
         klvk::Vulkan::CmdBindDescriptorSets(
             command_buffer,
             VK_PIPELINE_BIND_POINT_GRAPHICS,
             pipeline_layout_,
             0,
-            std::span{&descriptor_set_, 1});
+            std::span{&descriptor_set, 1});
         klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
         HandleInput();
     }
@@ -442,18 +420,18 @@ public:
         for (std::jthread& producer : producers_) producer.request_stop();
         queue_not_full_.notify_all();
         producers_.clear();
-        if (pipeline_ == VK_NULL_HANDLE) return;
-        auto& context = GetDeviceContext();
-        context.WaitIdle();
         renderers_.clear();
-        const VkDevice device = context.GetDevice();
-        if (target_.view) klvk::Vulkan::DestroyImageViewNE(device, target_.view);
-        if (target_.image) vmaDestroyImage(context.GetAllocator(), target_.image, target_.allocation);
-        klvk::Vulkan::DestroySamplerNE(device, sampler_);
-        klvk::Vulkan::DestroyPipelineNE(device, pipeline_);
-        klvk::Vulkan::DestroyPipelineLayoutNE(device, pipeline_layout_);
-        klvk::Vulkan::DestroyDescriptorPoolNE(device, descriptor_pool_);
-        klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, descriptor_set_layout_);
+
+        // The offscreen accumulation image is a raw VMA allocation, so it and its
+        // view still need manual teardown; the sampler, pipeline, layout and
+        // descriptor sets are VkObject / DescriptorSets members that clean up
+        // themselves. Application::Run already waited for the device to go idle.
+        if (target_.image)
+        {
+            auto& context = GetDeviceContext();
+            klvk::Vulkan::DestroyImageViewNE(context.GetDevice(), target_.view);
+            vmaDestroyImage(context.GetAllocator(), target_.image, target_.allocation);
+        }
     }
 
 private:
@@ -468,12 +446,10 @@ private:
     std::vector<std::vector<klvk::CurveRenderer2d::ControlPoint>> produced_curves_;
     std::vector<std::unique_ptr<klvk::CurveRenderer2d>> renderers_;
     OffscreenTarget target_{};
-    VkDescriptorSetLayout descriptor_set_layout_ = VK_NULL_HANDLE;
-    VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
-    VkDescriptorSet descriptor_set_ = VK_NULL_HANDLE;
-    VkSampler sampler_ = VK_NULL_HANDLE;
-    VkPipelineLayout pipeline_layout_ = VK_NULL_HANDLE;
-    VkPipeline pipeline_ = VK_NULL_HANDLE;
+    klvk::DescriptorSets descriptor_sets_;
+    klvk::VkObject<VkSampler> sampler_;
+    klvk::VkObject<VkPipelineLayout> pipeline_layout_;
+    klvk::VkObject<VkPipeline> pipeline_;
 };
 
 void Main()
