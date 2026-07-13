@@ -9,8 +9,10 @@
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
+#include "klvk/vulkan/vk_object.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
 
@@ -45,80 +47,57 @@ class RenderToTextureApp : public klvk::Application
         klvk::DeviceContext& context = GetDeviceContext();
         VkDevice device = context.GetDevice();
 
-        const VkDescriptorSetLayoutBinding binding{
-            .binding = 0,
-            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .descriptorCount = 1,
-            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-        };
-        descriptor_set_layout_ = klvk::Vulkan::CreateDescriptorSetLayout(
+        descriptor_sets_ = klvk::DescriptorSets::Builder(context)
+                               .Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+                               .Build(kFramesInFlight);
+        sampler_ = klvk::VkObject<VkSampler>{
             device,
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .bindingCount = 1,
-                .pBindings = &binding,
-            });
-        const VkDescriptorPoolSize pool_size{
-            .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .descriptorCount = kFramesInFlight,
-        };
-        descriptor_pool_ = klvk::Vulkan::CreateDescriptorPool(
-            device,
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-                .maxSets = kFramesInFlight,
-                .poolSizeCount = 1,
-                .pPoolSizes = &pool_size,
-            });
-        const std::array layouts{descriptor_set_layout_, descriptor_set_layout_};
-        const auto descriptor_sets = klvk::Vulkan::AllocateDescriptorSets(
-            device,
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-                .descriptorPool = descriptor_pool_,
-                .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
-                .pSetLayouts = layouts.data(),
-            });
-        for (size_t index = 0; index != descriptor_sets_.size(); ++index)
-            descriptor_sets_[index] = descriptor_sets[index];
-        sampler_ = klvk::Vulkan::CreateSampler(
-            device,
-            {
-                .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-                .magFilter = VK_FILTER_LINEAR,
-                .minFilter = VK_FILTER_LINEAR,
-                .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-                .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            });
+            klvk::Vulkan::CreateSampler(
+                device,
+                {
+                    .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+                    .magFilter = VK_FILTER_LINEAR,
+                    .minFilter = VK_FILTER_LINEAR,
+                    .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+                    .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                    .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                    .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                })};
 
         const VkPushConstantRange push_constant_range{
             .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
             .size = sizeof(ColorPushConstants),
         };
-        color_pipeline_layout_ = klvk::Vulkan::CreatePipelineLayout(
+        color_pipeline_layout_ = klvk::VkObject<VkPipelineLayout>{
             device,
-            {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                .pushConstantRangeCount = 1,
-                .pPushConstantRanges = &push_constant_range,
-            });
-        texture_pipeline_layout_ = klvk::Vulkan::CreatePipelineLayout(
+            klvk::Vulkan::CreatePipelineLayout(
+                device,
+                {
+                    .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                    .pushConstantRangeCount = 1,
+                    .pPushConstantRanges = &push_constant_range,
+                })};
+        const VkDescriptorSetLayout set_layout = descriptor_sets_.GetLayout();
+        texture_pipeline_layout_ = klvk::VkObject<VkPipelineLayout>{
             device,
-            {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                .setLayoutCount = 1,
-                .pSetLayouts = &descriptor_set_layout_,
-            });
-        color_pipeline_ =
-            CreatePipeline(context, "color.vert", "color.frag", color_pipeline_layout_, kOffscreenFormat);
-        texture_pipeline_ = CreatePipeline(
-            context,
-            "textured_quad.vert",
-            "textured_quad.frag",
-            texture_pipeline_layout_,
-            GetSwapchainFormat());
+            klvk::Vulkan::CreatePipelineLayout(
+                device,
+                {
+                    .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                    .setLayoutCount = 1,
+                    .pSetLayouts = &set_layout,
+                })};
+        color_pipeline_ = klvk::VkObject<VkPipeline>{
+            device,
+            CreatePipeline(context, "color.vert", "color.frag", color_pipeline_layout_, kOffscreenFormat)};
+        texture_pipeline_ = klvk::VkObject<VkPipeline>{
+            device,
+            CreatePipeline(
+                context,
+                "textured_quad.vert",
+                "textured_quad.frag",
+                texture_pipeline_layout_,
+                GetSwapchainFormat())};
     }
 
     [[nodiscard]] VkPipeline CreatePipeline(
@@ -182,20 +161,7 @@ class RenderToTextureApp : public klvk::Application
                     .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
                 });
 
-            const VkDescriptorImageInfo image_descriptor{
-                .sampler = sampler_,
-                .imageView = target.view,
-                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            };
-            const VkWriteDescriptorSet write{
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstSet = descriptor_sets_[index],
-                .dstBinding = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .pImageInfo = &image_descriptor,
-            };
-            klvk::Vulkan::UpdateDescriptorSets(context.GetDevice(), std::span{&write, 1});
+            descriptor_sets_.WriteImage(index, 0, target.view, sampler_);
         }
     }
 
@@ -283,7 +249,7 @@ class RenderToTextureApp : public klvk::Application
     {
         klvk::Application::Tick();
         VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
-        const VkDescriptorSet descriptor_set = descriptor_sets_[GetFrameInFlightIndex()];
+        const VkDescriptorSet descriptor_set = descriptor_sets_.Get(GetFrameInFlightIndex());
         klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, texture_pipeline_);
         klvk::Vulkan::CmdBindDescriptorSets(
             command_buffer,
@@ -315,29 +281,20 @@ class RenderToTextureApp : public klvk::Application
 public:
     ~RenderToTextureApp() override
     {
-        if (color_pipeline_ == VK_NULL_HANDLE) return;
-        klvk::DeviceContext& context = GetDeviceContext();
-        context.WaitIdle();
+        // The offscreen images are raw VMA allocations with no RAII wrapper; the
+        // sampler, pipelines, layouts and descriptor sets are VkObject /
+        // DescriptorSets members that clean up themselves. Application::Run has
+        // already waited for the device to go idle.
         DestroyOffscreenTargets();
-        VkDevice device = context.GetDevice();
-        klvk::Vulkan::DestroySamplerNE(device, sampler_);
-        klvk::Vulkan::DestroyPipelineNE(device, color_pipeline_);
-        klvk::Vulkan::DestroyPipelineNE(device, texture_pipeline_);
-        klvk::Vulkan::DestroyPipelineLayoutNE(device, color_pipeline_layout_);
-        klvk::Vulkan::DestroyPipelineLayoutNE(device, texture_pipeline_layout_);
-        klvk::Vulkan::DestroyDescriptorPoolNE(device, descriptor_pool_);
-        klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, descriptor_set_layout_);
     }
 
 private:
-    VkDescriptorSetLayout descriptor_set_layout_ = VK_NULL_HANDLE;
-    VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
-    std::array<VkDescriptorSet, kFramesInFlight> descriptor_sets_{};
-    VkSampler sampler_ = VK_NULL_HANDLE;
-    VkPipelineLayout color_pipeline_layout_ = VK_NULL_HANDLE;
-    VkPipelineLayout texture_pipeline_layout_ = VK_NULL_HANDLE;
-    VkPipeline color_pipeline_ = VK_NULL_HANDLE;
-    VkPipeline texture_pipeline_ = VK_NULL_HANDLE;
+    klvk::DescriptorSets descriptor_sets_;
+    klvk::VkObject<VkSampler> sampler_;
+    klvk::VkObject<VkPipelineLayout> color_pipeline_layout_;
+    klvk::VkObject<VkPipelineLayout> texture_pipeline_layout_;
+    klvk::VkObject<VkPipeline> color_pipeline_;
+    klvk::VkObject<VkPipeline> texture_pipeline_;
     std::array<OffscreenTarget, kFramesInFlight> targets_{};
     edt::Vec2<uint32_t> target_size_{};
 };
