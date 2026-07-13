@@ -12,9 +12,11 @@
 #include "klvk/math/transform.hpp"
 #include "klvk/mesh/procedural_mesh_generator.hpp"
 #include "klvk/ui/simple_type_widget.hpp"
+#include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
+#include "klvk/vulkan/vk_object.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
 
@@ -103,60 +105,17 @@ class SimpleLitCubeApp : public klvk::Application
 
     void CreateDescriptors(klvk::DeviceContext& context)
     {
-        VkDevice device = context.GetDevice();
-        const VkDescriptorSetLayoutBinding binding{
-            .binding = 0,
-            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .descriptorCount = 1,
-            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-        };
-        descriptor_set_layout_ = klvk::Vulkan::CreateDescriptorSetLayout(
-            device,
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .bindingCount = 1,
-                .pBindings = &binding,
-            });
-
-        constexpr uint32_t frames = static_cast<uint32_t>(kFramesInFlight);
-        const VkDescriptorPoolSize pool_size{.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = frames};
-        descriptor_pool_ = klvk::Vulkan::CreateDescriptorPool(
-            device,
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-                .maxSets = frames,
-                .poolSizeCount = 1,
-                .pPoolSizes = &pool_size,
-            });
-        std::array<VkDescriptorSetLayout, kFramesInFlight> layouts{};
-        layouts.fill(descriptor_set_layout_);
-        const auto sets = klvk::Vulkan::AllocateDescriptorSets(
-            device,
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-                .descriptorPool = descriptor_pool_,
-                .descriptorSetCount = frames,
-                .pSetLayouts = layouts.data(),
-            });
-
+        descriptor_sets_ = klvk::DescriptorSets::Builder(context)
+                               .Binding(
+                                   0,
+                                   VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                                   VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+                               .Build(kFramesInFlight);
         for (size_t index = 0; index != kFramesInFlight; ++index)
         {
-            descriptor_sets_[index] = sets[index];
             uniform_buffers_[index] =
                 klvk::GpuBuffer(context, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(SceneUniforms), true);
-            const VkDescriptorBufferInfo buffer_info{
-                .buffer = uniform_buffers_[index].GetHandle(),
-                .range = sizeof(SceneUniforms),
-            };
-            const VkWriteDescriptorSet write{
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstSet = descriptor_sets_[index],
-                .dstBinding = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                .pBufferInfo = &buffer_info,
-            };
-            klvk::Vulkan::UpdateDescriptorSets(device, std::span{&write, 1});
+            descriptor_sets_.WriteBuffer(index, 0, uniform_buffers_[index].GetHandle(), sizeof(SceneUniforms));
         }
     }
 
@@ -167,28 +126,33 @@ class SimpleLitCubeApp : public klvk::Application
             .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
             .size = sizeof(ModelPushConstants),
         };
-        pipeline_layout_ = klvk::Vulkan::CreatePipelineLayout(
+        const VkDescriptorSetLayout set_layout = descriptor_sets_.GetLayout();
+        pipeline_layout_ = klvk::VkObject<VkPipelineLayout>{
             device,
-            {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                .setLayoutCount = 1,
-                .pSetLayouts = &descriptor_set_layout_,
-                .pushConstantRangeCount = 1,
-                .pPushConstantRanges = &push_constant_range,
-            });
+            klvk::Vulkan::CreatePipelineLayout(
+                device,
+                {
+                    .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                    .setLayoutCount = 1,
+                    .pSetLayouts = &set_layout,
+                    .pushConstantRangeCount = 1,
+                    .pPushConstantRanges = &push_constant_range,
+                })};
 
         const std::filesystem::path shader_dir = GetShaderDir() / "basic_light_3d";
-        pipeline_ = klvk::GraphicsPipelineBuilder(*this)
-                        .Layout(pipeline_layout_)
-                        .VertexShaderFile(shader_dir / "basic_light_3d.vert")
-                        .FragmentShaderFile(shader_dir / "basic_light_3d.frag")
-                        .Topology(topology)
-                        .CullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE)
-                        .VertexBinding(0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX)
-                        .VertexAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position))
-                        .VertexAttribute(1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, normal))
-                        .DepthTest()
-                        .Build();
+        pipeline_ = klvk::VkObject<VkPipeline>{
+            device,
+            klvk::GraphicsPipelineBuilder(*this)
+                .Layout(pipeline_layout_)
+                .VertexShaderFile(shader_dir / "basic_light_3d.vert")
+                .FragmentShaderFile(shader_dir / "basic_light_3d.frag")
+                .Topology(topology)
+                .CullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE)
+                .VertexBinding(0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX)
+                .VertexAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position))
+                .VertexAttribute(1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, normal))
+                .DepthTest()
+                .Build()};
     }
 
     void Tick() override
@@ -215,13 +179,14 @@ class SimpleLitCubeApp : public klvk::Application
         VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
         const VkBuffer vertex_buffer = vertex_buffer_.GetHandle();
         constexpr VkDeviceSize offset = 0;
+        const VkDescriptorSet descriptor_set = descriptor_sets_.Get(frame_index);
         klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
         klvk::Vulkan::CmdBindDescriptorSets(
             command_buffer,
             VK_PIPELINE_BIND_POINT_GRAPHICS,
             pipeline_layout_,
             0,
-            std::span{&descriptor_sets_[frame_index], 1});
+            std::span{&descriptor_set, 1});
         klvk::Vulkan::CmdBindVertexBuffers(command_buffer, 0, std::span{&vertex_buffer, 1}, std::span{&offset, 1});
         klvk::Vulkan::CmdBindIndexBuffer(command_buffer, index_buffer_.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
         for (const edt::Mat4f& model : cubes_)
@@ -280,29 +245,14 @@ class SimpleLitCubeApp : public klvk::Application
         camera_.SetEye(camera_.GetEye() + delta * move_speed_ * GetLastFrameDurationSeconds());
     }
 
-public:
-    ~SimpleLitCubeApp() override
-    {
-        if (pipeline_ == VK_NULL_HANDLE) return;
-        klvk::DeviceContext& context = GetDeviceContext();
-        context.WaitIdle();
-        VkDevice device = context.GetDevice();
-        klvk::Vulkan::DestroyPipelineNE(device, pipeline_);
-        klvk::Vulkan::DestroyPipelineLayoutNE(device, pipeline_layout_);
-        klvk::Vulkan::DestroyDescriptorPoolNE(device, descriptor_pool_);
-        klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, descriptor_set_layout_);
-    }
-
 private:
     std::unique_ptr<klvk::events::IEventListener> event_listener_;
     klvk::GpuBuffer vertex_buffer_;
     klvk::GpuBuffer index_buffer_;
     std::array<klvk::GpuBuffer, kFramesInFlight> uniform_buffers_;
-    std::array<VkDescriptorSet, kFramesInFlight> descriptor_sets_{};
-    VkDescriptorSetLayout descriptor_set_layout_ = VK_NULL_HANDLE;
-    VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
-    VkPipelineLayout pipeline_layout_ = VK_NULL_HANDLE;
-    VkPipeline pipeline_ = VK_NULL_HANDLE;
+    klvk::DescriptorSets descriptor_sets_;
+    klvk::VkObject<VkPipelineLayout> pipeline_layout_;
+    klvk::VkObject<VkPipeline> pipeline_;
     uint32_t index_count_ = 0;
     float move_speed_ = 5.f;
     std::vector<edt::Mat4f> cubes_;
