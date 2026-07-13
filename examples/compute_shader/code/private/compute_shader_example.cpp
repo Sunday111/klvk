@@ -14,9 +14,11 @@
 #include "klvk/shader/shader.hpp"
 #include "klvk/template/on_scope_leave.hpp"
 #include "klvk/ui/simple_type_widget.hpp"
+#include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
+#include "klvk/vulkan/vk_object.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
 
@@ -80,28 +82,12 @@ class ComputeShaderApp : public klvk::Application
 
         auto& context = GetDeviceContext();
         const VkDevice device = context.GetDevice();
-        const VkDescriptorSetLayoutBinding binding{
-            .binding = 0,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            .descriptorCount = 1,
-            .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT};
-        set_layout_ = klvk::Vulkan::CreateDescriptorSetLayout(
-            device,
-            {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 1, .pBindings = &binding});
-        const VkDescriptorPoolSize pool_size{.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1};
-        descriptor_pool_ = klvk::Vulkan::CreateDescriptorPool(
-            device,
-            {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-             .maxSets = 1,
-             .poolSizeCount = 1,
-             .pPoolSizes = &pool_size});
-        set_ = klvk::Vulkan::AllocateDescriptorSets(
-                   device,
-                   {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-                    .descriptorPool = descriptor_pool_,
-                    .descriptorSetCount = 1,
-                    .pSetLayouts = &set_layout_})
-                   .front();
+        descriptor_sets_ = klvk::DescriptorSets::Builder(context)
+                               .Binding(
+                                   0,
+                                   VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                   VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT)
+                               .Build();
 
         // The particle state persists across frames (klgl keeps one SSBO), so a
         // single buffer serves every frame; barriers order the accesses.
@@ -109,26 +95,22 @@ class ComputeShaderApp : public klvk::Application
         const VkDeviceSize bytes = particles.size() * sizeof(Particle);
         buffer_ = klvk::GpuBuffer(context, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, bytes, true);
         buffer_.Write(std::as_bytes(std::span{particles}));
-        const VkDescriptorBufferInfo buffer{.buffer = buffer_.GetHandle(), .range = bytes};
-        const VkWriteDescriptorSet write{
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = set_,
-            .dstBinding = 0,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            .pBufferInfo = &buffer};
-        klvk::Vulkan::UpdateDescriptorSets(device, std::span{&write, 1});
+        descriptor_sets_.WriteBuffer(0, 0, buffer_.GetHandle(), bytes);
+
         const std::array ranges{
             VkPushConstantRange{.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .size = sizeof(SimulationPushConstants)},
             VkPushConstantRange{.stageFlags = VK_SHADER_STAGE_VERTEX_BIT, .size = sizeof(GraphicsPushConstants)},
         };
-        pipeline_layout_ = klvk::Vulkan::CreatePipelineLayout(
+        const VkDescriptorSetLayout set_layout = descriptor_sets_.GetLayout();
+        pipeline_layout_ = klvk::VkObject<VkPipelineLayout>{
             device,
-            {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-             .setLayoutCount = 1,
-             .pSetLayouts = &set_layout_,
-             .pushConstantRangeCount = static_cast<uint32_t>(ranges.size()),
-             .pPushConstantRanges = ranges.data()});
+            klvk::Vulkan::CreatePipelineLayout(
+                device,
+                {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                 .setLayoutCount = 1,
+                 .pSetLayouts = &set_layout,
+                 .pushConstantRangeCount = static_cast<uint32_t>(ranges.size()),
+                 .pPushConstantRanges = ranges.data()})};
         CreatePipelines(context);
 
         for (Body& body : bodies_) body.rotation = body.initial_rotation;
@@ -221,8 +203,10 @@ class ComputeShaderApp : public klvk::Application
                  .module = compute,
                  .pName = "main"},
             .layout = pipeline_layout_};
-        compute_pipeline_ = klvk::Vulkan::CreateComputePipelines(device, {}, std::span{&compute_info, 1}).front();
-        bodies_pipeline_ = CreateGraphicsPipeline(context, bodies_vertex, fragment);
+        compute_pipeline_ = klvk::VkObject<VkPipeline>{
+            device,
+            klvk::Vulkan::CreateComputePipelines(device, {}, std::span{&compute_info, 1}).front()};
+        bodies_pipeline_ = klvk::VkObject<VkPipeline>{device, CreateGraphicsPipeline(context, bodies_vertex, fragment)};
 
         klvk::Shader::shaders_dir_ = GetShaderDir();
         particles_shader_ = std::make_unique<klvk::Shader>(context, "compute_shader/particles");
@@ -235,16 +219,15 @@ class ComputeShaderApp : public klvk::Application
     void RebuildParticlesPipeline()
     {
         auto& context = GetDeviceContext();
-        if (particles_pipeline_)
-        {
-            context.WaitIdle();
-            klvk::Vulkan::DestroyPipelineNE(context.GetDevice(), particles_pipeline_);
-        }
+
+        // The old pipeline may still be referenced by an in-flight frame, so wait
+        // before the move-assign below destroys it.
+        if (particles_pipeline_.IsValid()) context.WaitIdle();
 
         // The .comp stage belongs to the simulation pipeline, not this one.
         const auto stages =
             particles_shader_->MakeShaderStages(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-        particles_pipeline_ = CreateGraphicsPipeline(context, stages);
+        particles_pipeline_ = klvk::VkObject<VkPipeline>{context.GetDevice(), CreateGraphicsPipeline(context, stages)};
         particles_pipeline_shader_version_ = particles_shader_->GetVersion();
     }
 
@@ -286,7 +269,7 @@ class ComputeShaderApp : public klvk::Application
             RebuildParticlesPipeline();
         }
 
-        const VkDescriptorSet set = set_;
+        const VkDescriptorSet set = descriptor_sets_.Get(0);
         const VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
         std::array<Vec4f, 2> bodies{};
         klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline_);
@@ -424,30 +407,12 @@ class ComputeShaderApp : public klvk::Application
             {.yaw = rotation.yaw + delta.x(), .pitch = rotation.pitch + delta.y(), .roll = rotation.roll});
     }
 
-public:
-    ~ComputeShaderApp() override
-    {
-        if (!compute_pipeline_) return;
-        auto& context = GetDeviceContext();
-        context.WaitIdle();
-        const VkDevice device = context.GetDevice();
-        particles_shader_.reset();
-        klvk::Vulkan::DestroyPipelineNE(device, compute_pipeline_);
-        klvk::Vulkan::DestroyPipelineNE(device, particles_pipeline_);
-        klvk::Vulkan::DestroyPipelineNE(device, bodies_pipeline_);
-        klvk::Vulkan::DestroyPipelineLayoutNE(device, pipeline_layout_);
-        klvk::Vulkan::DestroyDescriptorPoolNE(device, descriptor_pool_);
-        klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, set_layout_);
-    }
-
 private:
-    VkDescriptorSetLayout set_layout_ = VK_NULL_HANDLE;
-    VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
-    VkPipelineLayout pipeline_layout_ = VK_NULL_HANDLE;
-    VkPipeline compute_pipeline_ = VK_NULL_HANDLE;
-    VkPipeline particles_pipeline_ = VK_NULL_HANDLE;
-    VkPipeline bodies_pipeline_ = VK_NULL_HANDLE;
-    VkDescriptorSet set_ = VK_NULL_HANDLE;
+    klvk::DescriptorSets descriptor_sets_;
+    klvk::VkObject<VkPipelineLayout> pipeline_layout_;
+    klvk::VkObject<VkPipeline> compute_pipeline_;
+    klvk::VkObject<VkPipeline> particles_pipeline_;
+    klvk::VkObject<VkPipeline> bodies_pipeline_;
     klvk::GpuBuffer buffer_;
     std::unique_ptr<klvk::events::IEventListener> listener_;
     klvk::Camera3d camera_{Vec3f{0.f, 15.f, 0.f}, {.yaw = -90.f}};
