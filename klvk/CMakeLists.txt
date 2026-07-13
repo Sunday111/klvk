@@ -16,6 +16,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/texture/procedural_texture_generator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/simple_imgui_combo.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/type_id_widget.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/descriptor_sets.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/device_context.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/gpu_buffer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/graphics_pipeline_builder.cpp
@@ -63,6 +64,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/simple_imgui_combo.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/simple_type_widget.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/type_id_widget_minimal.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/descriptor_sets.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/detail/settings.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/detail/vulkan_api_impl.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/device_context.hpp
@@ -70,6 +72,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/graphics_pipeline_builder.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/swapchain.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/texture.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vk_object.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan_api.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan_common.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/window.hpp)

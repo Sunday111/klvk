@@ -313,6 +313,13 @@ void Application::Run()
 {
     Initialize();
     MainLoop();
+
+    // Make the device idle before returning, while the application object - and
+    // any Vulkan resources it owns as members - are still alive. This is what
+    // lets applications keep pipelines, layouts and descriptor sets as VkObject /
+    // DescriptorSets members and rely on their destructors instead of writing an
+    // explicit teardown that waits and destroys each handle by hand.
+    if (state_->device_context_) state_->device_context_->WaitIdle();
 }
 
 void Application::PreTick()
