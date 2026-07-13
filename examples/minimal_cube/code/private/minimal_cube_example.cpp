@@ -15,6 +15,7 @@
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
+#include "klvk/vulkan/vk_object.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
 
@@ -64,24 +65,28 @@ class CubeApp : public klvk::Application
             .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
             .size = sizeof(PushConstants),
         };
-        pipeline_layout_ = klvk::Vulkan::CreatePipelineLayout(
+        pipeline_layout_ = klvk::VkObject<VkPipelineLayout>{
             device,
-            {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                .pushConstantRangeCount = 1,
-                .pPushConstantRanges = &push_constant_range,
-            });
+            klvk::Vulkan::CreatePipelineLayout(
+                device,
+                {
+                    .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                    .pushConstantRangeCount = 1,
+                    .pPushConstantRanges = &push_constant_range,
+                })};
 
         const std::filesystem::path shader_dir = GetShaderDir() / "just_color_3d";
-        pipeline_ = klvk::GraphicsPipelineBuilder(*this)
-                        .Layout(pipeline_layout_)
-                        .VertexShaderFile(shader_dir / "just_color_3d.vert")
-                        .FragmentShaderFile(shader_dir / "just_color_3d.frag")
-                        .Topology(mesh.topology)
-                        .CullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE)
-                        .VertexBinding(0, sizeof(edt::Vec3f), VK_VERTEX_INPUT_RATE_VERTEX)
-                        .VertexAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0)
-                        .Build();
+        pipeline_ = klvk::VkObject<VkPipeline>{
+            device,
+            klvk::GraphicsPipelineBuilder(*this)
+                .Layout(pipeline_layout_)
+                .VertexShaderFile(shader_dir / "just_color_3d.vert")
+                .FragmentShaderFile(shader_dir / "just_color_3d.frag")
+                .Topology(mesh.topology)
+                .CullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE)
+                .VertexBinding(0, sizeof(edt::Vec3f), VK_VERTEX_INPUT_RATE_VERTEX)
+                .VertexAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0)
+                .Build()};
     }
 
     void Tick() override
@@ -151,22 +156,12 @@ class CubeApp : public klvk::Application
         camera_.SetEye(camera_.GetEye() + delta * move_speed_ * GetLastFrameDurationSeconds());
     }
 
-public:
-    ~CubeApp() override
-    {
-        if (pipeline_ == VK_NULL_HANDLE) return;
-        klvk::DeviceContext& context = GetDeviceContext();
-        context.WaitIdle();
-        klvk::Vulkan::DestroyPipelineNE(context.GetDevice(), pipeline_);
-        klvk::Vulkan::DestroyPipelineLayoutNE(context.GetDevice(), pipeline_layout_);
-    }
-
 private:
     std::unique_ptr<klvk::events::IEventListener> event_listener_;
     klvk::GpuBuffer vertex_buffer_;
     klvk::GpuBuffer index_buffer_;
-    VkPipelineLayout pipeline_layout_ = VK_NULL_HANDLE;
-    VkPipeline pipeline_ = VK_NULL_HANDLE;
+    klvk::VkObject<VkPipelineLayout> pipeline_layout_;
+    klvk::VkObject<VkPipeline> pipeline_;
     uint32_t index_count_ = 0;
     float move_speed_ = 5.f;
     klvk::Transform cube_transform_{.translation = {6, 6, 0}};

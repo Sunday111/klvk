@@ -5,6 +5,7 @@
 #include "klvk/filesystem/filesystem.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
+#include "klvk/vulkan/vk_object.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
 
@@ -39,20 +40,24 @@ class QuadApp : public klvk::Application
             .offset = 0,
             .size = sizeof(PushConstants),
         };
-        pipeline_layout_ = klvk::Vulkan::CreatePipelineLayout(
+        pipeline_layout_ = klvk::VkObject<VkPipelineLayout>{
             device,
-            {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                .pushConstantRangeCount = 1,
-                .pPushConstantRanges = &push_constant_range,
-            });
+            klvk::Vulkan::CreatePipelineLayout(
+                device,
+                {
+                    .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                    .pushConstantRangeCount = 1,
+                    .pPushConstantRanges = &push_constant_range,
+                })};
 
         const std::filesystem::path shader_dir = GetShaderDir() / "just_color_2d";
-        pipeline_ = klvk::GraphicsPipelineBuilder(*this)
-                        .Layout(pipeline_layout_)
-                        .VertexShaderFile(shader_dir / "just_color_2d.vert")
-                        .FragmentShaderFile(shader_dir / "just_color_2d.frag")
-                        .Build();
+        pipeline_ = klvk::VkObject<VkPipeline>{
+            device,
+            klvk::GraphicsPipelineBuilder(*this)
+                .Layout(pipeline_layout_)
+                .VertexShaderFile(shader_dir / "just_color_2d.vert")
+                .FragmentShaderFile(shader_dir / "just_color_2d.frag")
+                .Build()};
     }
 
     void Tick() override
@@ -79,22 +84,9 @@ class QuadApp : public klvk::Application
         klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
     }
 
-public:
-    ~QuadApp() override
-    {
-        // Initialize either succeeded entirely or threw before creating the pipeline.
-        if (pipeline_ == VK_NULL_HANDLE) return;
-
-        klvk::DeviceContext& context = GetDeviceContext();
-        context.WaitIdle();
-        VkDevice device = context.GetDevice();
-        klvk::Vulkan::DestroyPipelineNE(device, pipeline_);
-        klvk::Vulkan::DestroyPipelineLayoutNE(device, pipeline_layout_);
-    }
-
 private:
-    VkPipelineLayout pipeline_layout_ = VK_NULL_HANDLE;
-    VkPipeline pipeline_ = VK_NULL_HANDLE;
+    klvk::VkObject<VkPipelineLayout> pipeline_layout_;
+    klvk::VkObject<VkPipeline> pipeline_;
 };
 
 void Main()
