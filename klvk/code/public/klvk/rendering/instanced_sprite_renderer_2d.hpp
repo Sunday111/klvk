@@ -5,7 +5,9 @@
 
 #include "EverydayTools/Math/Matrix.hpp"
 #include "klvk/application.hpp"
+#include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
+#include "klvk/vulkan/vk_object.hpp"
 
 namespace klvk
 {
@@ -57,11 +59,9 @@ private:
     Application* app_ = nullptr;
     std::vector<Instance> instances_;
 
-    VkDescriptorSetLayout set_layout_ = VK_NULL_HANDLE;
-    VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
-    VkPipelineLayout pipeline_layout_ = VK_NULL_HANDLE;
-    VkPipeline pipeline_ = VK_NULL_HANDLE;
-    std::array<VkDescriptorSet, Application::kFramesInFlight> descriptor_sets_{};
+    DescriptorSets descriptor_sets_;
+    VkObject<VkPipelineLayout> pipeline_layout_;
+    VkObject<VkPipeline> pipeline_;
     std::array<GpuBuffer, Application::kFramesInFlight> instance_buffers_{};
 };
 

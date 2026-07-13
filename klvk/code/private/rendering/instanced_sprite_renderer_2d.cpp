@@ -1,7 +1,5 @@
 #include "klvk/rendering/instanced_sprite_renderer_2d.hpp"
 
-#include <algorithm>
-
 #include "klvk/filesystem/filesystem.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
@@ -33,71 +31,13 @@ InstancedSpriteRenderer2d::InstancedSpriteRenderer2d(Application& app, const Tex
     DeviceContext& context = app.GetDeviceContext();
     VkDevice device = context.GetDevice();
 
+    descriptor_sets_ = DescriptorSets::Builder(context)
+                           .Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+                           .Binding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
+                           .Build(Application::kFramesInFlight);
+    for (size_t frame = 0; frame != Application::kFramesInFlight; ++frame)
     {
-        const std::array<VkDescriptorSetLayoutBinding, 2> bindings{
-            VkDescriptorSetLayoutBinding{
-                .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-            },
-            VkDescriptorSetLayoutBinding{
-                .binding = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-            },
-        };
-        const VkDescriptorSetLayoutCreateInfo layout_info{
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            .bindingCount = static_cast<uint32_t>(bindings.size()),
-            .pBindings = bindings.data(),
-        };
-        set_layout_ = Vulkan::CreateDescriptorSetLayout(device, layout_info);
-    }
-
-    {
-        constexpr auto frames = static_cast<uint32_t>(Application::kFramesInFlight);
-        const std::array<VkDescriptorPoolSize, 2> pool_sizes{
-            VkDescriptorPoolSize{.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = frames},
-            VkDescriptorPoolSize{.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = frames},
-        };
-        const VkDescriptorPoolCreateInfo pool_info{
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-            .maxSets = frames,
-            .poolSizeCount = static_cast<uint32_t>(pool_sizes.size()),
-            .pPoolSizes = pool_sizes.data(),
-        };
-        descriptor_pool_ = Vulkan::CreateDescriptorPool(device, pool_info);
-
-        std::array<VkDescriptorSetLayout, Application::kFramesInFlight> layouts{};
-        layouts.fill(set_layout_);
-        const VkDescriptorSetAllocateInfo allocate_info{
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .descriptorPool = descriptor_pool_,
-            .descriptorSetCount = frames,
-            .pSetLayouts = layouts.data(),
-        };
-        const std::vector<VkDescriptorSet> allocated_sets = Vulkan::AllocateDescriptorSets(device, allocate_info);
-        std::ranges::copy(allocated_sets, descriptor_sets_.begin());
-    }
-
-    for (VkDescriptorSet set : descriptor_sets_)
-    {
-        const VkDescriptorImageInfo image_info{
-            .sampler = texture.GetSampler(),
-            .imageView = texture.GetView(),
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
-        const VkWriteDescriptorSet write{
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = set,
-            .dstBinding = 0,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .pImageInfo = &image_info,
-        };
-        Vulkan::UpdateDescriptorSetsNE(device, std::span{&write, 1});
+        descriptor_sets_.WriteImage(frame, 0, texture.GetView(), texture.GetSampler());
     }
 
     {
@@ -106,35 +46,33 @@ InstancedSpriteRenderer2d::InstancedSpriteRenderer2d(Application& app, const Tex
             .offset = 0,
             .size = sizeof(PushConstants),
         };
+        const VkDescriptorSetLayout set_layout = descriptor_sets_.GetLayout();
         const VkPipelineLayoutCreateInfo layout_info{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
             .setLayoutCount = 1,
-            .pSetLayouts = &set_layout_,
+            .pSetLayouts = &set_layout,
             .pushConstantRangeCount = 1,
             .pPushConstantRanges = &push_constant_range,
         };
-        pipeline_layout_ = Vulkan::CreatePipelineLayout(device, layout_info);
+        pipeline_layout_ = VkObject<VkPipelineLayout>{device, Vulkan::CreatePipelineLayout(device, layout_info)};
     }
 
-    {
-        pipeline_ = GraphicsPipelineBuilder(app)
-                        .Layout(pipeline_layout_)
-                        .VertexShaderFile(app.GetShaderDir() / "klvk/instanced_sprite.vert")
-                        .FragmentShaderFile(app.GetShaderDir() / "klvk/instanced_sprite.frag")
-                        .AlphaBlend()
-                        .Build();
-    }
+    pipeline_ = VkObject<VkPipeline>{
+        device,
+        GraphicsPipelineBuilder(app)
+            .Layout(pipeline_layout_)
+            .VertexShaderFile(app.GetShaderDir() / "klvk/instanced_sprite.vert")
+            .FragmentShaderFile(app.GetShaderDir() / "klvk/instanced_sprite.frag")
+            .AlphaBlend()
+            .Build()};
 }
 
 InstancedSpriteRenderer2d::~InstancedSpriteRenderer2d()
 {
-    DeviceContext& context = app_->GetDeviceContext();
-    context.WaitIdle();
-    VkDevice device = context.GetDevice();
-    if (pipeline_) Vulkan::DestroyPipelineNE(device, pipeline_);
-    if (pipeline_layout_) Vulkan::DestroyPipelineLayoutNE(device, pipeline_layout_);
-    if (descriptor_pool_) Vulkan::DestroyDescriptorPoolNE(device, descriptor_pool_);
-    if (set_layout_) Vulkan::DestroyDescriptorSetLayoutNE(device, set_layout_);
+    // The pipeline, layout and descriptor sets are VkObject/DescriptorSets members
+    // that destroy themselves; wait first in case a runtime destruction races
+    // in-flight frames (at shutdown Application::Run has already waited).
+    app_->GetDeviceContext().WaitIdle();
 }
 
 void InstancedSpriteRenderer2d::EnsureFrameBufferCapacity(size_t frame_index, size_t bytes)
@@ -148,21 +86,7 @@ void InstancedSpriteRenderer2d::EnsureFrameBufferCapacity(size_t frame_index, si
     // The application waited on this frame slot's fence in PreTick, so the GPU
     // is done with the old buffer and it can be destroyed right away.
     buffer = GpuBuffer(app_->GetDeviceContext(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, new_size, true);
-
-    const VkDescriptorBufferInfo buffer_info{
-        .buffer = buffer.GetHandle(),
-        .offset = 0,
-        .range = VK_WHOLE_SIZE,
-    };
-    const VkWriteDescriptorSet write{
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = descriptor_sets_[frame_index],
-        .dstBinding = 1,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-        .pBufferInfo = &buffer_info,
-    };
-    Vulkan::UpdateDescriptorSetsNE(app_->GetDeviceContext().GetDevice(), std::span{&write, 1});
+    descriptor_sets_.WriteBuffer(frame_index, 1, buffer.GetHandle(), VK_WHOLE_SIZE);
 }
 
 void InstancedSpriteRenderer2d::Render(const Mat3f& world_to_view)
@@ -175,13 +99,14 @@ void InstancedSpriteRenderer2d::Render(const Mat3f& world_to_view)
     EnsureFrameBufferCapacity(frame_index, instances_.size() * sizeof(Instance));
     instance_buffers_[frame_index].Write(std::as_bytes(std::span{instances_}));
 
+    const VkDescriptorSet descriptor_set = descriptor_sets_.Get(frame_index);
     Vulkan::CmdBindPipelineNE(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
     Vulkan::CmdBindDescriptorSetsNE(
         command_buffer,
         VK_PIPELINE_BIND_POINT_GRAPHICS,
         pipeline_layout_,
         0,
-        std::span{&descriptor_sets_[frame_index], 1});
+        std::span{&descriptor_set, 1});
 
     // The shader constructs the mat3 from columns.
     PushConstants push_constants{};

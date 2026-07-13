@@ -6,6 +6,7 @@
 #include "EverydayTools/Math/Matrix.hpp"
 #include "klvk/application.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
+#include "klvk/vulkan/vk_object.hpp"
 
 namespace klvk
 {
@@ -46,8 +47,8 @@ private:
 
     Application* app_ = nullptr;
     std::vector<ControlPoint> points_;
-    VkPipelineLayout pipeline_layout_ = VK_NULL_HANDLE;
-    VkPipeline pipeline_ = VK_NULL_HANDLE;
+    VkObject<VkPipelineLayout> pipeline_layout_;
+    VkObject<VkPipeline> pipeline_;
     std::array<GpuBuffer, Application::kFramesInFlight> buffers_{};
 };
 

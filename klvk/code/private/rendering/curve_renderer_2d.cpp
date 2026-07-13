@@ -102,25 +102,28 @@ CurveRenderer2d::CurveRenderer2d(Application& app, VkFormat color_format) : app_
 {
     auto& context = app.GetDeviceContext();
     const VkDevice device = context.GetDevice();
-    pipeline_layout_ = Vulkan::CreatePipelineLayout(device, {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO});
-    pipeline_ = GraphicsPipelineBuilder(app)
-                    .Layout(pipeline_layout_)
-                    .VertexShaderFile(app.GetShaderDir() / "klvk" / "curve2d.vert")
-                    .FragmentShaderFile(app.GetShaderDir() / "klvk" / "curve2d.frag")
-                    .VertexBinding(0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX)
-                    .VertexAttribute(0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, position))
-                    .VertexAttribute(1, 0, VK_FORMAT_R8G8B8A8_UNORM, offsetof(Vertex, color))
-                    .AlphaBlend()
-                    .ColorFormat(color_format)
-                    .Build();
+    pipeline_layout_ = VkObject<VkPipelineLayout>{
+        device,
+        Vulkan::CreatePipelineLayout(device, {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO})};
+    pipeline_ = VkObject<VkPipeline>{
+        device,
+        GraphicsPipelineBuilder(app)
+            .Layout(pipeline_layout_)
+            .VertexShaderFile(app.GetShaderDir() / "klvk" / "curve2d.vert")
+            .FragmentShaderFile(app.GetShaderDir() / "klvk" / "curve2d.frag")
+            .VertexBinding(0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX)
+            .VertexAttribute(0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, position))
+            .VertexAttribute(1, 0, VK_FORMAT_R8G8B8A8_UNORM, offsetof(Vertex, color))
+            .AlphaBlend()
+            .ColorFormat(color_format)
+            .Build()};
 }
 
 CurveRenderer2d::~CurveRenderer2d()
 {
+    // pipeline_ and pipeline_layout_ are VkObject members that destroy themselves;
+    // wait first in case a runtime destruction races in-flight frames.
     app_->GetDeviceContext().WaitIdle();
-    const VkDevice device = app_->GetDeviceContext().GetDevice();
-    if (pipeline_) Vulkan::DestroyPipelineNE(device, pipeline_);
-    if (pipeline_layout_) Vulkan::DestroyPipelineLayoutNE(device, pipeline_layout_);
 }
 
 void CurveRenderer2d::SetPoints(std::span<const ControlPoint> points)
