@@ -11,6 +11,23 @@ namespace
 {
 using namespace edt::lazy_matrix_aliases;  // NOLINT
 
+// The renderer only draws vertices, so each curve keeps its own control points,
+// tessellation parameters and vertex buffer.
+struct Curve
+{
+    void Draw(Vec2f viewport_size, const Mat3f& world_to_view)
+    {
+        klvk::CurveRenderer2d::BuildVertices(points, thickness, segment_pixel_length, viewport_size, world_to_view, vertices);
+        renderer->DrawVertices(vertices);
+    }
+
+    std::unique_ptr<klvk::CurveRenderer2d> renderer;
+    std::vector<klvk::CurveRenderer2d::ControlPoint> points;
+    std::vector<klvk::CurveRenderer2d::Vertex> vertices;
+    float thickness = 5.f;
+    float segment_pixel_length = 8.f;
+};
+
 class CurveApp : public klvk::Application
 {
     void Initialize() override
@@ -19,9 +36,9 @@ class CurveApp : public klvk::Application
         SetClearColor({});
         GetWindow().SetSize(1000, 1000);
         GetWindow().SetTitle("Curve Example");
-        spiral_ = std::make_unique<klvk::CurveRenderer2d>(*this);
-        secondary_ = std::make_unique<klvk::CurveRenderer2d>(*this);
-        extreme_ = std::make_unique<klvk::CurveRenderer2d>(*this);
+        spiral_.renderer = std::make_unique<klvk::CurveRenderer2d>(*this);
+        secondary_.renderer = std::make_unique<klvk::CurveRenderer2d>(*this);
+        extreme_.renderer = std::make_unique<klvk::CurveRenderer2d>(*this);
 
         auto points = edt::Math::GenerateSpiralPoints(100, {2.f, 2.f});
         for (size_t i = 0; i != points.size(); ++i)
@@ -30,10 +47,9 @@ class CurveApp : public klvk::Application
             const float offset = (1.f - modulation * 0.5f) + static_cast<float>(i & 1) * modulation * 0.5f;
             points[i] *= offset;
         }
-        std::vector<klvk::CurveRenderer2d::ControlPoint> spiral_points;
         for (size_t i = 0; i != points.size(); ++i)
         {
-            spiral_points.push_back(
+            spiral_.points.push_back(
                 {.position = points[i],
                  .color = Vec4f(
                      edt::Math::GetRainbowColors(10.f * static_cast<float>(i) / static_cast<float>(points.size()))
@@ -41,17 +57,15 @@ class CurveApp : public klvk::Application
                          255.f,
                      1.f)});
         }
-        spiral_->SetPoints(spiral_points);
 
-        const std::array secondary_points{
+        secondary_.points = {
             klvk::CurveRenderer2d::ControlPoint{{-1.f, -1.f}, {1.f, 0.f, 0.f, 1.f}},
             klvk::CurveRenderer2d::ControlPoint{{0.f, 1.f}, {0.f, 1.f, 0.f, 0.5f}},
             klvk::CurveRenderer2d::ControlPoint{{1.f, -1.f}, {0.f, 0.f, 1.f, 0.f}},
         };
-        secondary_->SetPoints(secondary_points);
-        secondary_->thickness_ = 20.f;
+        secondary_.thickness = 20.f;
 
-        const std::array extreme_points{
+        extreme_.points = {
             klvk::CurveRenderer2d::ControlPoint{{-0.8f, 0.6f}, {1.f, 1.f, 0.f, 0.3f}},
             klvk::CurveRenderer2d::ControlPoint{{-0.4f, 0.6f}, {1.f, 1.f, 0.f, 0.3f}},
             klvk::CurveRenderer2d::ControlPoint{{0.28f, 0.6f}, {1.f, 1.f, 0.f, 0.3f}},
@@ -60,28 +74,27 @@ class CurveApp : public klvk::Application
             klvk::CurveRenderer2d::ControlPoint{{-0.4f, 0.4f}, {1.f, 1.f, 0.f, 0.3f}},
             klvk::CurveRenderer2d::ControlPoint{{-0.8f, 0.4f}, {1.f, 1.f, 0.f, 0.3f}},
         };
-        extreme_->SetPoints(extreme_points);
-        extreme_->thickness_ = 120.f;
-        extreme_->segment_pixel_length_ = 100.f;
+        extreme_.thickness = 120.f;
+        extreme_.segment_pixel_length = 100.f;
     }
 
     void Tick() override
     {
         klvk::Application::Tick();
-        ImGui::SliderFloat("Spiral thickness", &spiral_->thickness_, 1.f, 60.f);
-        ImGui::SliderFloat("Secondary thickness", &secondary_->thickness_, 1.f, 60.f);
-        ImGui::SliderFloat("Extreme thickness", &extreme_->thickness_, 10.f, 180.f);
+        ImGui::SliderFloat("Spiral thickness", &spiral_.thickness, 1.f, 60.f);
+        ImGui::SliderFloat("Secondary thickness", &secondary_.thickness, 1.f, 60.f);
+        ImGui::SliderFloat("Extreme thickness", &extreme_.thickness, 10.f, 180.f);
         const Vec2f viewport = GetWindow().GetFramebufferSize().Cast<float>();
         const float minimum_extent = viewport.Min();
         const Mat3f view = edt::Math::ScaleMatrix(Vec2f{minimum_extent / viewport.x(), minimum_extent / viewport.y()});
-        spiral_->Draw(viewport, view);
-        secondary_->Draw(viewport, view);
-        extreme_->Draw(viewport, view);
+        spiral_.Draw(viewport, view);
+        secondary_.Draw(viewport, view);
+        extreme_.Draw(viewport, view);
     }
 
-    std::unique_ptr<klvk::CurveRenderer2d> spiral_;
-    std::unique_ptr<klvk::CurveRenderer2d> secondary_;
-    std::unique_ptr<klvk::CurveRenderer2d> extreme_;
+    Curve spiral_;
+    Curve secondary_;
+    Curve extreme_;
 };
 
 void Main()

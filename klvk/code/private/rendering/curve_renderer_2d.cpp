@@ -126,27 +126,28 @@ CurveRenderer2d::~CurveRenderer2d()
     app_->GetDeviceContext().WaitIdle();
 }
 
-void CurveRenderer2d::SetPoints(std::span<const ControlPoint> points)
+void CurveRenderer2d::BuildVertices(
+    std::span<const ControlPoint> points,
+    float thickness,
+    float segment_pixel_length,
+    Vec2f viewport_size,
+    const Mat3f& world_to_view,
+    std::vector<Vertex>& out)
 {
-    points_.assign(points.begin(), points.end());
-}
-
-std::vector<CurveRenderer2d::Vertex> CurveRenderer2d::BuildVertices(Vec2f viewport_size, const Mat3f& world_to_view)
-    const
-{
+    out.clear();
+    if (points.size() < 2) return;
     std::vector<Sample> samples;
-    if (points_.size() < 2) return {};
-    for (size_t segment = 0; segment + 1 < points_.size(); ++segment)
+    for (size_t segment = 0; segment + 1 < points.size(); ++segment)
     {
-        const auto& a = points_[segment];
-        const auto& b = points_[segment + 1];
-        const Vec2f p0 = edt::Math::TransformPos(world_to_view, points_[segment == 0 ? 0 : segment - 1].position);
+        const auto& a = points[segment];
+        const auto& b = points[segment + 1];
+        const Vec2f p0 = edt::Math::TransformPos(world_to_view, points[segment == 0 ? 0 : segment - 1].position);
         const Vec2f p1 = edt::Math::TransformPos(world_to_view, a.position);
         const Vec2f p2 = edt::Math::TransformPos(world_to_view, b.position);
         const Vec2f p3 =
-            edt::Math::TransformPos(world_to_view, points_[std::min(segment + 2, points_.size() - 1)].position);
+            edt::Math::TransformPos(world_to_view, points[std::min(segment + 2, points.size() - 1)].position);
         const float pixel_length = ToPixelVector(p2 - p1, viewport_size).Length();
-        const size_t steps = std::max<size_t>(1, static_cast<size_t>(std::ceil(pixel_length / segment_pixel_length_)));
+        const size_t steps = std::max<size_t>(1, static_cast<size_t>(std::ceil(pixel_length / segment_pixel_length)));
         for (size_t step = 0; step != steps; ++step)
         {
             const float t = static_cast<float>(step) / static_cast<float>(steps);
@@ -154,23 +155,22 @@ std::vector<CurveRenderer2d::Vertex> CurveRenderer2d::BuildVertices(Vec2f viewpo
         }
     }
     samples.push_back(
-        {.position = edt::Math::TransformPos(world_to_view, points_.back().position), .color = points_.back().color});
+        {.position = edt::Math::TransformPos(world_to_view, points.back().position), .color = points.back().color});
 
     std::vector<Join> joins(samples.size());
     for (size_t i = 0; i != samples.size(); ++i)
     {
         const Vec2f previous = samples[i == 0 ? 0 : i - 1].position;
         const Vec2f next = samples[std::min(i + 1, samples.size() - 1)].position;
-        joins[i] = CalculateJoin(previous, samples[i].position, next, viewport_size, thickness_);
+        joins[i] = CalculateJoin(previous, samples[i].position, next, viewport_size, thickness);
     }
 
-    std::vector<Vertex> vertices;
-    vertices.reserve((samples.size() - 1) * 12);
+    out.reserve((samples.size() - 1) * 12);
     auto emit_triangle = [&](Vec2f a, Vec2f b, Vec2f c, Vec4f ca, Vec4f cb, Vec4f cc)
     {
-        vertices.push_back({a, PackColor(ca)});
-        vertices.push_back({b, PackColor(cb)});
-        vertices.push_back({c, PackColor(cc)});
+        out.push_back({a, PackColor(ca)});
+        out.push_back({b, PackColor(cb)});
+        out.push_back({c, PackColor(cc)});
     };
     for (size_t i = 0; i + 1 < samples.size(); ++i)
     {
@@ -212,7 +212,6 @@ std::vector<CurveRenderer2d::Vertex> CurveRenderer2d::BuildVertices(Vec2f viewpo
                 b.color);
         }
     }
-    return vertices;
 }
 
 void CurveRenderer2d::EnsureBuffer(size_t frame_index, size_t bytes)
@@ -224,13 +223,12 @@ void CurveRenderer2d::EnsureBuffer(size_t frame_index, size_t bytes)
     buffer = GpuBuffer(app_->GetDeviceContext(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, capacity, true);
 }
 
-void CurveRenderer2d::Draw(Vec2f viewport_size, const Mat3f& world_to_view)
+void CurveRenderer2d::DrawVertices(std::span<const Vertex> vertices)
 {
-    const std::vector vertices = BuildVertices(viewport_size, world_to_view);
     if (vertices.empty()) return;
     const size_t frame = app_->GetFrameInFlightIndex();
     EnsureBuffer(frame, vertices.size() * sizeof(Vertex));
-    buffers_[frame].Write(std::as_bytes(std::span{vertices}));
+    buffers_[frame].Write(std::as_bytes(vertices));
     const VkCommandBuffer command_buffer = app_->GetCurrentCommandBuffer();
     const VkBuffer buffer = buffers_[frame].GetHandle();
     constexpr VkDeviceSize offset = 0;

@@ -183,8 +183,14 @@ class PendulumApp : public klvk::Application
             point.color.w() = static_cast<float>(index++) / static_cast<float>(trail_.size());
         if (trail_.size() > 10)
         {
-            trail_renderer_->SetPoints(trail_);
-            trail_renderer_->Draw(viewport.size.Cast<float>(), transforms_.world_to_view);
+            klvk::CurveRenderer2d::BuildVertices(
+                trail_,
+                kTrailThickness,
+                kTrailSegmentPixelLength,
+                viewport.size.Cast<float>(),
+                transforms_.world_to_view,
+                trail_vertices_);
+            trail_renderer_->DrawVertices(trail_vertices_);
         }
     }
 
@@ -196,6 +202,8 @@ public:
 
 private:
     static constexpr uint32_t kCircleTextureSize = 128;
+    static constexpr float kTrailThickness = 5.f;
+    static constexpr float kTrailSegmentPixelLength = 8.f;
     klvk::Camera2d camera_{};
     klvk::RenderTransforms2d transforms_{};
     std::unique_ptr<klvk::Texture> white_texture_;
@@ -205,6 +213,7 @@ private:
     std::unique_ptr<klvk::CurveRenderer2d> trail_renderer_;
     std::vector<DoublePendulum> pendulums_;
     std::vector<klvk::CurveRenderer2d::ControlPoint> trail_;
+    std::vector<klvk::CurveRenderer2d::Vertex> trail_vertices_;
     float time_scale_ = 1.f;
     float total_trail_distance_ = 0.f;
 };
