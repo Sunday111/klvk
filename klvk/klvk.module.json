@@ -20,7 +20,6 @@
         "Private": []
     },
     "ExtraCMakeFiles": [
-        "compile_shaders",
         "shader_cache",
         "vulkan_api"
     ],

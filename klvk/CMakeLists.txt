@@ -94,7 +94,6 @@ target_link_libraries(klvk PUBLIC ass
                                   imgui_vulkan)
 target_include_directories(klvk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/code/public)
 target_include_directories(klvk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/code/private)
-include(${CMAKE_CURRENT_SOURCE_DIR}/compile_shaders.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/shader_cache.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/vulkan_api.cmake)
 add_custom_target(klvk_copy_files ALL
