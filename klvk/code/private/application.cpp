@@ -273,7 +273,7 @@ void Application::Initialize()
         };
         state_->imgui_descriptor_pool_ = Vulkan::CreateDescriptorPool(device, pool_info);
 
-        const VkFormat color_format = state_->swapchain_->GetFormat();
+        const std::array color_formats{state_->swapchain_->GetFormat()};
         ImGui_ImplVulkan_InitInfo init_info{};
         init_info.Instance = state_->device_context_->GetInstance();
         init_info.PhysicalDevice = state_->device_context_->GetPhysicalDevice();
@@ -287,8 +287,8 @@ void Application::Initialize()
         init_info.UseDynamicRendering = true;
         init_info.PipelineRenderingCreateInfo = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
-            .colorAttachmentCount = 1,
-            .pColorAttachmentFormats = &color_format,
+            .colorAttachmentCount = color_formats.size(),
+            .pColorAttachmentFormats = color_formats.data(),
         };
         ErrorHandling::Ensure(ImGui_ImplVulkan_Init(&init_info), "Failed to initialize imgui vulkan backend");
     }
@@ -339,8 +339,9 @@ void Application::PreTick()
     auto& frame = state_->CurrentFrame();
     VkDevice device = state_->device_context_->GetDevice();
 
+    const std::array fences{frame.in_flight};
     const WaitStatus wait_status =
-        Vulkan::WaitForFences(device, std::span{&frame.in_flight, 1}, true, std::numeric_limits<uint64_t>::max());
+        Vulkan::WaitForFences(device, fences, true, std::numeric_limits<uint64_t>::max());
     ErrorHandling::Ensure(wait_status == WaitStatus::Complete, "Timed out waiting for the frame fence");
 
     // Acquire the next swapchain image, recreating the swapchain when it is out of date.
@@ -370,7 +371,7 @@ void Application::PreTick()
             "Timed out acquiring a swapchain image despite an infinite timeout");
     }
 
-    Vulkan::ResetFences(device, std::span{&frame.in_flight, 1});
+    Vulkan::ResetFences(device, fences);
     Vulkan::ResetCommandPool(device, frame.command_pool);
 
     const VkCommandBufferBeginInfo begin_info{
@@ -384,7 +385,7 @@ void Application::PreTick()
 
     // undefined -> color attachment
     {
-        const VkImageMemoryBarrier2 barrier{
+        const std::array barriers{VkImageMemoryBarrier2{
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
             .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
             .srcAccessMask = VK_ACCESS_2_NONE,
@@ -396,18 +397,18 @@ void Application::PreTick()
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = state_->swapchain_->GetImage(state_->image_index_),
             .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
-        };
+        }};
         const VkDependencyInfo dependency{
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .imageMemoryBarrierCount = 1,
-            .pImageMemoryBarriers = &barrier,
+            .imageMemoryBarrierCount = barriers.size(),
+            .pImageMemoryBarriers = barriers.data(),
         };
         Vulkan::CmdPipelineBarrier2(frame.command_buffer, dependency);
     }
 
     if (state_->depth_buffer_enabled_)
     {
-        const VkImageMemoryBarrier2 barrier{
+        const std::array barriers{VkImageMemoryBarrier2{
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
             .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
             .srcAccessMask = VK_ACCESS_2_NONE,
@@ -420,25 +421,26 @@ void Application::PreTick()
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = state_->swapchain_->GetDepthImage(state_->image_index_),
             .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT, .levelCount = 1, .layerCount = 1},
-        };
+        }};
         const VkDependencyInfo dependency{
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .imageMemoryBarrierCount = 1,
-            .pImageMemoryBarriers = &barrier,
+            .imageMemoryBarrierCount = barriers.size(),
+            .pImageMemoryBarriers = barriers.data(),
         };
         Vulkan::CmdPipelineBarrier2(frame.command_buffer, dependency);
     }
 
     const auto extent = state_->swapchain_->GetExtent();
     const auto& c = state_->clear_color_;
-    const VkRenderingAttachmentInfo color_attachment{
+    const std::array color_attachments{VkRenderingAttachmentInfo{
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .imageView = state_->swapchain_->GetImageView(state_->image_index_),
         .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .loadOp = state_->auto_clear_ ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue = {.color = {.float32 = {c.x(), c.y(), c.z(), c.w()}}},
-    };
+    }};
+    // Single object behind pDepthAttachment - no count field, so no array.
     const VkRenderingAttachmentInfo depth_attachment{
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .imageView = state_->depth_buffer_enabled_ ? state_->swapchain_->GetDepthImageView(state_->image_index_)
@@ -452,24 +454,24 @@ void Application::PreTick()
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
         .renderArea = {.offset = {0, 0}, .extent = extent},
         .layerCount = 1,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &color_attachment,
+        .colorAttachmentCount = color_attachments.size(),
+        .pColorAttachments = color_attachments.data(),
         .pDepthAttachment = state_->depth_buffer_enabled_ ? &depth_attachment : nullptr,
     };
     Vulkan::CmdBeginRendering(frame.command_buffer, rendering_info);
 
     // GL-style viewport (y up) so view matrices keep working unchanged after the klgl port.
-    const VkViewport viewport{
+    const std::array viewports{VkViewport{
         .x = 0.f,
         .y = static_cast<float>(extent.height),
         .width = static_cast<float>(extent.width),
         .height = -static_cast<float>(extent.height),
         .minDepth = 0.f,
         .maxDepth = 1.f,
-    };
-    Vulkan::CmdSetViewport(frame.command_buffer, 0, std::span{&viewport, 1});
-    const VkRect2D scissor{.offset = {0, 0}, .extent = extent};
-    Vulkan::CmdSetScissor(frame.command_buffer, 0, std::span{&scissor, 1});
+    }};
+    Vulkan::CmdSetViewport(frame.command_buffer, 0, viewports);
+    const std::array scissors{VkRect2D{.offset = {0, 0}, .extent = extent}};
+    Vulkan::CmdSetScissor(frame.command_buffer, 0, scissors);
 
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -489,19 +491,19 @@ void Application::PostTick()
     if (state_->depth_buffer_enabled_)
     {
         Vulkan::CmdEndRendering(frame.command_buffer);
-        const VkRenderingAttachmentInfo color_attachment{
+        const std::array color_attachments{VkRenderingAttachmentInfo{
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .imageView = state_->swapchain_->GetImageView(state_->image_index_),
             .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
             .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        };
+        }};
         const VkRenderingInfo rendering_info{
             .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
             .renderArea = {.offset = {0, 0}, .extent = state_->swapchain_->GetExtent()},
             .layerCount = 1,
-            .colorAttachmentCount = 1,
-            .pColorAttachments = &color_attachment,
+            .colorAttachmentCount = color_attachments.size(),
+            .pColorAttachments = color_attachments.data(),
         };
         Vulkan::CmdBeginRendering(frame.command_buffer, rendering_info);
     }
@@ -513,7 +515,7 @@ void Application::PostTick()
 
     // color attachment -> present
     {
-        const VkImageMemoryBarrier2 barrier{
+        const std::array barriers{VkImageMemoryBarrier2{
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
             .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
             .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
@@ -525,11 +527,11 @@ void Application::PostTick()
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = state_->swapchain_->GetImage(state_->image_index_),
             .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
-        };
+        }};
         const VkDependencyInfo dependency{
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .imageMemoryBarrierCount = 1,
-            .pImageMemoryBarriers = &barrier,
+            .imageMemoryBarrierCount = barriers.size(),
+            .pImageMemoryBarriers = barriers.data(),
         };
         Vulkan::CmdPipelineBarrier2(frame.command_buffer, dependency);
     }
@@ -539,41 +541,44 @@ void Application::PostTick()
 
     VkSemaphore render_finished = state_->render_finished_[state_->image_index_];
     {
-        const VkSemaphoreSubmitInfo wait_info{
+        const std::array wait_infos{VkSemaphoreSubmitInfo{
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
             .semaphore = frame.image_available,
             .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-        };
-        const VkCommandBufferSubmitInfo command_buffer_info{
+        }};
+        const std::array command_buffer_infos{VkCommandBufferSubmitInfo{
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
             .commandBuffer = frame.command_buffer,
-        };
-        const VkSemaphoreSubmitInfo signal_info{
+        }};
+        const std::array signal_infos{VkSemaphoreSubmitInfo{
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
             .semaphore = render_finished,
             .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-        };
-        const VkSubmitInfo2 submit_info{
+        }};
+        const std::array submit_infos{VkSubmitInfo2{
             .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-            .waitSemaphoreInfoCount = 1,
-            .pWaitSemaphoreInfos = &wait_info,
-            .commandBufferInfoCount = 1,
-            .pCommandBufferInfos = &command_buffer_info,
-            .signalSemaphoreInfoCount = 1,
-            .pSignalSemaphoreInfos = &signal_info,
-        };
-        Vulkan::QueueSubmit2(state_->device_context_->GetGraphicsQueue(), std::span{&submit_info, 1}, frame.in_flight);
+            .waitSemaphoreInfoCount = wait_infos.size(),
+            .pWaitSemaphoreInfos = wait_infos.data(),
+            .commandBufferInfoCount = command_buffer_infos.size(),
+            .pCommandBufferInfos = command_buffer_infos.data(),
+            .signalSemaphoreInfoCount = signal_infos.size(),
+            .pSignalSemaphoreInfos = signal_infos.data(),
+        }};
+        Vulkan::QueueSubmit2(state_->device_context_->GetGraphicsQueue(), submit_infos, frame.in_flight);
     }
 
     {
-        VkSwapchainKHR swapchain = state_->swapchain_->GetHandle();
+        const std::array wait_semaphores{render_finished};
+        const std::array swapchains{state_->swapchain_->GetHandle()};
+        // pImageIndices has no count of its own - it is parallel to pSwapchains.
+        const std::array image_indices{state_->image_index_};
         const VkPresentInfoKHR present_info{
             .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-            .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &render_finished,
-            .swapchainCount = 1,
-            .pSwapchains = &swapchain,
-            .pImageIndices = &state_->image_index_,
+            .waitSemaphoreCount = wait_semaphores.size(),
+            .pWaitSemaphores = wait_semaphores.data(),
+            .swapchainCount = swapchains.size(),
+            .pSwapchains = swapchains.data(),
+            .pImageIndices = image_indices.data(),
         };
         const PresentStatus status = Vulkan::QueuePresentKHR(state_->device_context_->GetGraphicsQueue(), present_info);
         if (status == PresentStatus::OutOfDate || status == PresentStatus::Suboptimal)

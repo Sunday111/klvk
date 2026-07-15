@@ -41,18 +41,18 @@ InstancedSpriteRenderer2d::InstancedSpriteRenderer2d(Application& app, const Tex
     }
 
     {
-        const VkPushConstantRange push_constant_range{
+        const std::array push_constant_ranges{VkPushConstantRange{
             .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
             .offset = 0,
             .size = sizeof(PushConstants),
-        };
-        const VkDescriptorSetLayout set_layout = descriptor_sets_.GetLayout();
+        }};
+        const std::array set_layouts{descriptor_sets_.GetLayout()};
         const VkPipelineLayoutCreateInfo layout_info{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .setLayoutCount = 1,
-            .pSetLayouts = &set_layout,
-            .pushConstantRangeCount = 1,
-            .pPushConstantRanges = &push_constant_range,
+            .setLayoutCount = set_layouts.size(),
+            .pSetLayouts = set_layouts.data(),
+            .pushConstantRangeCount = push_constant_ranges.size(),
+            .pPushConstantRanges = push_constant_ranges.data(),
         };
         pipeline_layout_ = VkObject<VkPipelineLayout>{device, Vulkan::CreatePipelineLayout(device, layout_info)};
     }
@@ -99,14 +99,14 @@ void InstancedSpriteRenderer2d::Render(const Mat3f& world_to_view)
     EnsureFrameBufferCapacity(frame_index, instances_.size() * sizeof(Instance));
     instance_buffers_[frame_index].Write(std::as_bytes(std::span{instances_}));
 
-    const VkDescriptorSet descriptor_set = descriptor_sets_.Get(frame_index);
+    const std::array descriptor_sets{descriptor_sets_.Get(frame_index)};
     Vulkan::CmdBindPipelineNE(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
     Vulkan::CmdBindDescriptorSetsNE(
         command_buffer,
         VK_PIPELINE_BIND_POINT_GRAPHICS,
         pipeline_layout_,
         0,
-        std::span{&descriptor_set, 1});
+        descriptor_sets);
 
     // The shader constructs the mat3 from columns.
     PushConstants push_constants{};

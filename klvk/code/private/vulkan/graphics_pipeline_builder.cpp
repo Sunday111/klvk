@@ -200,10 +200,11 @@ VkPipeline GraphicsPipelineBuilder::Build()
         .depthWriteEnable = depth_test_ ? VK_TRUE : VK_FALSE,
         .depthCompareOp = depth_compare_op_,
     };
+    const std::array blend_attachments{blend_attachment_};
     const VkPipelineColorBlendStateCreateInfo color_blend{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-        .attachmentCount = 1,
-        .pAttachments = &blend_attachment_,
+        .attachmentCount = blend_attachments.size(),
+        .pAttachments = blend_attachments.data(),
     };
     const std::array dynamic_states{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
     const VkPipelineDynamicStateCreateInfo dynamic_state{
@@ -212,13 +213,13 @@ VkPipeline GraphicsPipelineBuilder::Build()
         .pDynamicStates = dynamic_states.data(),
     };
 
-    VkFormat color_format = color_format_;
-    if (color_format == VK_FORMAT_UNDEFINED)
+    std::array color_formats{color_format_};
+    if (color_formats.front() == VK_FORMAT_UNDEFINED)
     {
         ErrorHandling::Ensure(
             app_ != nullptr,
             "GraphicsPipelineBuilder: no color format set and no application to default from");
-        color_format = app_->GetSwapchainFormat();
+        color_formats.front() = app_->GetSwapchainFormat();
     }
     VkFormat depth_format = VK_FORMAT_UNDEFINED;
     if (depth_test_)
@@ -234,12 +235,12 @@ VkPipeline GraphicsPipelineBuilder::Build()
     }
     const VkPipelineRenderingCreateInfo rendering_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-        .colorAttachmentCount = 1,
-        .pColorAttachmentFormats = &color_format,
+        .colorAttachmentCount = color_formats.size(),
+        .pColorAttachmentFormats = color_formats.data(),
         .depthAttachmentFormat = depth_format,
     };
 
-    const VkGraphicsPipelineCreateInfo pipeline_info{
+    const std::array pipeline_infos{VkGraphicsPipelineCreateInfo{
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
         .pNext = &rendering_info,
         .stageCount = static_cast<uint32_t>(stages.size()),
@@ -253,8 +254,8 @@ VkPipeline GraphicsPipelineBuilder::Build()
         .pColorBlendState = &color_blend,
         .pDynamicState = &dynamic_state,
         .layout = layout_,
-    };
-    return Vulkan::CreateGraphicsPipelines(context_->GetDevice(), VK_NULL_HANDLE, std::span{&pipeline_info, 1}).front();
+    }};
+    return Vulkan::CreateGraphicsPipelines(context_->GetDevice(), VK_NULL_HANDLE, pipeline_infos).front();
 }
 
 }  // namespace klvk

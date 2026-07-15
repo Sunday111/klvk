@@ -61,7 +61,7 @@ Texture::CreateR8(DeviceContext& context, edt::Vec2<uint32_t> size, std::span<co
     context.SubmitOneTimeCommands(
         [&](VkCommandBuffer command_buffer)
         {
-            VkImageMemoryBarrier2 barrier{
+            std::array barriers{VkImageMemoryBarrier2{
                 .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
                 .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
                 .srcAccessMask = VK_ACCESS_2_NONE,
@@ -73,25 +73,27 @@ Texture::CreateR8(DeviceContext& context, edt::Vec2<uint32_t> size, std::span<co
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .image = texture->image_,
                 .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
-            };
+            }};
+            // Reused below: the barrier is rewritten in place and re-issued through dependency.
             VkDependencyInfo dependency{
                 .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                .imageMemoryBarrierCount = 1,
-                .pImageMemoryBarriers = &barrier,
+                .imageMemoryBarrierCount = barriers.size(),
+                .pImageMemoryBarriers = barriers.data(),
             };
             Vulkan::CmdPipelineBarrier2NE(command_buffer, dependency);
 
-            const VkBufferImageCopy region{
+            const std::array regions{VkBufferImageCopy{
                 .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1},
                 .imageExtent = {size.x(), size.y(), 1},
-            };
+            }};
             Vulkan::CmdCopyBufferToImageNE(
                 command_buffer,
                 staging.GetHandle(),
                 texture->image_,
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                std::span{&region, 1});
+                regions);
 
+            VkImageMemoryBarrier2& barrier = barriers.front();
             barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
             barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
             barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;

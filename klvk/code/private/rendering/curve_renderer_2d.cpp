@@ -230,10 +230,10 @@ void CurveRenderer2d::DrawVertices(std::span<const Vertex> vertices)
     EnsureBuffer(frame, vertices.size() * sizeof(Vertex));
     buffers_[frame].Write(std::as_bytes(vertices));
     const VkCommandBuffer command_buffer = app_->GetCurrentCommandBuffer();
-    const VkBuffer buffer = buffers_[frame].GetHandle();
-    constexpr VkDeviceSize offset = 0;
+    const std::array vertex_buffers{buffers_[frame].GetHandle()};
+    const std::array<VkDeviceSize, 1> offsets{0};
     Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-    Vulkan::CmdBindVertexBuffers(command_buffer, 0, std::span{&buffer, 1}, std::span{&offset, 1});
+    Vulkan::CmdBindVertexBuffers(command_buffer, 0, vertex_buffers, offsets);
     Vulkan::CmdDraw(command_buffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 }
 

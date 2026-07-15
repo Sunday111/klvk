@@ -1,6 +1,7 @@
 #include "klvk/vulkan/descriptor_sets.hpp"
 
 #include <algorithm>
+#include <array>
 #include <span>
 
 #include "klvk/error_handling.hpp"
@@ -15,14 +16,10 @@
 namespace klvk
 {
 
-DescriptorSets::Builder& DescriptorSets::Builder::Binding(
-    uint32_t binding,
-    VkDescriptorType type,
-    VkShaderStageFlags stages,
-    uint32_t count)
+DescriptorSets::Builder&
+DescriptorSets::Builder::Binding(uint32_t binding, VkDescriptorType type, VkShaderStageFlags stages, uint32_t count)
 {
-    bindings_.push_back(
-        {.binding = binding, .descriptorType = type, .descriptorCount = count, .stageFlags = stages});
+    bindings_.push_back({.binding = binding, .descriptorType = type, .descriptorCount = count, .stageFlags = stages});
     return *this;
 }
 
@@ -118,16 +115,16 @@ void DescriptorSets::WriteBuffer(
     VkDeviceSize range,
     VkDeviceSize offset)
 {
-    const VkDescriptorBufferInfo buffer_info{.buffer = buffer, .offset = offset, .range = range};
-    const VkWriteDescriptorSet write{
+    const std::array buffer_info{VkDescriptorBufferInfo{.buffer = buffer, .offset = offset, .range = range}};
+    const std::array write{VkWriteDescriptorSet{
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .dstSet = sets_.at(set_index),
         .dstBinding = binding,
-        .descriptorCount = 1,
+        .descriptorCount = buffer_info.size(),
         .descriptorType = TypeOfBinding(binding),
-        .pBufferInfo = &buffer_info,
-    };
-    Vulkan::UpdateDescriptorSets(context_->GetDevice(), std::span{&write, 1});
+        .pBufferInfo = buffer_info.data(),
+    }};
+    Vulkan::UpdateDescriptorSets(context_->GetDevice(), std::span{write});
 }
 
 void DescriptorSets::WriteImage(
@@ -137,16 +134,16 @@ void DescriptorSets::WriteImage(
     VkSampler sampler,
     VkImageLayout layout)
 {
-    const VkDescriptorImageInfo image_info{.sampler = sampler, .imageView = view, .imageLayout = layout};
-    const VkWriteDescriptorSet write{
+    const std::array image_info{VkDescriptorImageInfo{.sampler = sampler, .imageView = view, .imageLayout = layout}};
+    const std::array write{VkWriteDescriptorSet{
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .dstSet = sets_.at(set_index),
         .dstBinding = binding,
-        .descriptorCount = 1,
+        .descriptorCount = image_info.size(),
         .descriptorType = TypeOfBinding(binding),
-        .pImageInfo = &image_info,
-    };
-    Vulkan::UpdateDescriptorSets(context_->GetDevice(), std::span{&write, 1});
+        .pImageInfo = image_info.data(),
+    }};
+    Vulkan::UpdateDescriptorSets(context_->GetDevice(), std::span{write});
 }
 
 }  // namespace klvk

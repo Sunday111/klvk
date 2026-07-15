@@ -232,13 +232,13 @@ void DeviceContext::PickPhysicalDevice()
 
 void DeviceContext::CreateDevice()
 {
-    const float priority = 1.f;
-    const VkDeviceQueueCreateInfo queue_info{
+    const std::array priorities{1.f};
+    const std::array queue_infos{VkDeviceQueueCreateInfo{
         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
         .queueFamilyIndex = graphics_queue_family_,
-        .queueCount = 1,
-        .pQueuePriorities = &priority,
-    };
+        .queueCount = priorities.size(),
+        .pQueuePriorities = priorities.data(),
+    }};
 
     VkPhysicalDeviceVulkan13Features features13{
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
@@ -269,8 +269,8 @@ void DeviceContext::CreateDevice()
     const VkDeviceCreateInfo create_info{
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext = &features2,
-        .queueCreateInfoCount = 1,
-        .pQueueCreateInfos = &queue_info,
+        .queueCreateInfoCount = queue_infos.size(),
+        .pQueueCreateInfos = queue_infos.data(),
         .enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
         .ppEnabledExtensionNames = extensions.data(),
     };
@@ -324,18 +324,19 @@ void DeviceContext::EndOneTimeCommands(VkCommandBuffer command_buffer) const
 {
     Vulkan::EndCommandBuffer(command_buffer);
 
-    const VkCommandBufferSubmitInfo command_buffer_info{
+    const std::array command_buffer_infos{VkCommandBufferSubmitInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
         .commandBuffer = command_buffer,
-    };
-    const VkSubmitInfo2 submit_info{
+    }};
+    const std::array submit_infos{VkSubmitInfo2{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-        .commandBufferInfoCount = 1,
-        .pCommandBufferInfos = &command_buffer_info,
-    };
-    Vulkan::QueueSubmit2(graphics_queue_, std::span{&submit_info, 1});
+        .commandBufferInfoCount = command_buffer_infos.size(),
+        .pCommandBufferInfos = command_buffer_infos.data(),
+    }};
+    Vulkan::QueueSubmit2(graphics_queue_, submit_infos);
     Vulkan::QueueWaitIdle(graphics_queue_);
-    Vulkan::FreeCommandBuffers(device_, one_time_pool_, std::span{&command_buffer, 1});
+    const std::array command_buffers{command_buffer};
+    Vulkan::FreeCommandBuffers(device_, one_time_pool_, command_buffers);
 }
 
 VkShaderModule DeviceContext::CreateShaderModule(std::string_view spirv_bytes, std::string_view debug_name) const
