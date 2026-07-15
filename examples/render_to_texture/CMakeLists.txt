@@ -7,17 +7,11 @@ set_generic_compiler_options(klvk_render_to_texture_example PRIVATE)
 target_link_libraries(klvk_render_to_texture_example PUBLIC klvk)
 target_include_directories(klvk_render_to_texture_example PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/code/public)
 target_include_directories(klvk_render_to_texture_example PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/code/private)
-set(klvk_render_to_texture_example_copy_files_outputs)
-file(GLOB_RECURSE klvk_render_to_texture_example_copy_files_sources_0 CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/content/*")
-foreach(source_file ${klvk_render_to_texture_example_copy_files_sources_0})
-    file(RELATIVE_PATH rel_path "${CMAKE_CURRENT_SOURCE_DIR}/content" "${source_file}")
-    set(copied_file "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/content/${rel_path}")
-    add_custom_command(
-        OUTPUT "${copied_file}"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_newer "${source_file}" "${copied_file}"
-        DEPENDS "${source_file}"
-        COMMENT "stage ${rel_path}")
-    list(APPEND klvk_render_to_texture_example_copy_files_outputs "${copied_file}")
-endforeach()
-add_custom_target(klvk_render_to_texture_example_copy_files ALL DEPENDS ${klvk_render_to_texture_example_copy_files_outputs})
+add_custom_target(klvk_render_to_texture_example_copy_files ALL
+    COMMAND ${Python3_EXECUTABLE} "${YAE_SUPPORT_ROOT}/scripts/stage_directories.py"
+            --destination "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/content"
+            --source "${CMAKE_CURRENT_SOURCE_DIR}/content"
+            --manifest "${CMAKE_CURRENT_BINARY_DIR}/klvk_render_to_texture_example_copy_files_content.manifest"
+    COMMENT "stage content of klvk_render_to_texture_example"
+    VERBATIM)
 add_dependencies(klvk_render_to_texture_example klvk_render_to_texture_example_copy_files)
