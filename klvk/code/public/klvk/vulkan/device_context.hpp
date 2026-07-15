@@ -49,6 +49,10 @@ public:
     // True when the geometryShader feature was available and enabled on the device.
     [[nodiscard]] bool IsGeometryShaderEnabled() const noexcept { return geometry_shader_enabled_; }
 
+    // True when VK_KHR_external_memory_fd was available and enabled, which lets device
+    // memory allocated here be exported as an opaque fd and imported by another API (e.g. CUDA).
+    [[nodiscard]] bool IsExternalMemoryFdEnabled() const noexcept { return external_memory_fd_enabled_; }
+
     void WaitIdle() const;
 
     // Records commands into a temporary command buffer, submits it to the graphics queue and waits for completion.
@@ -85,6 +89,7 @@ private:
     VmaAllocator allocator_ = VK_NULL_HANDLE;
     VkCommandPool one_time_pool_ = VK_NULL_HANDLE;
     bool geometry_shader_enabled_ = false;
+    bool external_memory_fd_enabled_ = false;
     std::unique_ptr<ShaderCacheManager> shader_cache_;
 };
 

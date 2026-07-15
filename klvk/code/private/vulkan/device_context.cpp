@@ -266,6 +266,14 @@ void DeviceContext::CreateDevice()
         extensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     }
 
+    // Lets device memory be exported as an opaque fd so another API (CUDA) can import
+    // the same allocation. Optional: only interop code needs it.
+    if (HasDeviceExtension(physical_device_, VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME))
+    {
+        extensions.push_back(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+        external_memory_fd_enabled_ = true;
+    }
+
     const VkDeviceCreateInfo create_info{
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext = &features2,
