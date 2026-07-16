@@ -19,6 +19,7 @@ namespace klvk
 class Window;
 class DeviceContext;
 class Swapchain;
+class TimerManager;
 
 class Application
 {
@@ -58,6 +59,9 @@ public:
     [[nodiscard]] const nlohmann::json* GetDiagnosticApplicationConfig() const noexcept;
 
     events::EventManager& GetEventManager();
+
+    // The application main loop owns Advance; callers schedule and cancel only.
+    TimerManager& GetTimerManager();
 
     // Current time. Relative to app start
     float GetTimeSeconds() const;

@@ -23,6 +23,7 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/platform/os/os.hpp"
 #include "klvk/reflection/register_types.hpp"
+#include "klvk/timing/timer_manager.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/swapchain.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
@@ -73,6 +74,7 @@ struct Application::State
     bool imgui_vulkan_initialized_ = false;
     bool exit_requested_ = false;
     u64 completed_frames_ = 0;
+    events::EventManager event_manager_;
     std::optional<DiagnosticRunConfig> diagnostic_config_;
     std::unique_ptr<DiagnosticRunner> diagnostic_runner_;
 
@@ -125,7 +127,7 @@ struct Application::State
         return State::DurationToSeconds(GetTime() - app_start_time_);
     }
 
-    double GetDiagnosticTimeSeconds() const
+    double GetElapsedTimeSeconds() const
     {
         if (const auto step = GetFixedStep()) return static_cast<double>(completed_frames_) * *step;
         return State::DurationToSeconds<double>(GetTime() - app_start_time_);
@@ -238,11 +240,11 @@ struct Application::State
     float framerate_ = 0.0f;
     u8 current_frame_time_index_ = kFrameTimeHistorySize - 1;
     std::optional<float> target_framerate_;
-    events::EventManager event_manager_;
+    TimerManager timer_manager_;
 
     State()
     {
-        (void)event_manager_.AddEventListener(
+        [[maybe_unused]] const events::IEventListener* quit_listener = event_manager_.AddEventListener(
             events::EventListenerMethodCallbacks<&State::OnApplicationQuitRequested>::CreatePtr(this));
     }
 
@@ -660,7 +662,7 @@ void Application::PostTick()
 {
     auto& frame = state_->CurrentFrame();
     if (state_->diagnostic_runner_)
-        state_->diagnostic_runner_->Advance(state_->completed_frames_ + 1, state_->GetDiagnosticTimeSeconds());
+        state_->diagnostic_runner_->Advance(state_->completed_frames_ + 1, state_->GetElapsedTimeSeconds());
     const bool capture_without_ui = state_->diagnostic_runner_ && state_->diagnostic_runner_->HasQueuedCaptures(false);
 
     // ImGui's pipeline is color-only. End an application's depth-enabled pass and
@@ -801,6 +803,9 @@ void Application::MainLoop()
         state_->RegisterFrameStartTime();
 
         PreTick();
+        [[maybe_unused]] const u64 timer_callback_count = state_->timer_manager_.Advance(
+            TimerDuration{state_->GetElapsedTimeSeconds()},
+            state_->completed_frames_ + 1);
         Tick();
         PostTick();
         state_->AlignWithFramerate();
@@ -911,6 +916,11 @@ size_t Application::GetFrameInFlightIndex() const
 events::EventManager& Application::GetEventManager()
 {
     return state_->event_manager_;
+}
+
+TimerManager& Application::GetTimerManager()
+{
+    return state_->timer_manager_;
 }
 
 }  // namespace klvk

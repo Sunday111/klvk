@@ -37,6 +37,13 @@ preserves all other due timers, and propagates the exception. `TimerManager` is 
 it and mutate it from its owning engine thread. Supply logical elapsed time to `Advance` rather than letting the manager
 read a wall clock, so fixed-step and deterministic runtimes use the same scheduler.
 
+Every `Application` owns a `TimerManager`, exposed through `GetTimerManager()`. The main loop advances it after
+`PreTick` and immediately before the application's `Tick`, using the application's logical elapsed time and one-based
+rendered-frame number. Applications therefore receive timer callbacks at a stable point after frame setup and before
+their per-frame logic. Diagnostics use a separate manager so application catch-up work cannot delay deterministic
+captures. The main loop owns `Advance`; application code uses the returned manager only to schedule, cancel, and inspect
+timers.
+
 ## Diagnostic runs and framebuffer capture
 
 `Application::RunWithArguments(argc, argv)` recognizes `--klvk-diagnostics <file>` and

@@ -2,6 +2,8 @@
 
 #include <EverydayTools/Math/Math.hpp>
 #include <EverydayTools/Template/TaggedIdentifier.hpp>
+#include <limits>
+#include <optional>
 #include <random>
 #include <variant>
 
@@ -9,6 +11,7 @@
 #include "klvk/error_handling.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/rendering/instanced_sprite_renderer_2d.hpp"
+#include "klvk/timing/timer_manager.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/texture.hpp"
 #include "klvk/window.hpp"
@@ -21,6 +24,8 @@ namespace colors
 constexpr edt::Vec4u8 kBlack{0, 0, 0, 255};
 constexpr edt::Vec4u8 kRed{255, 0, 0, 255};
 }  // namespace colors
+
+constexpr float kGameStepSeconds = 0.06f;
 
 struct BlockIdTag
 {
@@ -229,6 +234,18 @@ class TetrisApp : public klvk::Application
         texture_ = klvk::Texture::CreateR8(GetDeviceContext(), {1, 1}, white);
         renderer_ = std::make_unique<klvk::InstancedSpriteRenderer2d>(*this, *texture_);
         state_ = SpawnBlockState{};
+        const klvk::TimerDuration interval{static_cast<double>(kGameStepSeconds)};
+        game_step_timer_ = GetTimerManager().ScheduleEveryAt(
+            interval,
+            interval,
+            [this](const klvk::TimerEvent& event)
+            {
+                klvk::ErrorHandling::Ensure(
+                    event.occurrence != std::numeric_limits<u64>::max(),
+                    "Tetris game-step counter overflow");
+                pending_game_step_ = event.occurrence + 1;
+            },
+            klvk::TimerMissedTickPolicy::Coalesce);
     }
 
     [[nodiscard]] bool SpawnNewBlock()
@@ -263,7 +280,7 @@ class TetrisApp : public klvk::Application
         instant_move(KeyboardKey::W, {0, 1});
     }
 
-    void TimeStep(BlockFallState&, size_t step)
+    void TimeStep(BlockFallState&, u64 step)
     {
         constexpr size_t gravity_period = 15;
         const bool gravity_step = step % gravity_period == 0;
@@ -293,7 +310,7 @@ class TetrisApp : public klvk::Application
     }
 
     void Tick(DeleteRowsState&) {}
-    void TimeStep(DeleteRowsState& state, size_t)
+    void TimeStep(DeleteRowsState& state, u64)
     {
         if (state.next_x < TetrisGrid::kSize.x())
         {
@@ -326,13 +343,13 @@ class TetrisApp : public klvk::Application
     }
 
     void Tick(SpawnBlockState&) {}
-    void TimeStep(SpawnBlockState&, size_t)
+    void TimeStep(SpawnBlockState&, u64)
     {
         if (SpawnNewBlock()) state_ = BlockFallState{};
     }
 
     void Tick(MoveDeletedRowUp&) {}
-    void TimeStep(MoveDeletedRowUp& state, size_t)
+    void TimeStep(MoveDeletedRowUp& state, u64)
     {
         const size_t next = state.current_row + 1;
         if (next < TetrisGrid::kSize.y())
@@ -390,13 +407,12 @@ class TetrisApp : public klvk::Application
     {
         klvk::Application::Tick();
         UpdateKeyboardState();
-        constexpr float step_seconds = 0.06f;
-        const size_t step = static_cast<size_t>(GetTimeSeconds() / step_seconds);
         std::visit([&](auto& state) { Tick(state); }, state_);
-        if (step != last_step_)
+        if (pending_game_step_.has_value())
         {
+            const u64 step = *pending_game_step_;
+            pending_game_step_.reset();
             std::visit([&](auto& state) { TimeStep(state, step); }, state_);
-            last_step_ = step;
         }
 
         renderer_->Clear();
@@ -436,6 +452,10 @@ class TetrisApp : public klvk::Application
 public:
     ~TetrisApp() override
     {
+        if (game_step_timer_.IsValid())
+        {
+            [[maybe_unused]] const bool cancelled = GetTimerManager().Cancel(game_step_timer_);
+        }
         if (renderer_) GetDeviceContext().WaitIdle();
     }
 
@@ -450,7 +470,8 @@ private:
     std::variant<SpawnBlockState, BlockFallState, DeleteRowsState, MoveDeletedRowUp> state_;
     std::array<KeyboardState, static_cast<size_t>(KeyboardKey::Count)> keys_{};
     std::vector<AnimatedRect> animations_;
-    size_t last_step_ = 0;
+    klvk::TimerHandle game_step_timer_;
+    std::optional<u64> pending_game_step_;
 };
 
 void Main(int argc, char** argv)
