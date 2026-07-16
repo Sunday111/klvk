@@ -20,6 +20,23 @@ Public headers use the exact-width aliases from `klvk/integral_aliases.hpp`: `u8
 domains that can meaningfully be negative, or when matching an explicitly signed external ABI. Sizes, counts,
 dimensions, indices, masks, and identifiers should remain unsigned.
 
+## Timers
+
+`klvk/timing/timer_manager.hpp` provides render-thread scheduling in elapsed-time and frame domains. It uses indexed
+binary min-heaps and generational handles: finding the next timer is O(1), while scheduling and immediate cancellation
+are O(log n) without cancelled tombstones. Equal deadlines are FIFO.
+
+Timers may be one-shot or fixed-rate repeating. Repeating timers explicitly choose whether missed occurrences are all
+invoked or coalesced into the latest logical occurrence. Callbacks may schedule timers, cancel themselves or other
+timers, and clear the manager. Work scheduled by a callback is deliberately deferred until the next `Advance`, which
+prevents recursive starvation. `Advance` also has a callback budget. `InvokeAll` occurrences are merged chronologically
+with other due work in the same domain rather than dispatched as one timer-sized batch; a rotating readiness order
+between the otherwise incomparable time and frame domains prevents either from monopolizing a small budget. Remaining
+catch-up work resumes on the next advance without skipping occurrences. A callback that throws cancels that timer,
+preserves all other due timers, and propagates the exception. `TimerManager` is intentionally not synchronized; advance
+it and mutate it from its owning engine thread. Supply logical elapsed time to `Advance` rather than letting the manager
+read a wall clock, so fixed-step and deterministic runtimes use the same scheduler.
+
 ## Diagnostic runs and framebuffer capture
 
 `Application::RunWithArguments(argc, argv)` recognizes `--klvk-diagnostics <file>` and
