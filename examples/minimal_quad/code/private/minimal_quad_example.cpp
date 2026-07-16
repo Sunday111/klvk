@@ -89,14 +89,13 @@ private:
     klvk::VkObject<VkPipeline> pipeline_;
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     QuadApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

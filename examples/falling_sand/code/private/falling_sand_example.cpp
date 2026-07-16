@@ -11,7 +11,9 @@
 #include "klvk/events/event_listener_method.hpp"
 #include "klvk/events/event_manager.hpp"
 #include "klvk/events/mouse_events.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/rendering/instanced_sprite_renderer_2d.hpp"
+#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/texture.hpp"
 #include "klvk/window.hpp"
@@ -32,11 +34,11 @@ struct TaggedIdHasher
 struct ParticleIdTag
 {
 };
-using ParticleId = edt::TaggedIdentifier<ParticleIdTag, uint32_t>;
+using ParticleId = edt::TaggedIdentifier<ParticleIdTag, u32>;
 
 struct GridRegion
 {
-    static constexpr edt::Vec2<uint16_t> kSize{256, 256};
+    static constexpr edt::Vec2<u16> kSize{256, 256};
     std::array<ass::FixedBitset<kSize.x()>, kSize.y()> bits{};
     std::array<std::array<ParticleId, kSize.x()>, kSize.y()> ids{};
 };
@@ -46,21 +48,21 @@ using RegionId = Vec2i;
 [[nodiscard]] constexpr RegionId ToRegionId(Vec2i coordinate) noexcept
 {
     const Vec2i negative{coordinate.x() < 0, coordinate.y() < 0};
-    return ((coordinate + negative) / GridRegion::kSize.Cast<int32_t>()) - negative;
+    return ((coordinate + negative) / GridRegion::kSize.Cast<i32>()) - negative;
 }
 
 [[nodiscard]] constexpr std::pair<Vec2i, Vec2i> RegionRange(RegionId id) noexcept
 {
-    const auto size = GridRegion::kSize.Cast<int32_t>();
+    const auto size = GridRegion::kSize.Cast<i32>();
     const auto begin = id * size;
     return {begin, begin + size};
 }
 
 struct RegionIdHasher
 {
-    [[nodiscard]] uint64_t operator()(const RegionId& value) const noexcept
+    [[nodiscard]] u64 operator()(const RegionId& value) const noexcept
     {
-        return (uint64_t{std::bit_cast<uint32_t>(value.x())} << 32) | uint64_t{std::bit_cast<uint32_t>(value.y())};
+        return (u64{std::bit_cast<u32>(value.x())} << 32) | u64{std::bit_cast<u32>(value.y())};
     }
 };
 
@@ -86,7 +88,7 @@ struct ParticleGrid
         const auto iterator = containers.find(region_id);
         if (iterator == containers.end()) return false;
         const auto [begin, end] = RegionRange(region_id);
-        const auto in_region = (position - begin).Cast<uint32_t>();
+        const auto in_region = (position - begin).Cast<u32>();
         return iterator->second.bits[in_region.y()].Get(in_region.x());
     }
 
@@ -96,7 +98,7 @@ struct ParticleGrid
         order.insert(region_id);
         GridRegion& container = containers[region_id];
         const auto [begin, end] = RegionRange(region_id);
-        const auto in_region = (data.position - begin).Cast<uint32_t>();
+        const auto in_region = (data.position - begin).Cast<u32>();
         const ParticleId id = std::exchange(next_particle_id, ParticleId::FromValue(next_particle_id.GetValue() + 1));
         particles.emplace(id, data);
         container.bits[in_region.y()].Set(in_region.x(), true);
@@ -109,7 +111,7 @@ struct ParticleGrid
         const RegionId region_id = ToRegionId(position);
         GridRegion& container = containers.at(region_id);
         const auto [begin, end] = RegionRange(region_id);
-        const auto in_region = (position - begin).Cast<uint32_t>();
+        const auto in_region = (position - begin).Cast<u32>();
         container.bits[in_region.y()].Set(in_region.x(), false);
         const ParticleId id = std::exchange(container.ids[in_region.y()][in_region.x()], ParticleId{});
         return particles.extract(id).mapped();
@@ -144,7 +146,7 @@ class FallingSandApp : public klvk::Application
         GetWindow().SetTitle("Painter 2d");
         SetTargetFramerate(90.f);
 
-        constexpr std::array<uint8_t, 1> white{255};
+        constexpr std::array<u8, 1> white{255};
         texture_ = klvk::Texture::CreateR8(GetDeviceContext(), {1, 1}, white);
         renderer_ = std::make_unique<klvk::InstancedSpriteRenderer2d>(*this, *texture_);
         grid_.containers.reserve(64);
@@ -158,9 +160,9 @@ class FallingSandApp : public klvk::Application
         for (const RegionId& region_id : grid_.order)
         {
             GridRegion& container = grid_.containers[region_id];
-            for (uint32_t y = 0; y != GridRegion::kSize.y(); ++y)
+            for (u32 y = 0; y != GridRegion::kSize.y(); ++y)
             {
-                for (uint32_t x = 0; x != GridRegion::kSize.x(); ++x)
+                for (u32 x = 0; x != GridRegion::kSize.x(); ++x)
                 {
                     if (!container.bits[y].Get(x)) continue;
                     const auto [begin, end] = RegionRange(region_id);
@@ -222,8 +224,8 @@ class FallingSandApp : public klvk::Application
             AddRectOutline(*renderer_, region_center, region_size, 0.01f, kBlue);
 
             const GridRegion& container = grid_.containers.at(region_id);
-            for (uint32_t y = 0; y != GridRegion::kSize.y(); ++y)
-                for (uint32_t x = 0; x != GridRegion::kSize.x(); ++x)
+            for (u32 y = 0; y != GridRegion::kSize.y(); ++y)
+                for (u32 x = 0; x != GridRegion::kSize.x(); ++x)
                     if (container.bits[y].Get(x))
                     {
                         const Vec2i particle = begin + Vec2u32{x, y}.Cast<int>();
@@ -316,15 +318,14 @@ private:
     ParticleGrid grid_;
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     FallingSandApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 }  // namespace
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

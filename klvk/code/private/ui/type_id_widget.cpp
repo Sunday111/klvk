@@ -7,7 +7,9 @@
 #include "CppReflection/TypeRegistry.hpp"
 #include "ass/fixed_unordered_map.hpp"
 #include "klvk/error_handling.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/reflection/matrix_reflect.hpp"  // IWYU pragma: keep
+#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/ui/type_id_widget_minimal.hpp"
 
 namespace klvk
@@ -18,35 +20,35 @@ using namespace edt::lazy_matrix_aliases;  // NOLINT
 template <typename T>
 static constexpr ImGuiDataType_ CastDataType() noexcept
 {
-    if constexpr (std::is_same_v<T, int8_t>)
+    if constexpr (std::is_same_v<T, i8>)
     {
         return ImGuiDataType_S8;
     }
-    if constexpr (std::is_same_v<T, uint8_t>)
+    if constexpr (std::is_same_v<T, u8>)
     {
         return ImGuiDataType_U8;
     }
-    if constexpr (std::is_same_v<T, int16_t>)
+    if constexpr (std::is_same_v<T, i16>)
     {
         return ImGuiDataType_S16;
     }
-    if constexpr (std::is_same_v<T, uint16_t>)
+    if constexpr (std::is_same_v<T, u16>)
     {
         return ImGuiDataType_U16;
     }
-    if constexpr (std::is_same_v<T, int32_t>)
+    if constexpr (std::is_same_v<T, i32>)
     {
         return ImGuiDataType_S32;
     }
-    if constexpr (std::is_same_v<T, uint32_t>)
+    if constexpr (std::is_same_v<T, u32>)
     {
         return ImGuiDataType_U32;
     }
-    if constexpr (std::is_same_v<T, int64_t>)
+    if constexpr (std::is_same_v<T, i64>)
     {
         return ImGuiDataType_S64;
     }
-    if constexpr (std::is_same_v<T, uint64_t>)
+    if constexpr (std::is_same_v<T, u64>)
     {
         return ImGuiDataType_U64;
     }
@@ -227,7 +229,7 @@ struct GUIDHasher
             b = std::rotr(b, rot2);
         }
 
-        // const uint64_t prime = 0x9e3779b97f4a7c15;
+        // const u64 prime = 0x9e3779b97f4a7c15;
         // return (a * prime) ^ (b * (prime >> 1));
 
         return a ^ b;
@@ -268,14 +270,14 @@ inline constexpr auto kGuidToWidget = []
 
     add_scalar(std::tuple<float>{});
     add_scalar(std::tuple<double>{});
-    add_scalar(std::tuple<int8_t>{});
-    add_scalar(std::tuple<int16_t>{});
-    add_scalar(std::tuple<int32_t>{});
-    add_scalar(std::tuple<int64_t>{});
-    add_scalar(std::tuple<uint8_t>{});
-    add_scalar(std::tuple<uint16_t>{});
-    add_scalar(std::tuple<uint32_t>{});
-    add_scalar(std::tuple<uint64_t>{});
+    add_scalar(std::tuple<i8>{});
+    add_scalar(std::tuple<i16>{});
+    add_scalar(std::tuple<i32>{});
+    add_scalar(std::tuple<i64>{});
+    add_scalar(std::tuple<u8>{});
+    add_scalar(std::tuple<u16>{});
+    add_scalar(std::tuple<u32>{});
+    add_scalar(std::tuple<u64>{});
     add_vector(std::tuple<Vec2f>{});
     add_vector(std::tuple<Vec3f>{});
     add_vector(std::tuple<Vec4f>{});

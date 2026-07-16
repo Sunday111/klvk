@@ -2,7 +2,7 @@
 
 #include <chrono>
 #include <condition_variable>
-#include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <memory>
 #include <mutex>
@@ -11,6 +11,8 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
+
+#include "klvk/integral_aliases.hpp"
 
 namespace klvk
 {
@@ -34,13 +36,13 @@ public:
 
     // source_path must name a GLSL stage below source_root. The returned data is
     // immutable and remains alive as long as either the caller or manager holds it.
-    [[nodiscard]] std::shared_ptr<const std::vector<uint32_t>> GetOrCompile(const std::filesystem::path& source_path);
+    [[nodiscard]] std::shared_ptr<const std::vector<u32>> GetOrCompile(const std::filesystem::path& source_path);
 
     [[nodiscard]] const std::filesystem::path& GetSourceRoot() const noexcept { return source_root_; }
     [[nodiscard]] const std::filesystem::path& GetCacheRoot() const noexcept { return cache_root_; }
 
 private:
-    enum class EntryState : uint8_t
+    enum class EntryState : u8
     {
         Pending,
         Ready,
@@ -50,15 +52,15 @@ private:
     struct Entry
     {
         EntryState state = EntryState::Pending;
-        std::shared_ptr<const std::vector<uint32_t>> spirv;
+        std::shared_ptr<const std::vector<u32>> spirv;
         std::exception_ptr failure;
-        uint64_t generation = 0;
-        uint64_t persisted_generation = 0;
+        u64 generation = 0;
+        u64 persisted_generation = 0;
     };
 
     struct CompileJob
     {
-        uint64_t key = 0;
+        u64 key = 0;
         std::filesystem::path source_path;
         std::string source;
         std::shared_ptr<Entry> entry;
@@ -67,20 +69,20 @@ private:
     void WorkerMain();
     void Compile(const CompileJob& job);
     void FlushDirtyEntries();
-    [[nodiscard]] std::shared_ptr<const std::vector<uint32_t>> TryLoad(uint64_t key) const;
+    [[nodiscard]] std::shared_ptr<const std::vector<u32>> TryLoad(u64 key) const;
 
     std::filesystem::path source_root_;
     std::filesystem::path cache_root_;
     Settings settings_;
-    uint32_t compiler_spirv_version_ = 0;
-    uint32_t compiler_spirv_revision_ = 0;
+    u32 compiler_spirv_version_ = 0;
+    u32 compiler_spirv_revision_ = 0;
 
     std::mutex mutex_;
     std::condition_variable condition_;
-    std::unordered_map<uint64_t, std::shared_ptr<Entry>> entries_;
+    std::unordered_map<u64, std::shared_ptr<Entry>> entries_;
     std::queue<CompileJob> jobs_;
     bool stopping_ = false;
-    uint64_t next_generation_ = 1;
+    u64 next_generation_ = 1;
     std::thread worker_;
 };
 

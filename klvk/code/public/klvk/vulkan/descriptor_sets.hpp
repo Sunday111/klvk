@@ -2,6 +2,7 @@
 
 #include <vector>
 
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/vk_object.hpp"
 
 namespace klvk
@@ -26,10 +27,10 @@ public:
         explicit Builder(DeviceContext& context) : context_(&context) {}
 
         // Adds a binding to the shared layout. Repeat for multiple bindings.
-        Builder& Binding(uint32_t binding, VkDescriptorType type, VkShaderStageFlags stages, uint32_t count = 1);
+        Builder& Binding(u32 binding, VkDescriptorType type, VkShaderStageFlags stages, u32 count = 1);
 
         // Creates the layout and a pool, then allocates set_count identical sets.
-        [[nodiscard]] DescriptorSets Build(uint32_t set_count = 1);
+        [[nodiscard]] DescriptorSets Build(u32 set_count = 1);
 
     private:
         DeviceContext* context_ = nullptr;
@@ -44,12 +45,12 @@ public:
 
     // Points a binding of the given set at a buffer. The descriptor type comes
     // from the binding declared in the builder (uniform or storage buffer).
-    void WriteBuffer(size_t set_index, uint32_t binding, VkBuffer buffer, VkDeviceSize range, VkDeviceSize offset = 0);
+    void WriteBuffer(size_t set_index, u32 binding, VkBuffer buffer, VkDeviceSize range, VkDeviceSize offset = 0);
 
     // Points a combined-image-sampler binding of the given set at an image view.
     void WriteImage(
         size_t set_index,
-        uint32_t binding,
+        u32 binding,
         VkImageView view,
         VkSampler sampler,
         VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -62,7 +63,7 @@ private:
         std::vector<VkDescriptorSet> sets,
         std::vector<VkDescriptorSetLayoutBinding> bindings);
 
-    [[nodiscard]] VkDescriptorType TypeOfBinding(uint32_t binding) const;
+    [[nodiscard]] VkDescriptorType TypeOfBinding(u32 binding) const;
 
     DeviceContext* context_ = nullptr;
     VkObject<VkDescriptorSetLayout> layout_;

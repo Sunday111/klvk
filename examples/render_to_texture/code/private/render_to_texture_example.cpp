@@ -9,6 +9,7 @@
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
@@ -116,7 +117,7 @@ class RenderToTextureApp : public klvk::Application
             .Build();
     }
 
-    void EnsureOffscreenTargets(edt::Vec2<uint32_t> size)
+    void EnsureOffscreenTargets(edt::Vec2<u32> size)
     {
         if (size == target_size_) return;
 
@@ -296,17 +297,16 @@ private:
     klvk::VkObject<VkPipeline> color_pipeline_;
     klvk::VkObject<VkPipeline> texture_pipeline_;
     std::array<OffscreenTarget, kFramesInFlight> targets_{};
-    edt::Vec2<uint32_t> target_size_{};
+    edt::Vec2<u32> target_size_{};
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     RenderToTextureApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

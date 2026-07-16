@@ -5,6 +5,7 @@
 #include <EverydayTools/Math/Math.hpp>
 
 #include "../fractal_settings.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 
 // Vulkan create-info structs are designed for partial designated initialization;
@@ -118,7 +119,7 @@ void SimpleCpuRenderer::ApplySettings(const FractalSettings& settings)
             .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
             .imageType = VK_IMAGE_TYPE_2D,
             .format = VK_FORMAT_R8G8B8A8_UNORM,
-            .extent = {static_cast<uint32_t>(s.x()), static_cast<uint32_t>(s.y()), 1},
+            .extent = {static_cast<u32>(s.x()), static_cast<u32>(s.y()), 1},
             .mipLevels = 1,
             .arrayLayers = 1,
             .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -144,11 +145,8 @@ void SimpleCpuRenderer::ApplySettings(const FractalSettings& settings)
 
         for (auto& buffer : staging_buffers_)
         {
-            buffer = klvk::GpuBuffer(
-                context,
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                s.x() * s.y() * sizeof(edt::Vec4u8),
-                true);
+            buffer =
+                klvk::GpuBuffer(context, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, s.x() * s.y() * sizeof(edt::Vec4u8), true);
         }
 
         const VkDescriptorImageInfo descriptor_image_info{
@@ -203,9 +201,9 @@ void SimpleCpuRenderer::PrepareFrame(VkCommandBuffer command_buffer, const Fract
 
             const edt::Vec3f color = pallette[i];
             pixel = edt::Vec4u8{
-                static_cast<uint8_t>(std::clamp(color.x(), 0.f, 1.f) * 255.f),
-                static_cast<uint8_t>(std::clamp(color.y(), 0.f, 1.f) * 255.f),
-                static_cast<uint8_t>(std::clamp(color.z(), 0.f, 1.f) * 255.f),
+                static_cast<u8>(std::clamp(color.x(), 0.f, 1.f) * 255.f),
+                static_cast<u8>(std::clamp(color.y(), 0.f, 1.f) * 255.f),
+                static_cast<u8>(std::clamp(color.z(), 0.f, 1.f) * 255.f),
                 255,
             };
         }
@@ -236,7 +234,7 @@ void SimpleCpuRenderer::PrepareFrame(VkCommandBuffer command_buffer, const Fract
 
     const VkBufferImageCopy region{
         .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1},
-        .imageExtent = {static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1},
+        .imageExtent = {static_cast<u32>(w), static_cast<u32>(h), 1},
     };
     klvk::Vulkan::CmdCopyBufferToImage(
         command_buffer,

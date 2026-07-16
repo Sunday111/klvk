@@ -3,6 +3,7 @@
 #include <vk_mem_alloc.h>
 
 #include "klvk/error_handling.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
@@ -16,8 +17,7 @@
 namespace klvk
 {
 
-std::unique_ptr<Texture>
-Texture::CreateR8(DeviceContext& context, edt::Vec2<uint32_t> size, std::span<const uint8_t> pixels)
+std::unique_ptr<Texture> Texture::CreateR8(DeviceContext& context, edt::Vec2<u32> size, std::span<const u8> pixels)
 {
     ErrorHandling::Ensure(
         pixels.size() == static_cast<size_t>(size.x()) * size.y(),

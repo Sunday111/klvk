@@ -1,11 +1,20 @@
 #pragma once
 
-#include <fmt/format.h>
-
 #include <algorithm>
+// libc++ does not expose C allocation functions transitively. fmt needs them
+// while parsing its headers, so this ordering is intentional.
+// clang-format off
+#include <cstdlib>
+#include <fmt/format.h>
+// clang-format on
+
 #include <exception>
+#include <limits>
+#include <string_view>
 #include <utility>
 
+#include "klvk/integral_aliases.hpp"
+#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 
 namespace klvk
@@ -13,13 +22,13 @@ namespace klvk
 
 struct Vulkan::Internal
 {
-    [[nodiscard]] static uint32_t Count(size_t value) noexcept
+    [[nodiscard]] static u32 Count(size_t value) noexcept
     {
-        if (value > std::numeric_limits<uint32_t>::max()) [[unlikely]]
+        if (value > std::numeric_limits<u32>::max()) [[unlikely]]
         {
             std::terminate();
         }
-        return static_cast<uint32_t>(value);
+        return static_cast<u32>(value);
     }
 
     [[nodiscard]] static VulkanError
@@ -87,7 +96,7 @@ struct Vulkan::Internal
     {
         for (;;)
         {
-            uint32_t count = 0;
+            u32 count = 0;
             VkResult result = std::forward<Enumerator>(enumerate)(count, nullptr);
             if (result != VK_SUCCESS && result != VK_INCOMPLETE)
             {
@@ -117,14 +126,14 @@ struct Vulkan::Internal
     }
 };
 
-VkCallResult<uint32_t> Vulkan::AcquireNextImageKHRNE(
+VkCallResult<u32> Vulkan::AcquireNextImageKHRNE(
     VkDevice device,
     VkSwapchainKHR swapchain,
-    uint64_t timeout,
+    u64 timeout,
     VkSemaphore semaphore,
     VkFence fence) noexcept
 {
-    uint32_t image_index = 0;
+    u32 image_index = 0;
     const VkResult result = vkAcquireNextImageKHR(device, swapchain, timeout, semaphore, fence, &image_index);
     return {.result = result, .value = image_index};
 }
@@ -132,7 +141,7 @@ VkCallResult<uint32_t> Vulkan::AcquireNextImageKHRNE(
 tl::expected<AcquireNextImageOutcome, VulkanError> Vulkan::AcquireNextImageKHRCE(
     VkDevice device,
     VkSwapchainKHR swapchain,
-    uint64_t timeout,
+    u64 timeout,
     VkSemaphore semaphore,
     VkFence fence) noexcept
 {
@@ -163,7 +172,7 @@ tl::expected<AcquireNextImageOutcome, VulkanError> Vulkan::AcquireNextImageKHRCE
 AcquireNextImageOutcome Vulkan::AcquireNextImageKHR(
     VkDevice device,
     VkSwapchainKHR swapchain,
-    uint64_t timeout,
+    u64 timeout,
     VkSemaphore semaphore,
     VkFence fence)
 {
@@ -466,7 +475,7 @@ VkCallResult<std::vector<VkExtensionProperties>> Vulkan::EnumerateDeviceExtensio
     const char* layer_name) noexcept
 {
     return Internal::Enumerate<VkExtensionProperties>(
-        [physical_device, layer_name](uint32_t& count, VkExtensionProperties* properties)
+        [physical_device, layer_name](u32& count, VkExtensionProperties* properties)
         { return vkEnumerateDeviceExtensionProperties(physical_device, layer_name, &count, properties); });
 }
 
@@ -488,7 +497,7 @@ std::vector<VkExtensionProperties> Vulkan::EnumerateDeviceExtensionProperties(
 
 VkCallResult<std::vector<VkLayerProperties>> Vulkan::EnumerateInstanceLayerPropertiesNE() noexcept
 {
-    return Internal::Enumerate<VkLayerProperties>([](uint32_t& count, VkLayerProperties* properties)
+    return Internal::Enumerate<VkLayerProperties>([](u32& count, VkLayerProperties* properties)
                                                   { return vkEnumerateInstanceLayerProperties(&count, properties); });
 }
 
@@ -504,7 +513,7 @@ std::vector<VkLayerProperties> Vulkan::EnumerateInstanceLayerProperties()
 
 VkCallResult<std::vector<VkPhysicalDevice>> Vulkan::EnumeratePhysicalDevicesNE(VkInstance instance) noexcept
 {
-    return Internal::Enumerate<VkPhysicalDevice>([instance](uint32_t& count, VkPhysicalDevice* devices)
+    return Internal::Enumerate<VkPhysicalDevice>([instance](u32& count, VkPhysicalDevice* devices)
                                                  { return vkEnumeratePhysicalDevices(instance, &count, devices); });
 }
 
@@ -549,7 +558,7 @@ VkCallResult<std::vector<VkSurfaceFormatKHR>> Vulkan::GetPhysicalDeviceSurfaceFo
     VkSurfaceKHR surface) noexcept
 {
     return Internal::Enumerate<VkSurfaceFormatKHR>(
-        [physical_device, surface](uint32_t& count, VkSurfaceFormatKHR* formats)
+        [physical_device, surface](u32& count, VkSurfaceFormatKHR* formats)
         { return vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &count, formats); });
 }
 
@@ -574,7 +583,7 @@ VkCallResult<std::vector<VkPresentModeKHR>> Vulkan::GetPhysicalDeviceSurfacePres
     VkSurfaceKHR surface) noexcept
 {
     return Internal::Enumerate<VkPresentModeKHR>(
-        [physical_device, surface](uint32_t& count, VkPresentModeKHR* modes)
+        [physical_device, surface](u32& count, VkPresentModeKHR* modes)
         { return vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &count, modes); });
 }
 
@@ -596,7 +605,7 @@ std::vector<VkPresentModeKHR> Vulkan::GetPhysicalDeviceSurfacePresentModesKHR(
 
 VkCallResult<bool> Vulkan::GetPhysicalDeviceSurfaceSupportKHRNE(
     VkPhysicalDevice physical_device,
-    uint32_t queue_family_index,
+    u32 queue_family_index,
     VkSurfaceKHR surface) noexcept
 {
     VkBool32 supported = VK_FALSE;
@@ -607,7 +616,7 @@ VkCallResult<bool> Vulkan::GetPhysicalDeviceSurfaceSupportKHRNE(
 
 tl::expected<bool, VulkanError> Vulkan::GetPhysicalDeviceSurfaceSupportKHRCE(
     VkPhysicalDevice physical_device,
-    uint32_t queue_family_index,
+    u32 queue_family_index,
     VkSurfaceKHR surface) noexcept
 {
     return Internal::ValueOrError(
@@ -617,7 +626,7 @@ tl::expected<bool, VulkanError> Vulkan::GetPhysicalDeviceSurfaceSupportKHRCE(
 
 bool Vulkan::GetPhysicalDeviceSurfaceSupportKHR(
     VkPhysicalDevice physical_device,
-    uint32_t queue_family_index,
+    u32 queue_family_index,
     VkSurfaceKHR surface)
 {
     return Internal::TakeValue(GetPhysicalDeviceSurfaceSupportKHRCE(physical_device, queue_family_index, surface));
@@ -625,7 +634,7 @@ bool Vulkan::GetPhysicalDeviceSurfaceSupportKHR(
 
 VkCallResult<std::vector<VkImage>> Vulkan::GetSwapchainImagesKHRNE(VkDevice device, VkSwapchainKHR swapchain) noexcept
 {
-    return Internal::Enumerate<VkImage>([device, swapchain](uint32_t& count, VkImage* images)
+    return Internal::Enumerate<VkImage>([device, swapchain](u32& count, VkImage* images)
                                         { return vkGetSwapchainImagesKHR(device, swapchain, &count, images); });
 }
 
@@ -731,8 +740,7 @@ void Vulkan::ResetFences(VkDevice device, std::span<const VkFence> fences)
     Internal::ThrowIfError(ResetFencesCE(device, fences));
 }
 
-VkResult
-Vulkan::WaitForFencesNE(VkDevice device, std::span<const VkFence> fences, bool wait_all, uint64_t timeout) noexcept
+VkResult Vulkan::WaitForFencesNE(VkDevice device, std::span<const VkFence> fences, bool wait_all, u64 timeout) noexcept
 {
     return vkWaitForFences(
         device,
@@ -743,7 +751,7 @@ Vulkan::WaitForFencesNE(VkDevice device, std::span<const VkFence> fences, bool w
 }
 
 tl::expected<WaitStatus, VulkanError>
-Vulkan::WaitForFencesCE(VkDevice device, std::span<const VkFence> fences, bool wait_all, uint64_t timeout) noexcept
+Vulkan::WaitForFencesCE(VkDevice device, std::span<const VkFence> fences, bool wait_all, u64 timeout) noexcept
 {
     const VkResult result = WaitForFencesNE(device, fences, wait_all, timeout);
     switch (result)
@@ -757,7 +765,7 @@ Vulkan::WaitForFencesCE(VkDevice device, std::span<const VkFence> fences, bool w
     }
 }
 
-WaitStatus Vulkan::WaitForFences(VkDevice device, std::span<const VkFence> fences, bool wait_all, uint64_t timeout)
+WaitStatus Vulkan::WaitForFences(VkDevice device, std::span<const VkFence> fences, bool wait_all, u64 timeout)
 {
     return Internal::TakeValue(WaitForFencesCE(device, fences, wait_all, timeout));
 }
@@ -776,9 +784,9 @@ void Vulkan::CmdBindDescriptorSetsNE(
     VkCommandBuffer command_buffer,
     VkPipelineBindPoint pipeline_bind_point,
     VkPipelineLayout layout,
-    uint32_t first_set,
+    u32 first_set,
     std::span<const VkDescriptorSet> descriptor_sets,
-    std::span<const uint32_t> dynamic_offsets) noexcept
+    std::span<const u32> dynamic_offsets) noexcept
 {
     vkCmdBindDescriptorSets(
         command_buffer,
@@ -795,9 +803,9 @@ void Vulkan::CmdBindDescriptorSets(
     VkCommandBuffer command_buffer,
     VkPipelineBindPoint pipeline_bind_point,
     VkPipelineLayout layout,
-    uint32_t first_set,
+    u32 first_set,
     std::span<const VkDescriptorSet> descriptor_sets,
-    std::span<const uint32_t> dynamic_offsets) noexcept
+    std::span<const u32> dynamic_offsets) noexcept
 {
     CmdBindDescriptorSetsNE(command_buffer, pipeline_bind_point, layout, first_set, descriptor_sets, dynamic_offsets);
 }
@@ -844,6 +852,32 @@ void Vulkan::CmdCopyBufferToImage(
     CmdCopyBufferToImageNE(command_buffer, source, destination, destination_layout, regions);
 }
 
+void Vulkan::CmdCopyImageToBufferNE(
+    VkCommandBuffer command_buffer,
+    VkImage source,
+    VkImageLayout source_layout,
+    VkBuffer destination,
+    std::span<const VkBufferImageCopy> regions) noexcept
+{
+    vkCmdCopyImageToBuffer(
+        command_buffer,
+        source,
+        source_layout,
+        destination,
+        Internal::Count(regions.size()),
+        regions.data());
+}
+
+void Vulkan::CmdCopyImageToBuffer(
+    VkCommandBuffer command_buffer,
+    VkImage source,
+    VkImageLayout source_layout,
+    VkBuffer destination,
+    std::span<const VkBufferImageCopy> regions) noexcept
+{
+    CmdCopyImageToBufferNE(command_buffer, source, source_layout, destination, regions);
+}
+
 void Vulkan::CmdBindIndexBufferNE(
     VkCommandBuffer command_buffer,
     VkBuffer buffer,
@@ -864,7 +898,7 @@ void Vulkan::CmdBindIndexBuffer(
 
 void Vulkan::CmdBindVertexBuffersNE(
     VkCommandBuffer command_buffer,
-    uint32_t first_binding,
+    u32 first_binding,
     std::span<const VkBuffer> buffers,
     std::span<const VkDeviceSize> offsets) noexcept
 {
@@ -879,7 +913,7 @@ void Vulkan::CmdBindVertexBuffersNE(
 
 void Vulkan::CmdBindVertexBuffers(
     VkCommandBuffer command_buffer,
-    uint32_t first_binding,
+    u32 first_binding,
     std::span<const VkBuffer> buffers,
     std::span<const VkDeviceSize> offsets) noexcept
 {
@@ -888,60 +922,60 @@ void Vulkan::CmdBindVertexBuffers(
 
 void Vulkan::CmdDrawIndexedNE(
     VkCommandBuffer command_buffer,
-    uint32_t index_count,
-    uint32_t instance_count,
-    uint32_t first_index,
-    int32_t vertex_offset,
-    uint32_t first_instance) noexcept
+    u32 index_count,
+    u32 instance_count,
+    u32 first_index,
+    i32 vertex_offset,
+    u32 first_instance) noexcept
 {
     vkCmdDrawIndexed(command_buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
 }
 
 void Vulkan::CmdDrawIndexed(
     VkCommandBuffer command_buffer,
-    uint32_t index_count,
-    uint32_t instance_count,
-    uint32_t first_index,
-    int32_t vertex_offset,
-    uint32_t first_instance) noexcept
+    u32 index_count,
+    u32 instance_count,
+    u32 first_index,
+    i32 vertex_offset,
+    u32 first_instance) noexcept
 {
     CmdDrawIndexedNE(command_buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
 }
 
 void Vulkan::CmdDrawNE(
     VkCommandBuffer command_buffer,
-    uint32_t vertex_count,
-    uint32_t instance_count,
-    uint32_t first_vertex,
-    uint32_t first_instance) noexcept
+    u32 vertex_count,
+    u32 instance_count,
+    u32 first_vertex,
+    u32 first_instance) noexcept
 {
     vkCmdDraw(command_buffer, vertex_count, instance_count, first_vertex, first_instance);
 }
 
 void Vulkan::CmdDraw(
     VkCommandBuffer command_buffer,
-    uint32_t vertex_count,
-    uint32_t instance_count,
-    uint32_t first_vertex,
-    uint32_t first_instance) noexcept
+    u32 vertex_count,
+    u32 instance_count,
+    u32 first_vertex,
+    u32 first_instance) noexcept
 {
     CmdDrawNE(command_buffer, vertex_count, instance_count, first_vertex, first_instance);
 }
 
 void Vulkan::CmdDispatchNE(
     VkCommandBuffer command_buffer,
-    uint32_t group_count_x,
-    uint32_t group_count_y,
-    uint32_t group_count_z) noexcept
+    u32 group_count_x,
+    u32 group_count_y,
+    u32 group_count_z) noexcept
 {
     vkCmdDispatch(command_buffer, group_count_x, group_count_y, group_count_z);
 }
 
 void Vulkan::CmdDispatch(
     VkCommandBuffer command_buffer,
-    uint32_t group_count_x,
-    uint32_t group_count_y,
-    uint32_t group_count_z) noexcept
+    u32 group_count_x,
+    u32 group_count_y,
+    u32 group_count_z) noexcept
 {
     CmdDispatchNE(command_buffer, group_count_x, group_count_y, group_count_z);
 }
@@ -956,7 +990,7 @@ void Vulkan::CmdFillBufferNE(
     VkBuffer buffer,
     VkDeviceSize offset,
     VkDeviceSize size,
-    uint32_t data) noexcept
+    u32 data) noexcept
 {
     vkCmdFillBuffer(command_buffer, buffer, offset, size, data);
 }
@@ -966,7 +1000,7 @@ void Vulkan::CmdFillBuffer(
     VkBuffer buffer,
     VkDeviceSize offset,
     VkDeviceSize size,
-    uint32_t data) noexcept
+    u32 data) noexcept
 {
     CmdFillBufferNE(command_buffer, buffer, offset, size, data);
 }
@@ -990,7 +1024,7 @@ void Vulkan::CmdPushConstantsNE(
     VkCommandBuffer command_buffer,
     VkPipelineLayout layout,
     VkShaderStageFlags stage_flags,
-    uint32_t offset,
+    u32 offset,
     std::span<const std::byte> values) noexcept
 {
     vkCmdPushConstants(command_buffer, layout, stage_flags, offset, Internal::Count(values.size()), values.data());
@@ -1000,7 +1034,7 @@ void Vulkan::CmdPushConstants(
     VkCommandBuffer command_buffer,
     VkPipelineLayout layout,
     VkShaderStageFlags stage_flags,
-    uint32_t offset,
+    u32 offset,
     std::span<const std::byte> values) noexcept
 {
     CmdPushConstantsNE(command_buffer, layout, stage_flags, offset, values);
@@ -1008,7 +1042,7 @@ void Vulkan::CmdPushConstants(
 
 void Vulkan::CmdSetScissorNE(
     VkCommandBuffer command_buffer,
-    uint32_t first_scissor,
+    u32 first_scissor,
     std::span<const VkRect2D> scissors) noexcept
 {
     vkCmdSetScissor(command_buffer, first_scissor, Internal::Count(scissors.size()), scissors.data());
@@ -1016,7 +1050,7 @@ void Vulkan::CmdSetScissorNE(
 
 void Vulkan::CmdSetScissor(
     VkCommandBuffer command_buffer,
-    uint32_t first_scissor,
+    u32 first_scissor,
     std::span<const VkRect2D> scissors) noexcept
 {
     CmdSetScissorNE(command_buffer, first_scissor, scissors);
@@ -1024,7 +1058,7 @@ void Vulkan::CmdSetScissor(
 
 void Vulkan::CmdSetViewportNE(
     VkCommandBuffer command_buffer,
-    uint32_t first_viewport,
+    u32 first_viewport,
     std::span<const VkViewport> viewports) noexcept
 {
     vkCmdSetViewport(command_buffer, first_viewport, Internal::Count(viewports.size()), viewports.data());
@@ -1032,7 +1066,7 @@ void Vulkan::CmdSetViewportNE(
 
 void Vulkan::CmdSetViewport(
     VkCommandBuffer command_buffer,
-    uint32_t first_viewport,
+    u32 first_viewport,
     std::span<const VkViewport> viewports) noexcept
 {
     CmdSetViewportNE(command_buffer, first_viewport, viewports);
@@ -1134,14 +1168,14 @@ void Vulkan::FreeCommandBuffers(
     FreeCommandBuffersNE(device, command_pool, command_buffers);
 }
 
-VkQueue Vulkan::GetDeviceQueueNE(VkDevice device, uint32_t queue_family_index, uint32_t queue_index) noexcept
+VkQueue Vulkan::GetDeviceQueueNE(VkDevice device, u32 queue_family_index, u32 queue_index) noexcept
 {
     VkQueue queue = VK_NULL_HANDLE;
     vkGetDeviceQueue(device, queue_family_index, queue_index, &queue);
     return queue;
 }
 
-VkQueue Vulkan::GetDeviceQueue(VkDevice device, uint32_t queue_family_index, uint32_t queue_index) noexcept
+VkQueue Vulkan::GetDeviceQueue(VkDevice device, u32 queue_family_index, u32 queue_index) noexcept
 {
     return GetDeviceQueueNE(device, queue_family_index, queue_index);
 }
@@ -1173,7 +1207,7 @@ VkPhysicalDeviceProperties Vulkan::GetPhysicalDeviceProperties(VkPhysicalDevice 
 std::vector<VkQueueFamilyProperties> Vulkan::GetPhysicalDeviceQueueFamilyPropertiesNE(
     VkPhysicalDevice physical_device) noexcept
 {
-    uint32_t count = 0;
+    u32 count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &count, nullptr);
     std::vector<VkQueueFamilyProperties> properties(count);
     vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &count, properties.empty() ? nullptr : properties.data());

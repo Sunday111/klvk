@@ -5,6 +5,7 @@
 #include "klvk/application.hpp"
 #include "klvk/camera/camera_2d.hpp"
 #include "klvk/error_handling.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/rendering/curve_renderer_2d.hpp"
 #include "klvk/rendering/instanced_sprite_renderer_2d.hpp"
 #include "klvk/vulkan/device_context.hpp"
@@ -105,17 +106,17 @@ class PendulumApp : public klvk::Application
         GetWindow().SetSize(2000, 2000);
         GetWindow().SetTitle("Pendulum App");
 
-        constexpr std::array<uint8_t, 1> white{255};
+        constexpr std::array<u8, 1> white{255};
         white_texture_ = klvk::Texture::CreateR8(GetDeviceContext(), {1, 1}, white);
-        std::array<uint8_t, kCircleTextureSize * kCircleTextureSize> circle{};
-        for (uint32_t y = 0; y != kCircleTextureSize; ++y)
-            for (uint32_t x = 0; x != kCircleTextureSize; ++x)
+        std::array<u8, kCircleTextureSize * kCircleTextureSize> circle{};
+        for (u32 y = 0; y != kCircleTextureSize; ++y)
+            for (u32 x = 0; x != kCircleTextureSize; ++x)
             {
                 const Vec2f point{
                     (static_cast<float>(x) + 0.5f) / kCircleTextureSize * 2.f - 1.f,
                     (static_cast<float>(y) + 0.5f) / kCircleTextureSize * 2.f - 1.f};
                 circle[y * kCircleTextureSize + x] =
-                    static_cast<uint8_t>(std::clamp((1.02f - point.Length()) * 2550.f, 0.f, 255.f));
+                    static_cast<u8>(std::clamp((1.02f - point.Length()) * 2550.f, 0.f, 255.f));
             }
         circle_texture_ = klvk::Texture::CreateR8(GetDeviceContext(), {kCircleTextureSize, kCircleTextureSize}, circle);
         line_renderer_ = std::make_unique<klvk::InstancedSpriteRenderer2d>(*this, *white_texture_);
@@ -201,7 +202,7 @@ public:
     }
 
 private:
-    static constexpr uint32_t kCircleTextureSize = 128;
+    static constexpr u32 kCircleTextureSize = 128;
     static constexpr float kTrailThickness = 5.f;
     static constexpr float kTrailSegmentPixelLength = 8.f;
     klvk::Camera2d camera_{};
@@ -218,15 +219,14 @@ private:
     float total_trail_distance_ = 0.f;
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     PendulumApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 }  // namespace
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

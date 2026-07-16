@@ -9,13 +9,14 @@
 #include "klvk/events/event_manager.hpp"
 #include "klvk/events/mouse_events.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/math/transform.hpp"
 #include "klvk/mesh/procedural_mesh_generator.hpp"
 #include "klvk/ui/simple_type_widget.hpp"
 #include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
-#include "klvk/vulkan/graphics_pipeline_builder.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
+#include "klvk/vulkan/graphics_pipeline_builder.hpp"
 #include "klvk/vulkan/vk_object.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
@@ -72,7 +73,7 @@ class SimpleLitCubeApp : public klvk::Application
         {
             vertices[index] = {.position = mesh.vertices[index], .normal = mesh.normals[index]};
         }
-        index_count_ = static_cast<uint32_t>(mesh.indices.size());
+        index_count_ = static_cast<u32>(mesh.indices.size());
         vertex_buffer_ = klvk::GpuBuffer(
             context,
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
@@ -253,20 +254,19 @@ private:
     klvk::DescriptorSets descriptor_sets_;
     klvk::VkObject<VkPipelineLayout> pipeline_layout_;
     klvk::VkObject<VkPipeline> pipeline_;
-    uint32_t index_count_ = 0;
+    u32 index_count_ = 0;
     float move_speed_ = 5.f;
     std::vector<edt::Mat4f> cubes_;
     klvk::Camera3d camera_{Vec3f{3, 3, 4}, {.yaw = 45, .pitch = 45}};
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     SimpleLitCubeApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

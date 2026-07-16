@@ -4,6 +4,8 @@
 #include <nlohmann/json.hpp>
 
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/integral_aliases.hpp"
+#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 
@@ -28,10 +30,10 @@ constexpr std::pair<std::string_view, VkShaderStageFlagBits> kStageExtensions[] 
     {".tese", VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT},
 };
 
-uint32_t DefaultValueBits(const nlohmann::json& definition)
+u32 DefaultValueBits(const nlohmann::json& definition)
 {
     const std::string type = definition.at("type").get<std::string>();
-    uint32_t raw = 0;
+    u32 raw = 0;
     if (type == "float")
     {
         const float value = definition.at("default").get<float>();
@@ -39,12 +41,12 @@ uint32_t DefaultValueBits(const nlohmann::json& definition)
     }
     else if (type == "int")
     {
-        const int32_t value = definition.at("default").get<int32_t>();
+        const i32 value = definition.at("default").get<i32>();
         std::memcpy(&raw, &value, sizeof(raw));
     }
     else if (type == "uint")
     {
-        raw = definition.at("default").get<uint32_t>();
+        raw = definition.at("default").get<u32>();
     }
     else if (type == "bool")
     {
@@ -82,13 +84,13 @@ Shader::Shader(DeviceContext& context, std::string_view name) : context_(&contex
         const auto config = nlohmann::json::parse(config_text);
         for (const auto& definition : config.value("definitions", nlohmann::json::array()))
         {
-            const auto constant_id = static_cast<uint32_t>(define_values_.size());
+            const auto constant_id = static_cast<u32>(define_values_.size());
             define_names_.push_back(definition.at("name").get<std::string>());
             define_values_.push_back(DefaultValueBits(definition));
             specialization_entries_.push_back({
                 .constantID = constant_id,
-                .offset = constant_id * static_cast<uint32_t>(sizeof(uint32_t)),
-                .size = sizeof(uint32_t),
+                .offset = constant_id * static_cast<u32>(sizeof(u32)),
+                .size = sizeof(u32),
             });
         }
     }
@@ -108,7 +110,7 @@ std::optional<DefineHandle> Shader::FindDefine(std::string_view name) const noex
     {
         if (define_names_[index] == name)
         {
-            return DefineHandle{.name = std::string(name), .index = static_cast<uint32_t>(index)};
+            return DefineHandle{.name = std::string(name), .index = static_cast<u32>(index)};
         }
     }
     return std::nullopt;
@@ -124,9 +126,9 @@ DefineHandle Shader::GetDefine(std::string_view name) const
 std::vector<VkPipelineShaderStageCreateInfo> Shader::MakeShaderStages(VkShaderStageFlags stage_mask) const
 {
     specialization_info_ = VkSpecializationInfo{
-        .mapEntryCount = static_cast<uint32_t>(specialization_entries_.size()),
+        .mapEntryCount = static_cast<u32>(specialization_entries_.size()),
         .pMapEntries = specialization_entries_.data(),
-        .dataSize = define_values_.size() * sizeof(uint32_t),
+        .dataSize = define_values_.size() * sizeof(u32),
         .pData = define_values_.data(),
     };
     const VkSpecializationInfo* specialization = specialization_entries_.empty() ? nullptr : &specialization_info_;

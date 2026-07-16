@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "klvk/error_handling.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/shader/shader_cache_manager.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 
@@ -123,7 +124,7 @@ VkShaderModule DeviceContext::CreateShaderModuleFromSource(const std::filesystem
 {
     const auto spirv = GetShaderCacheManager().GetOrCompile(source_path);
     return CreateShaderModule(
-        std::string_view(reinterpret_cast<const char*>(spirv->data()), spirv->size() * sizeof(uint32_t)),
+        std::string_view(reinterpret_cast<const char*>(spirv->data()), spirv->size() * sizeof(u32)),
         source_path.filename().string());
 }
 
@@ -136,7 +137,7 @@ void DeviceContext::CreateInstance(const Settings& settings)
         .apiVersion = VK_API_VERSION_1_3,
     };
 
-    uint32_t glfw_extension_count = 0;
+    u32 glfw_extension_count = 0;
     const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
     ErrorHandling::Ensure(glfw_extensions != nullptr, "GLFW cannot provide Vulkan instance extensions");
     std::vector<const char*> extensions(glfw_extensions, glfw_extensions + glfw_extension_count);  // NOLINT
@@ -161,9 +162,9 @@ void DeviceContext::CreateInstance(const Settings& settings)
         create_info.pNext = &messenger_info;
     }
 
-    create_info.enabledLayerCount = static_cast<uint32_t>(layers.size());
+    create_info.enabledLayerCount = static_cast<u32>(layers.size());
     create_info.ppEnabledLayerNames = layers.data();
-    create_info.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+    create_info.enabledExtensionCount = static_cast<u32>(extensions.size());
     create_info.ppEnabledExtensionNames = extensions.data();
 
     instance_ = Vulkan::CreateInstance(create_info);
@@ -198,8 +199,8 @@ void DeviceContext::PickPhysicalDevice()
         // Single queue family that can do both graphics and present keeps ownership simple.
         const auto families = Vulkan::GetPhysicalDeviceQueueFamilyProperties(device);
 
-        std::optional<uint32_t> graphics_family;
-        for (uint32_t family = 0; family != static_cast<uint32_t>(families.size()); ++family)
+        std::optional<u32> graphics_family;
+        for (u32 family = 0; family != static_cast<u32>(families.size()); ++family)
         {
             if (!(families[family].queueFlags & VK_QUEUE_GRAPHICS_BIT)) continue;
             if (Vulkan::GetPhysicalDeviceSurfaceSupportKHR(device, family, surface_))
@@ -279,7 +280,7 @@ void DeviceContext::CreateDevice()
         .pNext = &features2,
         .queueCreateInfoCount = queue_infos.size(),
         .pQueueCreateInfos = queue_infos.data(),
-        .enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
+        .enabledExtensionCount = static_cast<u32>(extensions.size()),
         .ppEnabledExtensionNames = extensions.data(),
     };
 
@@ -350,7 +351,7 @@ void DeviceContext::EndOneTimeCommands(VkCommandBuffer command_buffer) const
 VkShaderModule DeviceContext::CreateShaderModule(std::string_view spirv_bytes, std::string_view debug_name) const
 {
     ErrorHandling::Ensure(
-        spirv_bytes.size() % sizeof(uint32_t) == 0 && !spirv_bytes.empty(),
+        spirv_bytes.size() % sizeof(u32) == 0 && !spirv_bytes.empty(),
         "Shader '{}': SPIR-V size {} is not a multiple of 4",
         debug_name,
         spirv_bytes.size());
@@ -358,7 +359,7 @@ VkShaderModule DeviceContext::CreateShaderModule(std::string_view spirv_bytes, s
     const VkShaderModuleCreateInfo create_info{
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize = spirv_bytes.size(),
-        .pCode = reinterpret_cast<const uint32_t*>(spirv_bytes.data()),  // NOLINT
+        .pCode = reinterpret_cast<const u32*>(spirv_bytes.data()),  // NOLINT
     };
     return Vulkan::CreateShaderModule(device_, create_info);
 }

@@ -10,8 +10,10 @@
 #include "klvk/events/event_manager.hpp"
 #include "klvk/events/mouse_events.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/math/rotator.hpp"
 #include "klvk/shader/shader.hpp"
+#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/template/on_scope_leave.hpp"
 #include "klvk/ui/simple_type_widget.hpp"
 #include "klvk/vulkan/descriptor_sets.hpp"
@@ -41,8 +43,8 @@ struct SimulationPushConstants
     Vec4f body_a{};
     Vec4f body_b{};
     float delta_time = 0.f;
-    uint32_t particle_count = 0;
-    std::array<uint32_t, 2> padding{};
+    u32 particle_count = 0;
+    std::array<u32, 2> padding{};
 };
 
 struct GraphicsPushConstants
@@ -66,8 +68,8 @@ struct Body
 
 class ComputeShaderApp : public klvk::Application
 {
-    static constexpr uint32_t kParticleCount = 1'000'000;
-    static constexpr uint32_t kWorkgroupSize = 256;
+    static constexpr u32 kParticleCount = 1'000'000;
+    static constexpr u32 kWorkgroupSize = 256;
 
     void Initialize() override
     {
@@ -82,12 +84,10 @@ class ComputeShaderApp : public klvk::Application
 
         auto& context = GetDeviceContext();
         const VkDevice device = context.GetDevice();
-        descriptor_sets_ = klvk::DescriptorSets::Builder(context)
-                               .Binding(
-                                   0,
-                                   VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                                   VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT)
-                               .Build();
+        descriptor_sets_ =
+            klvk::DescriptorSets::Builder(context)
+                .Binding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT)
+                .Build();
 
         // The particle state persists across frames (klgl keeps one SSBO), so a
         // single buffer serves every frame; barriers order the accesses.
@@ -109,7 +109,7 @@ class ComputeShaderApp : public klvk::Application
                 {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
                  .setLayoutCount = 1,
                  .pSetLayouts = &set_layout,
-                 .pushConstantRangeCount = static_cast<uint32_t>(ranges.size()),
+                 .pushConstantRangeCount = static_cast<u32>(ranges.size()),
                  .pPushConstantRanges = ranges.data()})};
         CreatePipelines(context);
 
@@ -119,14 +119,14 @@ class ComputeShaderApp : public klvk::Application
     static std::vector<Particle> MakeParticles()
     {
         std::vector<Particle> particles(kParticleCount);
-        const uint32_t side = static_cast<uint32_t>(std::round(std::cbrt(static_cast<float>(kParticleCount))));
+        const u32 side = static_cast<u32>(std::round(std::cbrt(static_cast<float>(kParticleCount))));
         const Vec3f delta = Vec3f{} + 2.f / static_cast<float>(side);
-        uint32_t index = 0;
-        for (uint32_t x = 0; x != side && index != kParticleCount; ++x)
-            for (uint32_t y = 0; y != side && index != kParticleCount; ++y)
-                for (uint32_t z = 0; z != side && index != kParticleCount; ++z)
+        u32 index = 0;
+        for (u32 x = 0; x != side && index != kParticleCount; ++x)
+            for (u32 y = 0; y != side && index != kParticleCount; ++y)
+                for (u32 z = 0; z != side && index != kParticleCount; ++z)
                 {
-                    const Vec3f position = Vec3<uint32_t>{x, y, z}.Cast<float>() * delta - 1.f;
+                    const Vec3f position = Vec3<u32>{x, y, z}.Cast<float>() * delta - 1.f;
                     particles[index++].position = Vec4f(position, 1.f);
                 }
         return particles;
@@ -371,7 +371,7 @@ class ComputeShaderApp : public klvk::Application
 
         if (ImGui::CollapsingHeader("Shader"))
         {
-            int color_function = particles_shader_->GetDefineValue<int32_t>(color_function_define_);
+            int color_function = particles_shader_->GetDefineValue<i32>(color_function_define_);
             if (ImGui::SliderInt("COLOR_FUNCTION", &color_function, 0, 2))
             {
                 // Applied at the start of the next frame: this frame's command
@@ -437,15 +437,14 @@ private:
     size_t particles_pipeline_shader_version_ = 0;
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     ComputeShaderApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 }  // namespace
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

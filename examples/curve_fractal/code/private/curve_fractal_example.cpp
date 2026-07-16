@@ -19,6 +19,7 @@
 #include "klvk/events/event_manager.hpp"
 #include "klvk/events/mouse_events.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/rendering/curve_renderer_2d.hpp"
 #include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
@@ -61,7 +62,7 @@ using namespace edt::lazy_matrix_aliases;  // NOLINT
     if (input[1] <= 0.f) return Vec3f{} + input[2];
     float hue = input[0] >= 360.f ? 0.f : input[0];
     hue /= 60.f;
-    const auto sector = static_cast<int64_t>(hue);
+    const auto sector = static_cast<u8>(hue);
     const float fraction = hue - static_cast<float>(sector);
     const float p = input[2] * (1.f - input[1]);
     const float q = input[2] * (1.f - input[1] * fraction);
@@ -139,7 +140,7 @@ private:
 
 class CurveFractalApp : public klvk::Application
 {
-    static constexpr Vec2<uint32_t> kFramebufferResolution{3840, 2160};
+    static constexpr Vec2<u32> kFramebufferResolution{3840, 2160};
     static constexpr size_t kMaxCurves = 10'000;
     static constexpr size_t kMaxCurvesPerFrame = 100;
     static constexpr VkFormat kOffscreenFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
@@ -494,15 +495,14 @@ private:
     klvk::VkObject<VkPipeline> pipeline_;
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     CurveFractalApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 }  // namespace
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

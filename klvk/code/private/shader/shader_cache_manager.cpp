@@ -1,46 +1,50 @@
 #include "klvk/shader/shader_cache_manager.hpp"
 
+#include <fmt/format.h>
+
 #include <array>
+#include <atomic>
 #include <cstring>
 #include <fstream>
 #include <iomanip>
-#include <iostream>
 #include <shaderc/shaderc.hpp>
 #include <span>
 #include <sstream>
 
 #include "klvk/error_handling.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/integral_aliases.hpp"
+#include "klvk/platform/os/os.hpp"
 
 namespace klvk
 {
 namespace
 {
 
-constexpr uint64_t kFnvOffset = 14695981039346656037ull;
-constexpr uint64_t kFnvPrime = 1099511628211ull;
-constexpr uint32_t kCacheFormatVersion = 1;
-constexpr uint32_t kSpirvMagic = 0x07230203;
+constexpr u64 kFnvOffset = 14695981039346656037ull;
+constexpr u64 kFnvPrime = 1099511628211ull;
+constexpr u32 kCacheFormatVersion = 1;
+constexpr u32 kSpirvMagic = 0x07230203;
 constexpr size_t kMaximumSpirvBytes = 256 * 1024 * 1024;
 constexpr std::array<char, 8> kCacheMagic{'K', 'L', 'V', 'K', 'S', 'P', 'V', '1'};
 
 struct CacheHeader
 {
     std::array<char, 8> magic{};
-    uint32_t format_version = 0;
-    uint32_t spirv_version = 0;
-    uint32_t spirv_revision = 0;
-    uint32_t reserved = 0;
-    uint64_t key = 0;
-    uint64_t word_count = 0;
-    uint64_t payload_hash = 0;
+    u32 format_version = 0;
+    u32 spirv_version = 0;
+    u32 spirv_revision = 0;
+    u32 reserved = 0;
+    u64 key = 0;
+    u64 word_count = 0;
+    u64 payload_hash = 0;
 };
 
 static_assert(std::is_trivially_copyable_v<CacheHeader>);
 
-uint64_t HashBytes(uint64_t hash, const void* bytes, size_t size)
+u64 HashBytes(u64 hash, const void* bytes, size_t size)
 {
-    const auto* data = static_cast<const uint8_t*>(bytes);
+    const auto* data = static_cast<const u8*>(bytes);
     for (size_t i = 0; i != size; ++i)
     {
         hash ^= data[i];
@@ -50,17 +54,17 @@ uint64_t HashBytes(uint64_t hash, const void* bytes, size_t size)
 }
 
 template <typename T>
-uint64_t HashValue(uint64_t hash, const T& value)
+u64 HashValue(u64 hash, const T& value)
 {
     return HashBytes(hash, &value, sizeof(value));
 }
 
-uint64_t HashWords(std::span<const uint32_t> words)
+u64 HashWords(std::span<const u32> words)
 {
     return HashBytes(kFnvOffset, words.data(), words.size_bytes());
 }
 
-std::filesystem::path CachePath(const std::filesystem::path& root, uint64_t key)
+std::filesystem::path CachePath(const std::filesystem::path& root, u64 key)
 {
     std::ostringstream name;
     name << std::hex << std::setfill('0') << std::setw(16) << key << ".spv.cache";
@@ -80,9 +84,9 @@ shaderc_shader_kind ShaderKind(const std::filesystem::path& path)
     return shaderc_glsl_infer_from_source;
 }
 
-uint64_t MakeKey(std::string_view source, shaderc_shader_kind kind, uint32_t spirv_version, uint32_t spirv_revision)
+u64 MakeKey(std::string_view source, shaderc_shader_kind kind, u32 spirv_version, u32 spirv_revision)
 {
-    uint64_t hash = HashBytes(kFnvOffset, source.data(), source.size());
+    u64 hash = HashBytes(kFnvOffset, source.data(), source.size());
     hash = HashValue(hash, kind);
     hash = HashValue(hash, spirv_version);
     hash = HashValue(hash, spirv_revision);
@@ -127,7 +131,7 @@ ShaderCacheManager::~ShaderCacheManager()
     if (worker_.joinable()) worker_.join();
 }
 
-std::shared_ptr<const std::vector<uint32_t>> ShaderCacheManager::GetOrCompile(const std::filesystem::path& source_path)
+std::shared_ptr<const std::vector<u32>> ShaderCacheManager::GetOrCompile(const std::filesystem::path& source_path)
 {
     const std::filesystem::path canonical_path = std::filesystem::weakly_canonical(source_path);
     const auto relative = canonical_path.lexically_relative(source_root_);
@@ -140,7 +144,7 @@ std::shared_ptr<const std::vector<uint32_t>> ShaderCacheManager::GetOrCompile(co
     std::string source;
     Filesystem::ReadFile(canonical_path, source);
     const shaderc_shader_kind kind = ShaderKind(canonical_path);
-    const uint64_t key = MakeKey(source, kind, compiler_spirv_version_, compiler_spirv_revision_);
+    const u64 key = MakeKey(source, kind, compiler_spirv_version_, compiler_spirv_revision_);
 
     std::unique_lock lock(mutex_);
     auto iterator = entries_.find(key);
@@ -226,7 +230,7 @@ void ShaderCacheManager::Compile(const CompileJob& job)
             "Failed to compile shader '{}':\n{}",
             job.source_path.string(),
             result.GetErrorMessage());
-        auto words = std::make_shared<const std::vector<uint32_t>>(result.cbegin(), result.cend());
+        auto words = std::make_shared<const std::vector<u32>>(result.cbegin(), result.cend());
         ErrorHandling::Ensure(!words->empty() && words->front() == kSpirvMagic, "Compiler returned invalid SPIR-V");
         {
             std::lock_guard lock(mutex_);
@@ -248,9 +252,9 @@ void ShaderCacheManager::FlushDirtyEntries()
 {
     struct Snapshot
     {
-        uint64_t key = 0;
-        uint64_t generation = 0;
-        std::shared_ptr<const std::vector<uint32_t>> spirv;
+        u64 key = 0;
+        u64 generation = 0;
+        std::shared_ptr<const std::vector<u32>> spirv;
         std::shared_ptr<Entry> entry;
     };
     std::vector<Snapshot> snapshots;
@@ -270,8 +274,11 @@ void ShaderCacheManager::FlushDirtyEntries()
         {
             const std::filesystem::path destination = CachePath(cache_root_, snapshot.key);
             temporary = destination;
-            temporary += ".tmp." + std::to_string(reinterpret_cast<uintptr_t>(this)) + "." +
-                         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+            static std::atomic<u64> temporary_sequence = 0;
+            temporary += fmt::format(
+                ".tmp.{}.{}",
+                os::GetProcessId(),
+                temporary_sequence.fetch_add(1, std::memory_order_relaxed));
             const CacheHeader header{
                 .magic = kCacheMagic,
                 .format_version = kCacheFormatVersion,
@@ -287,23 +294,13 @@ void ShaderCacheManager::FlushDirtyEntries()
                 file.write(reinterpret_cast<const char*>(&header), sizeof(header));
                 file.write(
                     reinterpret_cast<const char*>(snapshot.spirv->data()),
-                    static_cast<std::streamsize>(snapshot.spirv->size() * sizeof(uint32_t)));
+                    static_cast<std::streamsize>(snapshot.spirv->size() * sizeof(u32)));
                 file.flush();
                 ErrorHandling::Ensure(file.good(), "Failed to write shader cache file '{}'", temporary.string());
+                file.close();
+                ErrorHandling::Ensure(!file.fail(), "Failed to close shader cache file '{}'", temporary.string());
             }
-            std::error_code error;
-            std::filesystem::rename(temporary, destination, error);
-            if (error)
-            {
-                std::filesystem::remove(destination, error);
-                error.clear();
-                std::filesystem::rename(temporary, destination, error);
-            }
-            ErrorHandling::Ensure(
-                !error,
-                "Failed to install shader cache file '{}': {}",
-                destination.string(),
-                error.message());
+            Filesystem::InstallFileAtomically(temporary, destination);
             std::lock_guard lock(mutex_);
             if (snapshot.entry->generation == snapshot.generation)
                 snapshot.entry->persisted_generation = snapshot.generation;
@@ -315,12 +312,12 @@ void ShaderCacheManager::FlushDirtyEntries()
                 std::error_code ignored;
                 std::filesystem::remove(temporary, ignored);
             }
-            std::cerr << "[shader cache] " << exception.what() << '\n';
+            fmt::println(stderr, "[shader cache] {}", exception.what());
         }
     }
 }
 
-std::shared_ptr<const std::vector<uint32_t>> ShaderCacheManager::TryLoad(uint64_t key) const
+std::shared_ptr<const std::vector<u32>> ShaderCacheManager::TryLoad(u64 key) const
 {
     const std::filesystem::path path = CachePath(cache_root_, key);
     std::ifstream file(path, std::ios::binary | std::ios::ate);
@@ -334,11 +331,11 @@ std::shared_ptr<const std::vector<uint32_t>> ShaderCacheManager::TryLoad(uint64_
     file.read(reinterpret_cast<char*>(&header), sizeof(header));
     if (!file || header.magic != kCacheMagic || header.format_version != kCacheFormatVersion || header.key != key ||
         header.spirv_version != compiler_spirv_version_ || header.spirv_revision != compiler_spirv_revision_ ||
-        header.word_count == 0 || header.word_count > kMaximumSpirvBytes / sizeof(uint32_t) ||
-        size != static_cast<std::streamsize>(sizeof(CacheHeader) + header.word_count * sizeof(uint32_t)))
+        header.word_count == 0 || header.word_count > kMaximumSpirvBytes / sizeof(u32) ||
+        size != static_cast<std::streamsize>(sizeof(CacheHeader) + header.word_count * sizeof(u32)))
         return {};
-    auto words = std::make_shared<std::vector<uint32_t>>(static_cast<size_t>(header.word_count));
-    file.read(reinterpret_cast<char*>(words->data()), static_cast<std::streamsize>(words->size() * sizeof(uint32_t)));
+    auto words = std::make_shared<std::vector<u32>>(static_cast<size_t>(header.word_count));
+    file.read(reinterpret_cast<char*>(words->data()), static_cast<std::streamsize>(words->size() * sizeof(u32)));
     if (!file || words->front() != kSpirvMagic || HashWords(*words) != header.payload_hash) return {};
     return words;
 }

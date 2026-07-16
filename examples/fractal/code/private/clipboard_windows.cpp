@@ -4,6 +4,7 @@
 
 #include "Windows.h"  // IWYU pragma: keep
 #include "clipboard.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/template/on_scope_leave.hpp"
 
 void Clipboard::AddImage(edt::Vec2<size_t> size, std::span<const edt::Vec4u8> pixels)
@@ -13,7 +14,7 @@ void Clipboard::AddImage(edt::Vec2<size_t> size, std::span<const edt::Vec4u8> pi
     const auto free_mem = klvk::OnScopeLeave(std::bind_front(GlobalFree, hMem));
 
     {
-        auto mem = reinterpret_cast<uint8_t*>(GlobalLock(hMem));  // NOLINT
+        auto mem = reinterpret_cast<u8*>(GlobalLock(hMem));  // NOLINT
         klvk::OnScopeLeave(std::bind_front(GlobalUnlock, mem));
 
         auto& header = *reinterpret_cast<BITMAPINFOHEADER*>(mem);  // NOLINT

@@ -1,6 +1,7 @@
 #include "graphics_utils.hpp"
 
 #include "fractal_settings.hpp"
+#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
 
@@ -50,8 +51,8 @@ void CmdSetGlStyleViewport(VkCommandBuffer command_buffer, const klvk::Viewport&
 
     const VkRect2D scissor{
         .offset =
-            {static_cast<int32_t>(viewport.position.x()),
-             static_cast<int32_t>(framebuffer.y() - viewport.position.y() - viewport.size.y())},
+            {static_cast<i32>(viewport.position.x()),
+             static_cast<i32>(framebuffer.y() - viewport.position.y() - viewport.size.y())},
         .extent = {viewport.size.x(), viewport.size.y()},
     };
     klvk::Vulkan::CmdSetScissor(command_buffer, 0, std::span{&scissor, 1});

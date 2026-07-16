@@ -1,6 +1,8 @@
 #include "interpolation_widget.hpp"
 
 #include "fractal_settings.hpp"
+#include "klvk/integral_aliases.hpp"
+#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 
 // Vulkan create-info structs are designed for partial designated initialization;
@@ -18,7 +20,7 @@ InterpolationWidget::InterpolationWidget(klvk::Application& app, size_t num_colo
     klvk::DeviceContext& context = app.GetDeviceContext();
     VkDevice device = context.GetDevice();
 
-    widget_shader_.SetDefineValue(widget_shader_.GetDefine("COLORS_COUNT"), static_cast<int32_t>(num_colors));
+    widget_shader_.SetDefineValue(widget_shader_.GetDefine("COLORS_COUNT"), static_cast<i32>(num_colors));
 
     const VkDescriptorSetLayoutBinding binding{
         .binding = 0,
@@ -34,7 +36,7 @@ InterpolationWidget::InterpolationWidget(klvk::Application& app, size_t num_colo
             .pBindings = &binding,
         });
 
-    constexpr auto frames = static_cast<uint32_t>(klvk::Application::kFramesInFlight);
+    constexpr auto frames = static_cast<u32>(klvk::Application::kFramesInFlight);
     const VkDescriptorPoolSize pool_size{.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = frames};
     descriptor_pool_ = klvk::Vulkan::CreateDescriptorPool(
         device,
@@ -59,11 +61,8 @@ InterpolationWidget::InterpolationWidget(klvk::Application& app, size_t num_colo
     for (size_t index = 0; index != klvk::Application::kFramesInFlight; ++index)
     {
         descriptor_sets_[index] = sets[index];
-        color_buffers_[index] = klvk::GpuBuffer(
-            context,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            num_colors_ * sizeof(edt::Vec4f),
-            true);
+        color_buffers_[index] =
+            klvk::GpuBuffer(context, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, num_colors_ * sizeof(edt::Vec4f), true);
 
         const VkDescriptorBufferInfo buffer_info{.buffer = color_buffers_[index].GetHandle(), .range = VK_WHOLE_SIZE};
         const VkWriteDescriptorSet write{
@@ -112,7 +111,8 @@ void InterpolationWidget::Render(
     std::vector<edt::Vec4f> colors(num_colors_);
     settings.ComputeColors(
         colors.size(),
-        [&](size_t index, const edt::Vec3f& color) { colors[index] = edt::Vec4f{color.x(), color.y(), color.z(), 1.f}; });
+        [&](size_t index, const edt::Vec3f& color)
+        { colors[index] = edt::Vec4f{color.x(), color.y(), color.z(), 1.f}; });
     color_buffers_[frame_index].Write(std::as_bytes(std::span{colors}));
 
     CmdSetGlStyleViewport(command_buffer, viewport, app_->GetWindow().GetSize());

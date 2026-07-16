@@ -4,6 +4,7 @@
 
 #include "EverydayTools/Math/Matrix.hpp"
 #include "EverydayTools/Ranges/ArrayIndices2d.hpp"
+#include "klvk/integral_aliases.hpp"
 
 namespace klvk
 {
@@ -28,10 +29,10 @@ public:
         return PixelIndices(texture_size) | std::views::transform(&Vec2<size_t>::Cast<float>);
     }
 
-    [[nodiscard]] static std::vector<uint8_t> CircleMask(const edt::Vec2<size_t>& size, size_t upscale_factor = 1);
-    [[nodiscard]] static std::vector<uint8_t> TriangleMask(const edt::Vec2<size_t>& size, size_t upscale_factor = 1);
+    [[nodiscard]] static std::vector<u8> CircleMask(const edt::Vec2<size_t>& size, size_t upscale_factor = 1);
+    [[nodiscard]] static std::vector<u8> TriangleMask(const edt::Vec2<size_t>& size, size_t upscale_factor = 1);
 
-    static void MirrorX(const edt::Vec2<size_t>& size, std::span<uint8_t> data)
+    static void MirrorX(const edt::Vec2<size_t>& size, std::span<u8> data)
     {
         const auto w = size.x();
         const auto w_2 = w / 2;

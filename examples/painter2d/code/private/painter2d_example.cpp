@@ -4,6 +4,7 @@
 
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/rendering/instanced_sprite_renderer_2d.hpp"
 #include "klvk/texture/procedural_texture_generator.hpp"
 #include "klvk/ui/simple_type_widget.hpp"
@@ -21,7 +22,7 @@ using namespace edt::lazy_matrix_aliases;  // NOLINT
 // white texture, circles and triangles use mask textures.
 class Painter2dApp : public klvk::Application
 {
-    static constexpr uint32_t kMaskSize = 256;
+    static constexpr u32 kMaskSize = 256;
 
     void Initialize() override
     {
@@ -30,15 +31,15 @@ class Painter2dApp : public klvk::Application
         GetWindow().SetSize(1000, 1000);
         GetWindow().SetTitle("Painter 2d");
 
-        constexpr std::array<uint8_t, 1> white{255};
+        constexpr std::array<u8, 1> white{255};
         white_texture_ = klvk::Texture::CreateR8(GetDeviceContext(), {1, 1}, white);
 
-        std::array<uint8_t, kMaskSize * kMaskSize> mask{};
+        std::array<u8, kMaskSize * kMaskSize> mask{};
         auto fill_mask = [&](auto&& sample)
         {
-            for (uint32_t y = 0; y != kMaskSize; ++y)
+            for (u32 y = 0; y != kMaskSize; ++y)
             {
-                for (uint32_t x = 0; x != kMaskSize; ++x)
+                for (u32 x = 0; x != kMaskSize; ++x)
                 {
                     const Vec2f uv{
                         (static_cast<float>(x) + 0.5f) / kMaskSize * 2.f - 1.f,
@@ -49,9 +50,8 @@ class Painter2dApp : public klvk::Application
             }
         };
 
-        fill_mask(
-            [](const Vec2f& uv)
-            { return static_cast<uint8_t>(std::clamp((1.02f - uv.Length()) * 2550.f, 0.f, 255.f)); });
+        fill_mask([](const Vec2f& uv)
+                  { return static_cast<u8>(std::clamp((1.02f - uv.Length()) * 2550.f, 0.f, 255.f)); });
         circle_texture_ = klvk::Texture::CreateR8(GetDeviceContext(), {kMaskSize, kMaskSize}, mask);
 
         // Ear triangle in quad space: base along the bottom, apex at (1/3, 1),
@@ -63,7 +63,7 @@ class Painter2dApp : public klvk::Application
                 // Inside when right of the left edge (-1,-1)->(apex,1) and left of the right edge (1,-1)->(apex,1).
                 const float left = (uv.x() + 1.f) * 2.f - (uv.y() + 1.f) * (apex_x + 1.f);
                 const float right = (1.f - uv.x()) * 2.f - (uv.y() + 1.f) * (1.f - apex_x);
-                return static_cast<uint8_t>((left >= 0.f && right >= 0.f) ? 255 : 0);
+                return static_cast<u8>((left >= 0.f && right >= 0.f) ? 255 : 0);
             });
         left_ear_texture_ = klvk::Texture::CreateR8(GetDeviceContext(), {kMaskSize, kMaskSize}, mask);
         klvk::ProceduralTextureGenerator::MirrorX({kMaskSize, kMaskSize}, mask);
@@ -167,16 +167,15 @@ private:
     float line_width_ = 0.05f;
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     Painter2dApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 
 }  // namespace
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

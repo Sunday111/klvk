@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
 struct GLFWwindow;
@@ -43,7 +44,7 @@ public:
     [[nodiscard]] VkPhysicalDevice GetPhysicalDevice() const noexcept { return physical_device_; }
     [[nodiscard]] VkDevice GetDevice() const noexcept { return device_; }
     [[nodiscard]] VkQueue GetGraphicsQueue() const noexcept { return graphics_queue_; }
-    [[nodiscard]] uint32_t GetGraphicsQueueFamily() const noexcept { return graphics_queue_family_; }
+    [[nodiscard]] u32 GetGraphicsQueueFamily() const noexcept { return graphics_queue_family_; }
     [[nodiscard]] VmaAllocator GetAllocator() const noexcept { return allocator_; }
 
     // True when the geometryShader feature was available and enabled on the device.
@@ -85,7 +86,7 @@ private:
     VkPhysicalDevice physical_device_ = VK_NULL_HANDLE;
     VkDevice device_ = VK_NULL_HANDLE;
     VkQueue graphics_queue_ = VK_NULL_HANDLE;
-    uint32_t graphics_queue_family_ = 0;
+    u32 graphics_queue_family_ = 0;
     VmaAllocator allocator_ = VK_NULL_HANDLE;
     VkCommandPool one_time_pool_ = VK_NULL_HANDLE;
     bool geometry_shader_enabled_ = false;

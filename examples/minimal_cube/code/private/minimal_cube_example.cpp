@@ -9,6 +9,7 @@
 #include "klvk/events/event_manager.hpp"
 #include "klvk/events/mouse_events.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/math/transform.hpp"
 #include "klvk/mesh/procedural_mesh_generator.hpp"
 #include "klvk/ui/simple_type_widget.hpp"
@@ -47,7 +48,7 @@ class CubeApp : public klvk::Application
         klvk::DeviceContext& context = GetDeviceContext();
         VkDevice device = context.GetDevice();
         const auto mesh = klvk::ProceduralMeshGenerator::GenerateCubeMesh();
-        index_count_ = static_cast<uint32_t>(mesh.indices.size());
+        index_count_ = static_cast<u32>(mesh.indices.size());
         vertex_buffer_ = klvk::GpuBuffer(
             context,
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
@@ -162,20 +163,19 @@ private:
     klvk::GpuBuffer index_buffer_;
     klvk::VkObject<VkPipelineLayout> pipeline_layout_;
     klvk::VkObject<VkPipeline> pipeline_;
-    uint32_t index_count_ = 0;
+    u32 index_count_ = 0;
     float move_speed_ = 5.f;
     klvk::Transform cube_transform_{.translation = {6, 6, 0}};
     klvk::Camera3d camera_{Vec3f{3, 3, 4}, {.yaw = 45, .pitch = 45}};
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     CubeApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

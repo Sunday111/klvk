@@ -7,6 +7,7 @@
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
@@ -100,7 +101,7 @@ class PostProcessingApp : public klvk::Application
             .Build();
     }
 
-    void EnsureTargets(edt::Vec2<uint32_t> size)
+    void EnsureTargets(edt::Vec2<u32> size)
     {
         if (size == size_) return;
         auto& context = GetDeviceContext();
@@ -251,21 +252,20 @@ private:
     klvk::VkObject<VkPipeline> scene_pipeline_;
     klvk::VkObject<VkPipeline> blur_pipeline_;
     std::array<Target, kFramesInFlight> targets_{};
-    edt::Vec2<uint32_t> size_{};
+    edt::Vec2<u32> size_{};
     int radius_ = 4;
     float spread_ = 12.f;
     float mix_ = 1.f;
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     PostProcessingApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 }  // namespace
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

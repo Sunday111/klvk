@@ -7,6 +7,7 @@
 
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/rendering/instanced_sprite_renderer_2d.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/texture.hpp"
@@ -24,7 +25,7 @@ constexpr edt::Vec4u8 kRed{255, 0, 0, 255};
 struct BlockIdTag
 {
 };
-using BlockId = edt::TaggedIdentifier<BlockIdTag, uint32_t>;
+using BlockId = edt::TaggedIdentifier<BlockIdTag, u32>;
 constexpr BlockId kInvalidBlockId{};
 
 struct Block
@@ -37,7 +38,7 @@ struct Block
 
 struct BlockIdHash
 {
-    size_t operator()(BlockId id) const noexcept { return std::hash<uint32_t>{}(id.GetValue()); }
+    size_t operator()(BlockId id) const noexcept { return std::hash<u32>{}(id.GetValue()); }
 };
 
 struct TetrisCell
@@ -160,7 +161,7 @@ private:
     BlockId next_block_id_ = BlockId::FromValue(0);
 };
 
-enum class KeyboardKey : uint8_t
+enum class KeyboardKey : u8
 {
     W,
     A,
@@ -224,7 +225,7 @@ class TetrisApp : public klvk::Application
         GetWindow().SetSize(500, 1000);
         GetWindow().SetTitle("Tetris Example");
         SetTargetFramerate(60.f);
-        constexpr std::array<uint8_t, 1> white{255};
+        constexpr std::array<u8, 1> white{255};
         texture_ = klvk::Texture::CreateR8(GetDeviceContext(), {1, 1}, white);
         renderer_ = std::make_unique<klvk::InstancedSpriteRenderer2d>(*this, *texture_);
         state_ = SpawnBlockState{};
@@ -366,7 +367,7 @@ class TetrisApp : public klvk::Application
                 .size = edt::Math::Lerp(animation.start.size, animation.finish.size, factor),
                 .color =
                     edt::Math::Lerp(animation.start.color.Cast<float>(), animation.finish.color.Cast<float>(), factor)
-                        .Cast<uint8_t>(),
+                        .Cast<u8>(),
                 .rotation_degrees =
                     std::lerp(animation.start.rotation_degrees, animation.finish.rotation_degrees, factor)};
             AddRect(rectangle);
@@ -452,15 +453,14 @@ private:
     size_t last_step_ = 0;
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     TetrisApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 }  // namespace
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

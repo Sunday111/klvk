@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "EverydayTools/Math/Matrix.hpp"
+#include "klvk/diagnostics/diagnostic_run_config.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk::events
@@ -35,6 +36,7 @@ public:
 
     virtual void Initialize();
     virtual void Run();
+    void RunWithArguments(int argc, char** argv);
     virtual void PreTick();
     virtual void BeforeSwapchainRender(VkCommandBuffer command_buffer);
     virtual void Tick();
@@ -50,6 +52,10 @@ public:
     const std::filesystem::path& GetExecutableDir() const;
     virtual std::filesystem::path GetContentDir() const;
     virtual std::filesystem::path GetShaderDir() const;
+
+    // Present only when RunWithArguments loaded --klvk-diagnostics. Applications
+    // may read their opaque "application" object during Initialize().
+    [[nodiscard]] const nlohmann::json* GetDiagnosticApplicationConfig() const noexcept;
 
     events::EventManager& GetEventManager();
 
@@ -82,6 +88,8 @@ public:
     [[nodiscard]] size_t GetFrameInFlightIndex() const;
 
 private:
+    void RunImpl();
+
     std::unique_ptr<State> state_;
 };
 

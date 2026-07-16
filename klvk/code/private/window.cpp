@@ -2,18 +2,22 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 
 #include "GLFW/glfw3.h"
 #include "klvk/application.hpp"
+#include "klvk/error_handling.hpp"
 #include "klvk/events/event_manager.hpp"
 #include "klvk/events/mouse_events.hpp"
 #include "klvk/events/window_events.hpp"
+#include "klvk/integral_aliases.hpp"
 
 namespace klvk
 {
 
-Window::Window(Application& app, uint32_t width, uint32_t height)
+Window::Window(Application& app, u32 width, u32 height)
     : app_(&app),
       id_(MakeWindowId()),
       width_(width),
@@ -34,7 +38,51 @@ bool Window::ShouldClose() const noexcept
 
 void Window::SetSize(size_t width, size_t height)
 {
+    if (fixed_framebuffer_size_.has_value()) return;
     glfwSetWindowSize(window_, static_cast<int>(width), static_cast<int>(height));
+}
+
+void Window::SetFramebufferSize(Vec2<u32> size)
+{
+    if (fixed_framebuffer_size_.has_value()) size = *fixed_framebuffer_size_;
+    constexpr size_t max_attempts = 20;
+    for (size_t attempt = 0; attempt != max_attempts; ++attempt)
+    {
+        int framebuffer_width = 0;
+        int framebuffer_height = 0;
+        glfwGetFramebufferSize(window_, &framebuffer_width, &framebuffer_height);
+        if (framebuffer_width == static_cast<int>(size.x()) && framebuffer_height == static_cast<int>(size.y())) return;
+
+        int window_width = 0;
+        int window_height = 0;
+        glfwGetWindowSize(window_, &window_width, &window_height);
+        const int new_width =
+            framebuffer_width > 0
+                ? static_cast<int>(std::lround(static_cast<double>(window_width) * size.x() / framebuffer_width))
+                : static_cast<int>(size.x());
+        const int new_height =
+            framebuffer_height > 0
+                ? static_cast<int>(std::lround(static_cast<double>(window_height) * size.y() / framebuffer_height))
+                : static_cast<int>(size.y());
+        glfwSetWindowSize(window_, std::max(new_width, 1), std::max(new_height, 1));
+        // X11 window-manager resizes are asynchronous. Give the corresponding
+        // configure event time to arrive before calculating the next correction.
+        glfwWaitEventsTimeout(0.05);
+    }
+    const Vec2<u32> actual = GetFramebufferSize();
+    ErrorHandling::Ensure(
+        actual == size,
+        "Could not set framebuffer size to {}x{}; GLFW reports {}x{}",
+        size.x(),
+        size.y(),
+        actual.x(),
+        actual.y());
+}
+
+void Window::SetFixedFramebufferSize(Vec2<u32> size)
+{
+    fixed_framebuffer_size_ = size;
+    SetFramebufferSize(size);
 }
 
 void Window::SetTitle(const char* title)
@@ -47,9 +95,9 @@ bool Window::IsKeyPressed(int key) const
     return glfwGetKey(window_, key) == GLFW_PRESS;
 }
 
-uint32_t Window::MakeWindowId()
+u32 Window::MakeWindowId()
 {
-    static uint32_t next_id = 0;
+    static u32 next_id = 0;
     return next_id++;
 }
 
@@ -119,8 +167,8 @@ void Window::Destroy()
 void Window::OnResize(int width, int height)
 {
     Vec2i prev_size = {static_cast<int>(width_), static_cast<int>(height_)};
-    width_ = static_cast<uint32_t>(width);
-    height_ = static_cast<uint32_t>(height);
+    width_ = static_cast<u32>(width);
+    height_ = static_cast<u32>(height);
 
     app_->GetEventManager().Emit(events::OnWindowResize{.previous = prev_size, .current{width, height}});
 }
@@ -161,12 +209,12 @@ bool Window::IsFocused() const noexcept
     return glfwGetWindowAttrib(window_, GLFW_FOCUSED);
 }
 
-Vec2<uint32_t> Window::GetFramebufferSize() const noexcept
+Vec2<u32> Window::GetFramebufferSize() const noexcept
 {
     int width = 0;
     int height = 0;
     glfwGetFramebufferSize(window_, &width, &height);
-    return Vec2<int>{width, height}.Cast<uint32_t>();
+    return Vec2<int>{width, height}.Cast<u32>();
 }
 
 bool Window::IsHovered() const noexcept

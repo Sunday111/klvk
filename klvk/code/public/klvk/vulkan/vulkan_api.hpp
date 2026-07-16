@@ -3,7 +3,6 @@
 #include <volk.h>  // IWYU pragma: export
 
 #include <cstddef>
-#include <cstdint>
 #include <limits>
 #include <optional>
 #include <span>
@@ -11,6 +10,8 @@
 #include <tl/expected.hpp>
 #include <vector>
 
+#include "klvk/integral_aliases.hpp"
+#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/vulkan/detail/settings.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
@@ -24,13 +25,13 @@ struct VkCallResult
     T value{};
 };
 
-enum class WaitStatus : uint8_t
+enum class WaitStatus : u8
 {
     Complete,
     Timeout,
 };
 
-enum class AcquireNextImageStatus : uint8_t
+enum class AcquireNextImageStatus : u8
 {
     Acquired,
     Suboptimal,
@@ -42,10 +43,10 @@ enum class AcquireNextImageStatus : uint8_t
 struct AcquireNextImageOutcome
 {
     AcquireNextImageStatus status = AcquireNextImageStatus::Acquired;
-    std::optional<uint32_t> image_index{};
+    std::optional<u32> image_index{};
 };
 
-enum class PresentStatus : uint8_t
+enum class PresentStatus : u8
 {
     Presented,
     Suboptimal,
@@ -64,22 +65,22 @@ class Vulkan
 public:
     /*********************************************** Result calls ****************************************************/
 
-    [[nodiscard]] KLVK_VK_INLINE static VkCallResult<uint32_t> AcquireNextImageKHRNE(
+    [[nodiscard]] KLVK_VK_INLINE static VkCallResult<u32> AcquireNextImageKHRNE(
         VkDevice device,
         VkSwapchainKHR swapchain,
-        uint64_t timeout,
+        u64 timeout,
         VkSemaphore semaphore = VK_NULL_HANDLE,
         VkFence fence = VK_NULL_HANDLE) noexcept;
     [[nodiscard]] KLVK_VK_INLINE static tl::expected<AcquireNextImageOutcome, VulkanError> AcquireNextImageKHRCE(
         VkDevice device,
         VkSwapchainKHR swapchain,
-        uint64_t timeout,
+        u64 timeout,
         VkSemaphore semaphore = VK_NULL_HANDLE,
         VkFence fence = VK_NULL_HANDLE) noexcept;
     [[nodiscard]] KLVK_VK_INLINE static AcquireNextImageOutcome AcquireNextImageKHR(
         VkDevice device,
         VkSwapchainKHR swapchain,
-        uint64_t timeout,
+        u64 timeout,
         VkSemaphore semaphore = VK_NULL_HANDLE,
         VkFence fence = VK_NULL_HANDLE);
 
@@ -365,16 +366,14 @@ public:
 
     [[nodiscard]] KLVK_VK_INLINE static VkCallResult<bool> GetPhysicalDeviceSurfaceSupportKHRNE(
         VkPhysicalDevice physical_device,
-        uint32_t queue_family_index,
+        u32 queue_family_index,
         VkSurfaceKHR surface) noexcept;
     [[nodiscard]] KLVK_VK_INLINE static tl::expected<bool, VulkanError> GetPhysicalDeviceSurfaceSupportKHRCE(
         VkPhysicalDevice physical_device,
-        uint32_t queue_family_index,
+        u32 queue_family_index,
         VkSurfaceKHR surface) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static bool GetPhysicalDeviceSurfaceSupportKHR(
-        VkPhysicalDevice physical_device,
-        uint32_t queue_family_index,
-        VkSurfaceKHR surface);
+    [[nodiscard]] KLVK_VK_INLINE static bool
+    GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physical_device, u32 queue_family_index, VkSurfaceKHR surface);
 
     [[nodiscard]] KLVK_VK_INLINE static VkCallResult<std::vector<VkImage>> GetSwapchainImagesKHRNE(
         VkDevice device,
@@ -426,17 +425,17 @@ public:
         VkDevice device,
         std::span<const VkFence> fences,
         bool wait_all,
-        uint64_t timeout = std::numeric_limits<uint64_t>::max()) noexcept;
+        u64 timeout = std::numeric_limits<u64>::max()) noexcept;
     [[nodiscard]] KLVK_VK_INLINE static tl::expected<WaitStatus, VulkanError> WaitForFencesCE(
         VkDevice device,
         std::span<const VkFence> fences,
         bool wait_all,
-        uint64_t timeout = std::numeric_limits<uint64_t>::max()) noexcept;
+        u64 timeout = std::numeric_limits<u64>::max()) noexcept;
     [[nodiscard]] KLVK_VK_INLINE static WaitStatus WaitForFences(
         VkDevice device,
         std::span<const VkFence> fences,
         bool wait_all,
-        uint64_t timeout = std::numeric_limits<uint64_t>::max());
+        u64 timeout = std::numeric_limits<u64>::max());
 
     /************************************************ Void calls *****************************************************/
 
@@ -451,16 +450,16 @@ public:
         VkCommandBuffer command_buffer,
         VkPipelineBindPoint pipeline_bind_point,
         VkPipelineLayout layout,
-        uint32_t first_set,
+        u32 first_set,
         std::span<const VkDescriptorSet> descriptor_sets,
-        std::span<const uint32_t> dynamic_offsets = {}) noexcept;
+        std::span<const u32> dynamic_offsets = {}) noexcept;
     KLVK_VK_INLINE static void CmdBindDescriptorSets(
         VkCommandBuffer command_buffer,
         VkPipelineBindPoint pipeline_bind_point,
         VkPipelineLayout layout,
-        uint32_t first_set,
+        u32 first_set,
         std::span<const VkDescriptorSet> descriptor_sets,
-        std::span<const uint32_t> dynamic_offsets = {}) noexcept;
+        std::span<const u32> dynamic_offsets = {}) noexcept;
 
     KLVK_VK_INLINE static void CmdBindIndexBufferNE(
         VkCommandBuffer command_buffer,
@@ -485,12 +484,12 @@ public:
     // buffers and offsets must have the same size.
     KLVK_VK_INLINE static void CmdBindVertexBuffersNE(
         VkCommandBuffer command_buffer,
-        uint32_t first_binding,
+        u32 first_binding,
         std::span<const VkBuffer> buffers,
         std::span<const VkDeviceSize> offsets) noexcept;
     KLVK_VK_INLINE static void CmdBindVertexBuffers(
         VkCommandBuffer command_buffer,
-        uint32_t first_binding,
+        u32 first_binding,
         std::span<const VkBuffer> buffers,
         std::span<const VkDeviceSize> offsets) noexcept;
 
@@ -507,44 +506,51 @@ public:
         VkImageLayout destination_layout,
         std::span<const VkBufferImageCopy> regions) noexcept;
 
+    KLVK_VK_INLINE static void CmdCopyImageToBufferNE(
+        VkCommandBuffer command_buffer,
+        VkImage source,
+        VkImageLayout source_layout,
+        VkBuffer destination,
+        std::span<const VkBufferImageCopy> regions) noexcept;
+    KLVK_VK_INLINE static void CmdCopyImageToBuffer(
+        VkCommandBuffer command_buffer,
+        VkImage source,
+        VkImageLayout source_layout,
+        VkBuffer destination,
+        std::span<const VkBufferImageCopy> regions) noexcept;
+
     KLVK_VK_INLINE static void CmdDrawNE(
         VkCommandBuffer command_buffer,
-        uint32_t vertex_count,
-        uint32_t instance_count,
-        uint32_t first_vertex,
-        uint32_t first_instance) noexcept;
+        u32 vertex_count,
+        u32 instance_count,
+        u32 first_vertex,
+        u32 first_instance) noexcept;
     KLVK_VK_INLINE static void CmdDraw(
         VkCommandBuffer command_buffer,
-        uint32_t vertex_count,
-        uint32_t instance_count,
-        uint32_t first_vertex,
-        uint32_t first_instance) noexcept;
+        u32 vertex_count,
+        u32 instance_count,
+        u32 first_vertex,
+        u32 first_instance) noexcept;
 
-    KLVK_VK_INLINE static void CmdDispatchNE(
-        VkCommandBuffer command_buffer,
-        uint32_t group_count_x,
-        uint32_t group_count_y,
-        uint32_t group_count_z) noexcept;
-    KLVK_VK_INLINE static void CmdDispatch(
-        VkCommandBuffer command_buffer,
-        uint32_t group_count_x,
-        uint32_t group_count_y,
-        uint32_t group_count_z) noexcept;
+    KLVK_VK_INLINE static void
+    CmdDispatchNE(VkCommandBuffer command_buffer, u32 group_count_x, u32 group_count_y, u32 group_count_z) noexcept;
+    KLVK_VK_INLINE static void
+    CmdDispatch(VkCommandBuffer command_buffer, u32 group_count_x, u32 group_count_y, u32 group_count_z) noexcept;
 
     KLVK_VK_INLINE static void CmdDrawIndexedNE(
         VkCommandBuffer command_buffer,
-        uint32_t index_count,
-        uint32_t instance_count,
-        uint32_t first_index,
-        int32_t vertex_offset,
-        uint32_t first_instance) noexcept;
+        u32 index_count,
+        u32 instance_count,
+        u32 first_index,
+        i32 vertex_offset,
+        u32 first_instance) noexcept;
     KLVK_VK_INLINE static void CmdDrawIndexed(
         VkCommandBuffer command_buffer,
-        uint32_t index_count,
-        uint32_t instance_count,
-        uint32_t first_index,
-        int32_t vertex_offset,
-        uint32_t first_instance) noexcept;
+        u32 index_count,
+        u32 instance_count,
+        u32 first_index,
+        i32 vertex_offset,
+        u32 first_instance) noexcept;
 
     KLVK_VK_INLINE static void CmdEndRenderingNE(VkCommandBuffer command_buffer) noexcept;
     KLVK_VK_INLINE static void CmdEndRendering(VkCommandBuffer command_buffer) noexcept;
@@ -554,13 +560,13 @@ public:
         VkBuffer buffer,
         VkDeviceSize offset,
         VkDeviceSize size,
-        uint32_t data) noexcept;
+        u32 data) noexcept;
     KLVK_VK_INLINE static void CmdFillBuffer(
         VkCommandBuffer command_buffer,
         VkBuffer buffer,
         VkDeviceSize offset,
         VkDeviceSize size,
-        uint32_t data) noexcept;
+        u32 data) noexcept;
 
     KLVK_VK_INLINE static void CmdPipelineBarrier2NE(
         VkCommandBuffer command_buffer,
@@ -573,13 +579,13 @@ public:
         VkCommandBuffer command_buffer,
         VkPipelineLayout layout,
         VkShaderStageFlags stage_flags,
-        uint32_t offset,
+        u32 offset,
         std::span<const std::byte> values) noexcept;
     KLVK_VK_INLINE static void CmdPushConstants(
         VkCommandBuffer command_buffer,
         VkPipelineLayout layout,
         VkShaderStageFlags stage_flags,
-        uint32_t offset,
+        u32 offset,
         std::span<const std::byte> values) noexcept;
 
     template <typename T>
@@ -587,7 +593,7 @@ public:
         VkCommandBuffer command_buffer,
         VkPipelineLayout layout,
         VkShaderStageFlags stage_flags,
-        uint32_t offset,
+        u32 offset,
         const T& value) noexcept
     {
         CmdPushConstantsNE(command_buffer, layout, stage_flags, offset, std::as_bytes(std::span{&value, 1}));
@@ -598,27 +604,23 @@ public:
         VkCommandBuffer command_buffer,
         VkPipelineLayout layout,
         VkShaderStageFlags stage_flags,
-        uint32_t offset,
+        u32 offset,
         const T& value) noexcept
     {
         CmdPushConstants(command_buffer, layout, stage_flags, offset, std::as_bytes(std::span{&value, 1}));
     }
 
-    KLVK_VK_INLINE static void CmdSetScissorNE(
-        VkCommandBuffer command_buffer,
-        uint32_t first_scissor,
-        std::span<const VkRect2D> scissors) noexcept;
     KLVK_VK_INLINE static void
-    CmdSetScissor(VkCommandBuffer command_buffer, uint32_t first_scissor, std::span<const VkRect2D> scissors) noexcept;
+    CmdSetScissorNE(VkCommandBuffer command_buffer, u32 first_scissor, std::span<const VkRect2D> scissors) noexcept;
+    KLVK_VK_INLINE static void
+    CmdSetScissor(VkCommandBuffer command_buffer, u32 first_scissor, std::span<const VkRect2D> scissors) noexcept;
 
     KLVK_VK_INLINE static void CmdSetViewportNE(
         VkCommandBuffer command_buffer,
-        uint32_t first_viewport,
+        u32 first_viewport,
         std::span<const VkViewport> viewports) noexcept;
-    KLVK_VK_INLINE static void CmdSetViewport(
-        VkCommandBuffer command_buffer,
-        uint32_t first_viewport,
-        std::span<const VkViewport> viewports) noexcept;
+    KLVK_VK_INLINE static void
+    CmdSetViewport(VkCommandBuffer command_buffer, u32 first_viewport, std::span<const VkViewport> viewports) noexcept;
 
     KLVK_VK_INLINE static void DestroyCommandPoolNE(
         VkDevice device,
@@ -747,9 +749,9 @@ public:
         std::span<const VkCommandBuffer> command_buffers) noexcept;
 
     [[nodiscard]] KLVK_VK_INLINE static VkQueue
-    GetDeviceQueueNE(VkDevice device, uint32_t queue_family_index, uint32_t queue_index) noexcept;
+    GetDeviceQueueNE(VkDevice device, u32 queue_family_index, u32 queue_index) noexcept;
     [[nodiscard]] KLVK_VK_INLINE static VkQueue
-    GetDeviceQueue(VkDevice device, uint32_t queue_family_index, uint32_t queue_index) noexcept;
+    GetDeviceQueue(VkDevice device, u32 queue_family_index, u32 queue_index) noexcept;
 
     KLVK_VK_INLINE static void GetPhysicalDeviceFeatures2NE(
         VkPhysicalDevice physical_device,

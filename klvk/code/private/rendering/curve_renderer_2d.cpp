@@ -4,6 +4,7 @@
 
 #include "EverydayTools/Math/Math.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
@@ -91,7 +92,7 @@ Join CalculateJoin(Vec2f previous, Vec2f current, Vec2f next, Vec2f viewport_siz
 Vec4u8 PackColor(Vec4f color)
 {
     color = edt::Math::Clamp(color, 0.f, 1.f);
-    return (color * 255.f).Cast<uint8_t>();
+    return (color * 255.f).Cast<u8>();
 }
 
 }  // namespace
@@ -234,7 +235,7 @@ void CurveRenderer2d::DrawVertices(std::span<const Vertex> vertices)
     const std::array<VkDeviceSize, 1> offsets{0};
     Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
     Vulkan::CmdBindVertexBuffers(command_buffer, 0, vertex_buffers, offsets);
-    Vulkan::CmdDraw(command_buffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+    Vulkan::CmdDraw(command_buffer, static_cast<u32>(vertices.size()), 1, 0, 0);
 }
 
 }  // namespace klvk

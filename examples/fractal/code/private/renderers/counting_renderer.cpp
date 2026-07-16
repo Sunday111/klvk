@@ -1,6 +1,8 @@
 #include "counting_renderer.hpp"
 
 #include "../fractal_settings.hpp"
+#include "klvk/integral_aliases.hpp"
+#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 
 // Vulkan create-info structs are designed for partial designated initialization;
@@ -30,16 +32,13 @@ CountingRenderer::CountingRenderer(klvk::Application& app, size_t max_iterations
     klvk::DeviceContext& context = app.GetDeviceContext();
     VkDevice device = context.GetDevice();
 
-    const auto iterations = static_cast<int32_t>(max_iterations);
+    const auto iterations = static_cast<i32>(max_iterations);
     draw_shader_.SetDefineValue(draw_shader_.GetDefine("MAX_ITERATIONS"), iterations);
     compute_shader_.SetDefineValue(compute_shader_.GetDefine("MAX_ITERATIONS"), iterations);
     def_compute_inside_out_space_ = compute_shader_.GetDefine("INSIDE_OUT_SPACE");
 
-    color_table_ = klvk::GpuBuffer(
-        context,
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        (max_iterations + 1) * sizeof(edt::Vec4f),
-        true);
+    color_table_ =
+        klvk::GpuBuffer(context, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, (max_iterations + 1) * sizeof(edt::Vec4f), true);
 
     {
         const VkDescriptorSetLayoutBinding binding{
@@ -76,7 +75,7 @@ CountingRenderer::CountingRenderer(klvk::Application& app, size_t max_iterations
             device,
             {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .bindingCount = static_cast<uint32_t>(bindings.size()),
+                .bindingCount = static_cast<u32>(bindings.size()),
                 .pBindings = bindings.data(),
             });
     }
@@ -97,7 +96,7 @@ CountingRenderer::CountingRenderer(klvk::Application& app, size_t max_iterations
         {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
             .descriptorPool = descriptor_pool_,
-            .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
+            .descriptorSetCount = static_cast<u32>(layouts.size()),
             .pSetLayouts = layouts.data(),
         });
     compute_set_ = sets[0];
@@ -189,7 +188,7 @@ void CountingRenderer::ApplySettings(const FractalSettings& settings)
         counters_ = klvk::GpuBuffer(
             app_->GetDeviceContext(),
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            num_pixels * sizeof(uint32_t),
+            num_pixels * sizeof(u32),
             false);
         current_counters_size_ = num_pixels;
     }
@@ -227,7 +226,8 @@ void CountingRenderer::ApplySettings(const FractalSettings& settings)
     std::vector<edt::Vec4f> colors(max_iterations + 1);
     settings.ComputeColors(
         colors.size(),
-        [&](size_t index, const edt::Vec3f& color) { colors[index] = edt::Vec4f{color.x(), color.y(), color.z(), 1.f}; });
+        [&](size_t index, const edt::Vec3f& color)
+        { colors[index] = edt::Vec4f{color.x(), color.y(), color.z(), 1.f}; });
     color_table_.Write(std::as_bytes(std::span{colors}));
 }
 
@@ -278,8 +278,7 @@ void CountingRenderer::PrepareFrame(VkCommandBuffer command_buffer, const Fracta
         0,
         std::span{&compute_set_, 1});
 
-    const FractalPushConstants push_constants =
-        MakeFractalPushConstants(settings, render_transforms_.screen_to_world);
+    const FractalPushConstants push_constants = MakeFractalPushConstants(settings, render_transforms_.screen_to_world);
     klvk::Vulkan::CmdPushConstants(
         command_buffer,
         compute_pipeline_layout_,
@@ -287,7 +286,7 @@ void CountingRenderer::PrepareFrame(VkCommandBuffer command_buffer, const Fracta
         0,
         push_constants);
 
-    constexpr uint32_t group_size = 16;
+    constexpr u32 group_size = 16;
     const auto resolution = settings.viewport.size;
     klvk::Vulkan::CmdDispatch(
         command_buffer,

@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "EverydayTools/Math/Matrix.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
 VK_DEFINE_HANDLE(VmaAllocation)
@@ -17,12 +18,12 @@ class Swapchain
 public:
     static constexpr VkFormat kDepthFormat = VK_FORMAT_D32_SFLOAT;
 
-    Swapchain(DeviceContext& context, edt::Vec2<uint32_t> framebuffer_size);
+    Swapchain(DeviceContext& context, edt::Vec2<u32> framebuffer_size, VkImageUsageFlags additional_image_usage = 0);
     Swapchain(const Swapchain&) = delete;
     Swapchain(Swapchain&&) = delete;
     ~Swapchain();
 
-    void Recreate(edt::Vec2<uint32_t> framebuffer_size);
+    void Recreate(edt::Vec2<u32> framebuffer_size);
 
     [[nodiscard]] VkSwapchainKHR GetHandle() const noexcept { return swapchain_; }
     [[nodiscard]] VkFormat GetFormat() const noexcept { return format_.format; }
@@ -34,10 +35,11 @@ public:
     [[nodiscard]] VkImageView GetDepthImageView(size_t index) const { return depth_image_views_[index]; }
 
 private:
-    void Create(edt::Vec2<uint32_t> framebuffer_size, VkSwapchainKHR old_swapchain);
+    void Create(edt::Vec2<u32> framebuffer_size, VkSwapchainKHR old_swapchain);
     void DestroyImageViews();
 
     DeviceContext* context_ = nullptr;
+    VkImageUsageFlags additional_image_usage_ = 0;
     VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
     VkSurfaceFormatKHR format_{};
     VkExtent2D extent_{};

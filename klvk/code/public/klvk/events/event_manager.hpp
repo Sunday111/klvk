@@ -5,6 +5,7 @@
 #include "CppReflection/Type.hpp"
 #include "ankerl/unordered_dense.h"
 #include "klvk/events/event_listener_interface.hpp"
+#include "klvk/integral_aliases.hpp"
 
 namespace klvk::events
 {
@@ -53,12 +54,12 @@ private:
     {
         using is_transparent = void;  // enable heterogeneous overloads
 
-        [[nodiscard]] auto operator()(const std::unique_ptr<IEventListener>& ptr) const noexcept -> uint64_t
+        [[nodiscard]] auto operator()(const std::unique_ptr<IEventListener>& ptr) const noexcept -> u64
         {
             return (*this)(ptr.get());
         }
 
-        [[nodiscard]] auto operator()(const IEventListener* ptr) const noexcept -> uint64_t
+        [[nodiscard]] auto operator()(const IEventListener* ptr) const noexcept -> u64
         {
             return ankerl::unordered_dense::hash<size_t>{}(std::bit_cast<size_t>(ptr));
         }

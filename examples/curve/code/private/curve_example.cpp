@@ -17,7 +17,13 @@ struct Curve
 {
     void Draw(Vec2f viewport_size, const Mat3f& world_to_view)
     {
-        klvk::CurveRenderer2d::BuildVertices(points, thickness, segment_pixel_length, viewport_size, world_to_view, vertices);
+        klvk::CurveRenderer2d::BuildVertices(
+            points,
+            thickness,
+            segment_pixel_length,
+            viewport_size,
+            world_to_view,
+            vertices);
         renderer->DrawVertices(vertices);
     }
 
@@ -97,15 +103,14 @@ class CurveApp : public klvk::Application
     Curve extreme_;
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     CurveApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 }  // namespace
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

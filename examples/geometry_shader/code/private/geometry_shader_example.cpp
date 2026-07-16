@@ -4,6 +4,7 @@
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/ui/imgui_helpers.hpp"
 #include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
@@ -19,7 +20,7 @@
 #pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
 #endif
 
-enum class ShapeType : uint32_t
+enum class ShapeType : u32
 {
     Quad = 0,
     Circle,
@@ -32,8 +33,8 @@ struct Object
     std::array<edt::Vec4f, 3> transform_columns{};
     edt::Vec4u8 color{};
     ShapeType type = ShapeType::Quad;
-    uint32_t padding0 = 0;
-    uint32_t padding1 = 0;
+    u32 padding0 = 0;
+    u32 padding1 = 0;
 };
 
 static_assert(sizeof(Object) == 64);
@@ -58,7 +59,7 @@ class GeometryShaderApp : public klvk::Application
 
         objects_.resize(kMaxObjects);
         std::mt19937 rnd;  // NOLINT
-        std::uniform_int_distribution<uint32_t> type_distribution(0, 2);
+        std::uniform_int_distribution<u32> type_distribution(0, 2);
         for (auto& object : objects_)
         {
             object.type = static_cast<ShapeType>(type_distribution(rnd));
@@ -164,7 +165,7 @@ class GeometryShaderApp : public klvk::Application
             VK_SHADER_STAGE_FRAGMENT_BIT,
             0,
             figure_border_);
-        klvk::Vulkan::CmdDraw(command_buffer, static_cast<uint32_t>(n), 1, 0, 0);
+        klvk::Vulkan::CmdDraw(command_buffer, static_cast<u32>(n), 1, 0, 0);
     }
 
 private:
@@ -176,14 +177,13 @@ private:
     klvk::VkObject<VkPipeline> pipeline_;
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     GeometryShaderApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

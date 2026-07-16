@@ -4,6 +4,7 @@
 #include <span>
 #include <vector>
 
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk
@@ -46,8 +47,8 @@ public:
     GraphicsPipelineBuilder& PolygonMode(VkPolygonMode mode);
     GraphicsPipelineBuilder& CullMode(VkCullModeFlags mode, VkFrontFace front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE);
 
-    GraphicsPipelineBuilder& VertexBinding(uint32_t binding, uint32_t stride, VkVertexInputRate rate);
-    GraphicsPipelineBuilder& VertexAttribute(uint32_t location, uint32_t binding, VkFormat format, uint32_t offset);
+    GraphicsPipelineBuilder& VertexBinding(u32 binding, u32 stride, VkVertexInputRate rate);
+    GraphicsPipelineBuilder& VertexAttribute(u32 location, u32 binding, VkFormat format, u32 offset);
 
     // No blending is the default. AlphaBlend() sets the usual straight-alpha
     // over-operator used by the 2d/sprite examples; Blend() takes an explicit
