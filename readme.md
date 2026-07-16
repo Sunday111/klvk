@@ -73,6 +73,8 @@ use this entry point.
   working directory. Parent directories are created and completed files atomically replace older captures.
 - `exit` contains exactly one of `frame`, `time_seconds`, or `after_last_capture`. The last form waits for every requested
   capture to be submitted; klvk waits for GPU completion and finishes writing the files before `Run` returns.
+- Capture and exit points are one-shot `TimerManager` jobs. Their callbacks emit typed capture/application-quit events;
+  an interactive run creates no diagnostic timers and does no trigger-list polling.
 - A fixed clock controls klvk and ImGui frame time, and diagnostic runs ignore persisted `imgui.ini` state. Applications
   can read their optional object through `GetDiagnosticApplicationConfig()`.
 

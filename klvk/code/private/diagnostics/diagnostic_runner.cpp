@@ -8,8 +8,12 @@
 #include <fstream>
 #include <limits>
 #include <set>
+#include <type_traits>
 
 #include "klvk/error_handling.hpp"
+#include "klvk/events/application_events.hpp"
+#include "klvk/events/event_listener_method.hpp"
+#include "klvk/events/event_manager.hpp"
 #include "klvk/filesystem/filesystem.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/platform/os/os.hpp"
@@ -52,13 +56,16 @@ size_t CheckedPixelCount(VkExtent2D extent)
 DiagnosticRunner::DiagnosticRunner(
     DiagnosticRunConfig config,
     const std::filesystem::path& executable_directory,
-    size_t frames_in_flight)
-    : config_(std::move(config)),
-      pending_(frames_in_flight)
+    size_t frames_in_flight,
+    events::EventManager& event_manager)
+    : pending_(frames_in_flight),
+      event_manager_(event_manager)
 {
     std::set<std::filesystem::path> resolved_paths;
-    captures_.reserve(config_.captures.size());
-    for (auto capture : config_.captures)
+    captures_.reserve(config.captures.size());
+    queued_without_ui_.reserve(config.captures.size());
+    queued_with_ui_.reserve(config.captures.size());
+    for (auto capture : config.captures)
     {
         if (capture.path.is_relative()) capture.path = executable_directory / capture.path;
         capture.path = capture.path.lexically_normal();
@@ -72,43 +79,106 @@ DiagnosticRunner::DiagnosticRunner(
             capture.path.string());
         captures_.push_back({.config = std::move(capture)});
     }
+    for (size_t capture_index = 0; capture_index != captures_.size(); ++capture_index)
+        ScheduleCapture(capture_index, config.exit.after_last_capture);
+    ScheduleQuit(config.exit);
+
+    event_listener_ = events::EventListenerMethodCallbacks<&DiagnosticRunner::OnCaptureDue>::CreatePtr(this);
+    event_manager_.AddEventListener(*event_listener_);
 }
 
-bool DiagnosticRunner::IsDue(const Capture& capture, u64 frame, double time_seconds) const
+DiagnosticRunner::~DiagnosticRunner()
 {
-    return !capture.recorded &&
-           ((capture.config.frame.has_value() && frame >= *capture.config.frame) ||
-            (capture.config.time_seconds.has_value() && time_seconds >= *capture.config.time_seconds));
+    timers_.Clear();
+    if (event_listener_) event_manager_.RemoveListener(event_listener_.get());
 }
 
-bool DiagnosticRunner::HasDueCaptures(u64 frame, double time_seconds, bool include_ui) const
+void DiagnosticRunner::ScheduleCapture(size_t capture_index, bool quit_after_last_capture)
 {
-    return std::ranges::any_of(
-        captures_,
-        [&](const Capture& capture)
-        { return capture.config.include_ui == include_ui && IsDue(capture, frame, time_seconds); });
+    ErrorHandling::Ensure(capture_index < captures_.size(), "Invalid diagnostic capture index");
+    const auto callback = [this, capture_index, quit_after_last_capture](const TimerEvent&)
+    {
+        event_manager_.Emit(events::DiagnosticCaptureDue{.capture_index = capture_index});
+        if (quit_after_last_capture && triggered_capture_count_ == captures_.size())
+            event_manager_.Emit(events::OnApplicationQuitRequested{});
+    };
+    const DiagnosticCaptureConfig& capture = captures_[capture_index].config;
+    if (capture.frame.has_value())
+    {
+        [[maybe_unused]] const TimerHandle timer = timers_.ScheduleAtFrame(*capture.frame, callback);
+    }
+    else
+    {
+        ErrorHandling::Ensure(capture.time_seconds.has_value(), "Diagnostic capture has no trigger");
+        [[maybe_unused]] const TimerHandle timer = timers_.ScheduleAt(TimerDuration{*capture.time_seconds}, callback);
+    }
 }
 
-bool DiagnosticRunner::RecordDueCaptures(
+void DiagnosticRunner::ScheduleQuit(const DiagnosticExitConfig& exit)
+{
+    const auto callback = [this](const TimerEvent&)
+    {
+        event_manager_.Emit(events::OnApplicationQuitRequested{});
+    };
+    if (exit.frame.has_value())
+    {
+        [[maybe_unused]] const TimerHandle timer = timers_.ScheduleAtFrame(*exit.frame, callback);
+    }
+    else if (exit.time_seconds.has_value())
+    {
+        [[maybe_unused]] const TimerHandle timer = timers_.ScheduleAt(TimerDuration{*exit.time_seconds}, callback);
+    }
+}
+
+void DiagnosticRunner::OnCaptureDue(const events::DiagnosticCaptureDue& event)
+{
+    ErrorHandling::Ensure(event.capture_index < captures_.size(), "Invalid due diagnostic capture index");
+    Capture& capture = captures_[event.capture_index];
+    ErrorHandling::Ensure(!capture.queued && !capture.recorded, "Diagnostic capture was triggered more than once");
+    auto& queue = capture.config.include_ui ? queued_with_ui_ : queued_without_ui_;
+    queue.push_back(event.capture_index);
+    capture.queued = true;
+    ++triggered_capture_count_;
+}
+
+void DiagnosticRunner::Advance(u64 frame, double time_seconds)
+{
+    [[maybe_unused]] const u64 callback_count =
+        timers_.Advance(TimerDuration{time_seconds}, frame, std::numeric_limits<u64>::max());
+}
+
+bool DiagnosticRunner::HasQueuedCaptures(bool include_ui) const noexcept
+{
+    const auto& queue = include_ui ? queued_with_ui_ : queued_without_ui_;
+    return !queue.empty();
+}
+
+bool DiagnosticRunner::RecordQueuedCaptures(
     DeviceContext& context,
     VkCommandBuffer command_buffer,
     size_t frame_in_flight,
-    u64 frame,
-    double time_seconds,
     bool include_ui,
     VkImage image,
     VkFormat format,
     VkExtent2D extent,
     VkImageLayout final_layout)
 {
+    static_assert(std::is_nothrow_move_constructible_v<PendingCapture>);
+
+    auto& queue = include_ui ? queued_with_ui_ : queued_without_ui_;
+    if (queue.empty()) return false;
+
     std::vector<std::filesystem::path> paths;
-    for (Capture& capture : captures_)
+    paths.reserve(queue.size());
+    for (size_t capture_index : queue)
     {
-        if (capture.config.include_ui != include_ui || !IsDue(capture, frame, time_seconds)) continue;
-        capture.recorded = true;
+        ErrorHandling::Ensure(capture_index < captures_.size(), "Invalid queued diagnostic capture index");
+        Capture& capture = captures_[capture_index];
+        ErrorHandling::Ensure(
+            capture.queued && !capture.recorded && capture.config.include_ui == include_ui,
+            "Diagnostic capture queue is corrupt");
         paths.push_back(capture.config.path);
     }
-    if (paths.empty()) return false;
 
     ErrorHandling::Ensure(frame_in_flight < pending_.size(), "Invalid diagnostic frame-in-flight index");
     ErrorHandling::Ensure(extent.width != 0 && extent.height != 0, "Cannot capture an empty framebuffer");
@@ -118,12 +188,34 @@ bool DiagnosticRunner::RecordDueCaptures(
         static_cast<int>(format));
     const size_t pixel_count = CheckedPixelCount(extent);
     const VkDeviceSize byte_size = static_cast<VkDeviceSize>(pixel_count) * 4;
-    auto& pending = pending_[frame_in_flight].emplace_back(
-        PendingCapture{
-            .buffer = GpuBuffer(context, VK_BUFFER_USAGE_TRANSFER_DST_BIT, byte_size, GpuBufferHostAccess::Random),
-            .format = format,
-            .extent = extent,
-            .paths = std::move(paths)});
+
+    VkPipelineStageFlags2 final_stage_mask = 0;
+    VkAccessFlags2 final_access_mask = 0;
+    if (final_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+    {
+        final_stage_mask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+        final_access_mask = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    }
+    else
+    {
+        ErrorHandling::Ensure(
+            final_layout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            "Unsupported diagnostic capture final image layout");
+        final_stage_mask = VK_PIPELINE_STAGE_2_NONE;
+        final_access_mask = VK_ACCESS_2_NONE;
+    }
+
+    auto& pending_frame = pending_[frame_in_flight];
+    ErrorHandling::Ensure(
+        pending_frame.size() < pending_frame.max_size(),
+        "Too many pending diagnostic captures for one frame");
+    pending_frame.reserve(pending_frame.size() + 1);
+
+    PendingCapture pending{
+        .buffer = GpuBuffer(context, VK_BUFFER_USAGE_TRANSFER_DST_BIT, byte_size, GpuBufferHostAccess::Random),
+        .format = format,
+        .extent = extent,
+        .paths = std::move(paths)};
 
     VkImageMemoryBarrier2 barrier{
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -156,20 +248,18 @@ bool DiagnosticRunner::RecordDueCaptures(
     barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
     barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     barrier.newLayout = final_layout;
-    if (final_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
-    {
-        barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-        barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-    }
-    else
-    {
-        ErrorHandling::Ensure(
-            final_layout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-            "Unsupported diagnostic capture final image layout");
-        barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
-        barrier.dstAccessMask = VK_ACCESS_2_NONE;
-    }
+    barrier.dstStageMask = final_stage_mask;
+    barrier.dstAccessMask = final_access_mask;
     Vulkan::CmdPipelineBarrier2(command_buffer, dependency);
+    pending_frame.push_back(std::move(pending));
+
+    for (size_t capture_index : queue)
+    {
+        Capture& capture = captures_[capture_index];
+        capture.queued = false;
+        capture.recorded = true;
+    }
+    queue.clear();
     return true;
 }
 
@@ -248,13 +338,6 @@ void DiagnosticRunner::EnsureComplete() const
         "Diagnostic run ended before {} requested capture{} could be recorded",
         missing,
         missing == 1 ? "" : "s");
-}
-
-bool DiagnosticRunner::ShouldExit(u64 frame, double time_seconds) const
-{
-    if (config_.exit.frame.has_value() && frame >= *config_.exit.frame) return true;
-    if (config_.exit.time_seconds.has_value() && time_seconds >= *config_.exit.time_seconds) return true;
-    return config_.exit.after_last_capture && std::ranges::all_of(captures_, &Capture::recorded);
 }
 
 }  // namespace klvk

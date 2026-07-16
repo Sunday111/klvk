@@ -17,6 +17,8 @@
 
 #include "diagnostics/diagnostic_runner.hpp"
 #include "klvk/error_handling.hpp"
+#include "klvk/events/application_events.hpp"
+#include "klvk/events/event_listener_method.hpp"
 #include "klvk/events/event_manager.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/platform/os/os.hpp"
@@ -38,7 +40,7 @@ namespace klvk
 
 struct Application::State
 {
-    using Clock = std::chrono::high_resolution_clock;
+    using Clock = std::chrono::steady_clock;
     using TimePoint = Clock::time_point;
 
     struct FrameInFlight
@@ -69,7 +71,7 @@ struct Application::State
     bool imgui_context_created_ = false;
     bool imgui_glfw_initialized_ = false;
     bool imgui_vulkan_initialized_ = false;
-    bool diagnostic_exit_requested_ = false;
+    bool exit_requested_ = false;
     u64 completed_frames_ = 0;
     std::optional<DiagnosticRunConfig> diagnostic_config_;
     std::unique_ptr<DiagnosticRunner> diagnostic_runner_;
@@ -237,6 +239,14 @@ struct Application::State
     u8 current_frame_time_index_ = kFrameTimeHistorySize - 1;
     std::optional<float> target_framerate_;
     events::EventManager event_manager_;
+
+    State()
+    {
+        (void)event_manager_.AddEventListener(
+            events::EventListenerMethodCallbacks<&State::OnApplicationQuitRequested>::CreatePtr(this));
+    }
+
+    void OnApplicationQuitRequested(const events::OnApplicationQuitRequested&) { exit_requested_ = true; }
 };
 
 Application::Application()
@@ -445,8 +455,11 @@ void Application::RunImpl()
         }
         state_->InitTime();
         state_->completed_frames_ = 0;
-        state_->diagnostic_runner_ =
-            std::make_unique<DiagnosticRunner>(*state_->diagnostic_config_, state_->executable_dir_, kFramesInFlight);
+        state_->diagnostic_runner_ = std::make_unique<DiagnosticRunner>(
+            *state_->diagnostic_config_,
+            state_->executable_dir_,
+            kFramesInFlight,
+            state_->event_manager_);
     }
     MainLoop();
 
@@ -646,10 +659,9 @@ void Application::BeforeSwapchainRender([[maybe_unused]] VkCommandBuffer command
 void Application::PostTick()
 {
     auto& frame = state_->CurrentFrame();
-    const u64 rendered_frame = state_->completed_frames_ + 1;
-    const double time_seconds = state_->GetDiagnosticTimeSeconds();
-    const bool capture_without_ui =
-        state_->diagnostic_runner_ && state_->diagnostic_runner_->HasDueCaptures(rendered_frame, time_seconds, false);
+    if (state_->diagnostic_runner_)
+        state_->diagnostic_runner_->Advance(state_->completed_frames_ + 1, state_->GetDiagnosticTimeSeconds());
+    const bool capture_without_ui = state_->diagnostic_runner_ && state_->diagnostic_runner_->HasQueuedCaptures(false);
 
     // ImGui's pipeline is color-only. End an application's depth-enabled pass and
     // resume rendering the same color image without a depth attachment for the UI.
@@ -659,12 +671,10 @@ void Application::PostTick()
         Vulkan::CmdEndRendering(frame.command_buffer);
         if (capture_without_ui)
         {
-            const bool recorded = state_->diagnostic_runner_->RecordDueCaptures(
+            const bool recorded = state_->diagnostic_runner_->RecordQueuedCaptures(
                 *state_->device_context_,
                 frame.command_buffer,
                 state_->frame_index_,
-                rendered_frame,
-                time_seconds,
                 false,
                 state_->swapchain_->GetImage(state_->image_index_),
                 state_->swapchain_->GetFormat(),
@@ -694,12 +704,10 @@ void Application::PostTick()
 
     Vulkan::CmdEndRendering(frame.command_buffer);
 
-    const bool captured_with_ui = state_->diagnostic_runner_ && state_->diagnostic_runner_->RecordDueCaptures(
+    const bool captured_with_ui = state_->diagnostic_runner_ && state_->diagnostic_runner_->RecordQueuedCaptures(
                                                                     *state_->device_context_,
                                                                     frame.command_buffer,
                                                                     state_->frame_index_,
-                                                                    rendered_frame,
-                                                                    time_seconds,
                                                                     true,
                                                                     state_->swapchain_->GetImage(state_->image_index_),
                                                                     state_->swapchain_->GetFormat(),
@@ -781,8 +789,6 @@ void Application::PostTick()
         }
     }
 
-    if (state_->diagnostic_runner_ && state_->diagnostic_runner_->ShouldExit(rendered_frame, time_seconds))
-        state_->diagnostic_exit_requested_ = true;
     ++state_->completed_frames_;
     state_->frame_index_ = (state_->frame_index_ + 1) % kFramesInFlight;
     glfwPollEvents();
@@ -808,7 +814,7 @@ void Application::InitializeReflectionTypes()
 
 bool Application::WantsToClose() const
 {
-    return state_->diagnostic_exit_requested_ || state_->window_->ShouldClose();
+    return state_->exit_requested_ || state_->window_->ShouldClose();
 }
 
 Window& Application::GetWindow()
