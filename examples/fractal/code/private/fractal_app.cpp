@@ -4,12 +4,12 @@
 #include <klvk/template/on_scope_leave.hpp>
 
 #include "clipboard.hpp"
-#include "klvk/shader/shader.hpp"
 #include "imgui.h"
 #include "interpolation_widget.hpp"
 #include "klvk/events/event_listener_method.hpp"
 #include "klvk/events/event_manager.hpp"
 #include "klvk/events/mouse_events.hpp"
+#include "klvk/shader/shader.hpp"
 #include "klvk/window.hpp"
 #include "renderers/counting_renderer.hpp"
 #include "renderers/simple_cpu_renderer.hpp"
@@ -82,10 +82,11 @@ void FractalApp::BeforeSwapchainRender(VkCommandBuffer command_buffer)
     HandleInput();
     settings_.SetCurrentTime(GetTimeSeconds());
 
-    settings_.SetViewport(klvk::Viewport{
-        .position = {},
-        .size = GetWindow().GetSize(),
-    });
+    settings_.SetViewport(
+        klvk::Viewport{
+            .position = {},
+            .size = GetWindow().GetSize(),
+        });
     if (settings_.changed)
     {
         renderer_->ApplySettings(settings_);

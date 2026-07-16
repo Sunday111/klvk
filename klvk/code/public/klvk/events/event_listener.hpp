@@ -60,8 +60,7 @@ private:
         [&]<size_t... indices>(std::index_sequence<indices...>)
         {
             ((wrappers_[indices] = Callback<indices>), ...);
-        }
-        (std::make_index_sequence<kEventsCount>());
+        }(std::make_index_sequence<kEventsCount>());
     }
 
 private:
