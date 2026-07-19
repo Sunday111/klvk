@@ -6,6 +6,12 @@
                 "packages": [
                     "imgui_glfw_cmake"
                 ]
+            },
+            {
+                "link": "https://github.com/Sunday111/yae-slang main",
+                "packages": [
+                    "yae-slang"
+                ]
             }
         ]
     }
