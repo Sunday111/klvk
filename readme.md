@@ -57,6 +57,14 @@ use this entry point.
   "presentation": "offscreen",
   "framebuffer_size": [800, 600],
   "clock": {"mode": "fixed", "step_seconds": 0.016666666666666666},
+  "input": [
+    {"frame": 1, "type": "mouse_move", "position": [400, 300]},
+    {"frame": 1, "type": "mouse_button", "button": "left", "action": "press"},
+    {"frame": 2, "type": "mouse_button", "button": "left", "action": "release"},
+    {"time_seconds": 0.25, "type": "mouse_scroll", "offset": [0, 1]},
+    {"time_seconds": 0.25, "type": "key", "key": "w", "action": "press"},
+    {"time_seconds": 0.5, "type": "key", "key": "w", "action": "release"}
+  ],
   "captures": [
     {"frame": 1, "path": "captures/first.ppm", "include_ui": false},
     {"time_seconds": 0.25, "path": "captures/quarter-second.ppm"},
@@ -74,6 +82,15 @@ use this entry point.
   window outside the desktop before hiding it because some Vulkan drivers otherwise report a fallback surface extent.
 - `framebuffer_size` is required when captures are present and is enforced exactly, including after an example changes
   its window size during initialization.
+- `input` schedules mouse and keyboard events before the target frame's application tick. Each event contains exactly
+  one of one-based `frame` or non-negative `time_seconds`. Supported types are `mouse_move` with `position`,
+  `mouse_button` with `button` and `action`, `mouse_scroll` with `offset`, and `key` with `key` and `action`. Actions are
+  `press` and `release`; mouse buttons are `left`, `right`, `middle`, `button4`, and `button5`. Mouse positions use
+  logical window coordinates, matching native cursor events.
+- Key names are lowercase: `a` through `z`, `0` through `9`, `f1` through `f12`, arrows (`left`, `right`, `up`, `down`),
+  navigation and editing keys (`page_up`, `page_down`, `home`, `end`, `insert`, `delete`, `backspace`, `enter`, `escape`,
+  `space`, `tab`), punctuation names, keypad names prefixed with `keypad_`, and left/right modifiers such as
+  `left_ctrl`, `right_shift`, `left_alt`, and `right_super`.
 - `captures` is an array, so a run may contain any number of frame and time points. Each entry contains exactly one of
   one-based `frame` or non-negative `time_seconds`. A time capture occurs on the first rendered frame whose diagnostic
   time reaches the requested point. `include_ui` defaults to `true`.

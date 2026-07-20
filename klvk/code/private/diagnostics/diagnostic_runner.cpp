@@ -1,6 +1,7 @@
 #include "diagnostic_runner.hpp"
 
 #include <fmt/format.h>
+#include <imgui.h>
 
 #include <algorithm>
 #include <array>
@@ -20,6 +21,8 @@
 #include "klvk/template/on_scope_leave.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/window.hpp"
+#include "platform/input_mapping.hpp"
 
 #ifdef __clang__
 #pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
@@ -57,9 +60,11 @@ DiagnosticRunner::DiagnosticRunner(
     const DiagnosticRunConfig& config,
     const std::filesystem::path& executable_directory,
     size_t frames_in_flight,
-    events::EventManager& event_manager)
+    events::EventManager& event_manager,
+    Window& window)
     : pending_(frames_in_flight),
-      event_manager_(event_manager)
+      event_manager_(event_manager),
+      window_(window)
 {
     std::set<std::filesystem::path> resolved_paths;
     captures_.reserve(config.captures.size());
@@ -83,6 +88,8 @@ DiagnosticRunner::DiagnosticRunner(
     {
         ScheduleCapture(capture_index, config.exit.after_last_capture);
     }
+    input_count_ = config.input.size();
+    for (const DiagnosticInputConfig& input : config.input) ScheduleInput(input);
     ScheduleQuit(config.exit);
 
     event_listener_ = events::EventListenerMethodCallbacks<&DiagnosticRunner::OnCaptureDue>::CreatePtr(this);
@@ -92,7 +99,84 @@ DiagnosticRunner::DiagnosticRunner(
 DiagnosticRunner::~DiagnosticRunner()
 {
     timers_.Clear();
+    input_timers_.Clear();
     if (event_listener_) event_manager_.RemoveListener(event_listener_.get());
+}
+
+void DiagnosticRunner::ScheduleInput(const DiagnosticInputConfig& input)
+{
+    const auto callback = [this, event = input.event](const TimerEvent&)
+    {
+        ApplyInput(event);
+        ++applied_input_count_;
+    };
+    if (input.frame.has_value())
+    {
+        [[maybe_unused]] const TimerHandle timer = input_timers_.ScheduleAtFrame(*input.frame, callback);
+    }
+    else
+    {
+        ErrorHandling::Ensure(input.time_seconds.has_value(), "Diagnostic input has no trigger");
+        [[maybe_unused]] const TimerHandle timer =
+            input_timers_.ScheduleAt(TimerDuration{*input.time_seconds}, callback);
+    }
+}
+
+void DiagnosticRunner::ApplyInput(const DiagnosticInputEvent& input)
+{
+    ImGuiIO& io = ImGui::GetIO();
+    std::visit(
+        [&](const auto& event)
+        {
+            using Event = std::decay_t<decltype(event)>;
+            if constexpr (std::is_same_v<Event, DiagnosticMouseMoveInput>)
+            {
+                window_.OnMouseMove(event.position);
+                io.AddMousePosEvent(event.position.x(), event.position.y());
+            }
+            else if constexpr (std::is_same_v<Event, DiagnosticMouseButtonInput>)
+            {
+                const bool pressed = event.action == InputAction::Press;
+                window_.OnMouseButton(event.button, event.action);
+                io.AddMouseButtonEvent(MouseButtonToImGui(event.button), pressed);
+            }
+            else if constexpr (std::is_same_v<Event, DiagnosticMouseScrollInput>)
+            {
+                window_.OnMouseScroll(event.offset.x(), event.offset.y());
+                io.AddMouseWheelEvent(event.offset.x(), event.offset.y());
+            }
+            else if constexpr (std::is_same_v<Event, DiagnosticKeyInput>)
+            {
+                const bool pressed = event.action == InputAction::Press;
+                window_.OnKey(event.key, event.action);
+                io.AddKeyEvent(static_cast<ImGuiKey>(KeyToImGui(event.key)), pressed);
+                if (event.key == Key::LeftCtrl || event.key == Key::RightCtrl)
+                {
+                    io.AddKeyEvent(
+                        ImGuiMod_Ctrl,
+                        window_.IsKeyPressed(Key::LeftCtrl) || window_.IsKeyPressed(Key::RightCtrl));
+                }
+                else if (event.key == Key::LeftShift || event.key == Key::RightShift)
+                {
+                    io.AddKeyEvent(
+                        ImGuiMod_Shift,
+                        window_.IsKeyPressed(Key::LeftShift) || window_.IsKeyPressed(Key::RightShift));
+                }
+                else if (event.key == Key::LeftAlt || event.key == Key::RightAlt)
+                {
+                    io.AddKeyEvent(
+                        ImGuiMod_Alt,
+                        window_.IsKeyPressed(Key::LeftAlt) || window_.IsKeyPressed(Key::RightAlt));
+                }
+                else if (event.key == Key::LeftSuper || event.key == Key::RightSuper)
+                {
+                    io.AddKeyEvent(
+                        ImGuiMod_Super,
+                        window_.IsKeyPressed(Key::LeftSuper) || window_.IsKeyPressed(Key::RightSuper));
+                }
+            }
+        },
+        input);
 }
 
 void DiagnosticRunner::ScheduleCapture(size_t capture_index, bool quit_after_last_capture)
@@ -149,6 +233,12 @@ void DiagnosticRunner::Advance(u64 frame, double time_seconds)
 {
     [[maybe_unused]] const u64 callback_count =
         timers_.Advance(TimerDuration{time_seconds}, frame, std::numeric_limits<u64>::max());
+}
+
+void DiagnosticRunner::AdvanceInput(u64 frame, double time_seconds)
+{
+    [[maybe_unused]] const u64 callback_count =
+        input_timers_.Advance(TimerDuration{time_seconds}, frame, std::numeric_limits<u64>::max());
 }
 
 bool DiagnosticRunner::HasQueuedCaptures(bool include_ui) const noexcept
@@ -335,6 +425,11 @@ void DiagnosticRunner::ProcessAllCompleted()
 
 void DiagnosticRunner::EnsureComplete() const
 {
+    ErrorHandling::Ensure(
+        applied_input_count_ == input_count_,
+        "Diagnostic run ended before {} scheduled input event{} could be applied",
+        input_count_ - applied_input_count_,
+        input_count_ - applied_input_count_ == 1 ? "" : "s");
     const auto missing =
         static_cast<size_t>(std::ranges::count_if(captures_, [](const Capture& capture) { return !capture.recorded; }));
     ErrorHandling::Ensure(

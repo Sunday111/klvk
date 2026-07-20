@@ -11,6 +11,7 @@
 #include "klvk/error_handling.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/signed_integral_aliases.hpp"
+#include "platform/input_mapping.hpp"
 
 namespace klvk
 {
@@ -57,6 +58,18 @@ double ReadNonNegativeNumber(const nlohmann::json& value, std::string_view name,
     return result;
 }
 
+float ReadFiniteFloat(const nlohmann::json& value, std::string_view name)
+{
+    ErrorHandling::Ensure(value.is_number(), "Diagnostic configuration field '{}' must be a number", name);
+    const double parsed = value.get<double>();
+    const auto result = static_cast<float>(parsed);
+    ErrorHandling::Ensure(
+        std::isfinite(parsed) && std::isfinite(result),
+        "Diagnostic configuration field '{}' must be a finite float",
+        name);
+    return result;
+}
+
 std::optional<u64> ReadOptionalFrame(const nlohmann::json& object, std::string_view prefix)
 {
     if (!object.contains("frame")) return std::nullopt;
@@ -95,12 +108,121 @@ DiagnosticCaptureConfig ParseCapture(const nlohmann::json& value, size_t index)
     return result;
 }
 
+InputAction ParseInputAction(const nlohmann::json& value, std::string_view name)
+{
+    ErrorHandling::Ensure(value.is_string(), "Diagnostic configuration field '{}' must be a string", name);
+    const std::string action = value.get<std::string>();
+    if (action == "press") return InputAction::Press;
+    if (action == "release") return InputAction::Release;
+    ErrorHandling::ThrowWithMessage(
+        "Unknown diagnostic input action '{}' in '{}' (expected 'press' or 'release')",
+        action,
+        name);
+}
+
+MouseButton ParseMouseButton(const nlohmann::json& value, std::string_view name)
+{
+    ErrorHandling::Ensure(value.is_string(), "Diagnostic configuration field '{}' must be a string", name);
+    const std::string button = value.get<std::string>();
+    if (button == "left") return MouseButton::Left;
+    if (button == "right") return MouseButton::Right;
+    if (button == "middle") return MouseButton::Middle;
+    if (button == "button4") return MouseButton::Button4;
+    if (button == "button5") return MouseButton::Button5;
+    ErrorHandling::ThrowWithMessage(
+        "Unknown diagnostic mouse button '{}' in '{}' (expected 'left', 'right', 'middle', 'button4', or 'button5')",
+        button,
+        name);
+}
+
+Key ParseKey(const nlohmann::json& value, std::string_view name)
+{
+    ErrorHandling::Ensure(value.is_string(), "Diagnostic configuration field '{}' must be a string", name);
+    const std::string key = value.get<std::string>();
+    if (const std::optional<Key> parsed = KeyFromName(key)) return *parsed;
+    ErrorHandling::ThrowWithMessage("Unknown diagnostic key '{}' in '{}'", key, name);
+}
+
+edt::Vec2f ParseFloatVector(const nlohmann::json& value, std::string_view name)
+{
+    ErrorHandling::Ensure(
+        value.is_array() && value.size() == 2,
+        "Diagnostic configuration field '{}' must be an array containing two numbers",
+        name);
+    return {
+        ReadFiniteFloat(value[0], std::string(name) + "[0]"),
+        ReadFiniteFloat(value[1], std::string(name) + "[1]"),
+    };
+}
+
+DiagnosticInputConfig ParseInput(const nlohmann::json& value, size_t index)
+{
+    const std::string name = "input[" + std::to_string(index) + "]";
+    EnsureObject(value, name);
+    ErrorHandling::Ensure(value.contains("type") && value.at("type").is_string(), "{}.type must be a string", name);
+
+    DiagnosticInputConfig result;
+    result.frame = ReadOptionalFrame(value, name);
+    result.time_seconds = ReadOptionalTime(value, name);
+    ErrorHandling::Ensure(
+        result.frame.has_value() != result.time_seconds.has_value(),
+        "Diagnostic configuration field '{}' must contain exactly one of 'frame' and 'time_seconds'",
+        name);
+
+    const std::string type = value.at("type").get<std::string>();
+    if (type == "mouse_move")
+    {
+        EnsureKnownKeys(value, name, {"frame", "time_seconds", "type", "position"});
+        ErrorHandling::Ensure(value.contains("position"), "{}.position is required", name);
+        result.event = DiagnosticMouseMoveInput{
+            .position = ParseFloatVector(value.at("position"), name + ".position"),
+        };
+    }
+    else if (type == "mouse_button")
+    {
+        EnsureKnownKeys(value, name, {"frame", "time_seconds", "type", "button", "action"});
+        ErrorHandling::Ensure(value.contains("button"), "{}.button is required", name);
+        ErrorHandling::Ensure(value.contains("action"), "{}.action is required", name);
+        result.event = DiagnosticMouseButtonInput{
+            .button = ParseMouseButton(value.at("button"), name + ".button"),
+            .action = ParseInputAction(value.at("action"), name + ".action"),
+        };
+    }
+    else if (type == "mouse_scroll")
+    {
+        EnsureKnownKeys(value, name, {"frame", "time_seconds", "type", "offset"});
+        ErrorHandling::Ensure(value.contains("offset"), "{}.offset is required", name);
+        result.event = DiagnosticMouseScrollInput{
+            .offset = ParseFloatVector(value.at("offset"), name + ".offset"),
+        };
+    }
+    else if (type == "key")
+    {
+        EnsureKnownKeys(value, name, {"frame", "time_seconds", "type", "key", "action"});
+        ErrorHandling::Ensure(value.contains("key"), "{}.key is required", name);
+        ErrorHandling::Ensure(value.contains("action"), "{}.action is required", name);
+        result.event = DiagnosticKeyInput{
+            .key = ParseKey(value.at("key"), name + ".key"),
+            .action = ParseInputAction(value.at("action"), name + ".action"),
+        };
+    }
+    else
+    {
+        ErrorHandling::ThrowWithMessage(
+            "Unknown diagnostic input type '{}' in '{}' "
+            "(expected 'mouse_move', 'mouse_button', 'mouse_scroll', or 'key')",
+            type,
+            name);
+    }
+    return result;
+}
+
 DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
 {
     EnsureKnownKeys(
         root,
         "root",
-        {"version", "presentation", "framebuffer_size", "clock", "captures", "exit", "application"});
+        {"version", "presentation", "framebuffer_size", "clock", "input", "captures", "exit", "application"});
     ErrorHandling::Ensure(root.contains("version"), "Diagnostic configuration is missing 'version'");
     const u64 version = ReadNonNegativeInteger(root.at("version"), "version");
     ErrorHandling::Ensure(
@@ -169,6 +291,17 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
         result.clock.fixed_step_seconds = step;
     }
 
+    if (root.contains("input"))
+    {
+        const auto& input = root.at("input");
+        ErrorHandling::Ensure(input.is_array(), "input must be an array");
+        result.input.reserve(input.size());
+        for (size_t index = 0; index != input.size(); ++index)
+        {
+            result.input.push_back(ParseInput(input[index], index));
+        }
+    }
+
     if (root.contains("captures"))
     {
         const auto& captures = root.at("captures");
@@ -216,6 +349,12 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
         "exit.after_last_capture requires at least one capture");
     if (result.exit.frame.has_value())
     {
+        for (const auto& input : result.input)
+        {
+            ErrorHandling::Ensure(
+                input.frame.has_value() && *input.frame <= *result.exit.frame,
+                "A frame-based exit must not precede or use a different trigger domain from diagnostic input");
+        }
         for (const auto& capture : result.captures)
         {
             ErrorHandling::Ensure(
@@ -225,6 +364,12 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
     }
     if (result.exit.time_seconds.has_value())
     {
+        for (const auto& input : result.input)
+        {
+            ErrorHandling::Ensure(
+                input.time_seconds.has_value() && *input.time_seconds <= *result.exit.time_seconds,
+                "A time-based exit must not precede or use a different trigger domain from diagnostic input");
+        }
         for (const auto& capture : result.captures)
         {
             ErrorHandling::Ensure(

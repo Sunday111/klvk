@@ -5,9 +5,11 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include "EverydayTools/Math/Matrix.hpp"
+#include "klvk/input.hpp"
 #include "klvk/integral_aliases.hpp"
 
 namespace klvk
@@ -33,6 +35,38 @@ struct DiagnosticCaptureConfig
     bool include_ui = true;
 };
 
+struct DiagnosticMouseMoveInput
+{
+    edt::Vec2f position{};
+};
+
+struct DiagnosticMouseButtonInput
+{
+    MouseButton button = MouseButton::Left;
+    InputAction action = InputAction::Release;
+};
+
+struct DiagnosticMouseScrollInput
+{
+    edt::Vec2f offset{};
+};
+
+struct DiagnosticKeyInput
+{
+    Key key = Key::Tab;
+    InputAction action = InputAction::Release;
+};
+
+using DiagnosticInputEvent =
+    std::variant<DiagnosticMouseMoveInput, DiagnosticMouseButtonInput, DiagnosticMouseScrollInput, DiagnosticKeyInput>;
+
+struct DiagnosticInputConfig
+{
+    std::optional<u64> frame;
+    std::optional<double> time_seconds;
+    DiagnosticInputEvent event;
+};
+
 struct DiagnosticExitConfig
 {
     std::optional<u64> frame;
@@ -47,6 +81,7 @@ struct DiagnosticRunConfig
     DiagnosticPresentation presentation = DiagnosticPresentation::Hidden;
     std::optional<edt::Vec2<u32>> framebuffer_size;
     DiagnosticClockConfig clock;
+    std::vector<DiagnosticInputConfig> input;
     std::vector<DiagnosticCaptureConfig> captures;
     DiagnosticExitConfig exit;
     nlohmann::json application = nlohmann::json::object();
