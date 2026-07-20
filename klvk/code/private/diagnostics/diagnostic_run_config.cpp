@@ -557,34 +557,261 @@ DiagnosticRunConfig LoadDiagnosticRunConfig(const std::filesystem::path& path)
     }
 }
 
-std::optional<DiagnosticRunConfig> LoadDiagnosticRunConfigFromArguments(std::span<const std::string_view> arguments)
+namespace
 {
-    constexpr std::string_view option = "--klvk-diagnostics";
-    std::optional<std::filesystem::path> path;
+
+// Matches one option in either spelling, consuming the following argument for
+// the separated form. Returns nullopt when this argument is not the option.
+std::optional<std::string_view>
+MatchOption(std::span<const std::string_view> arguments, size_t& index, std::string_view option)
+{
+    const std::string_view argument = arguments[index];
+    if (argument == option)
+    {
+        ErrorHandling::Ensure(index + 1 < arguments.size(), "{} requires a file path", option);
+        return arguments[++index];
+    }
+    if (argument.starts_with(option) && argument.size() > option.size() && argument[option.size()] == '=')
+    {
+        return argument.substr(option.size() + 1);
+    }
+    return std::nullopt;
+}
+
+void AssignOnce(std::optional<std::filesystem::path>& destination, std::string_view value, std::string_view option)
+{
+    ErrorHandling::Ensure(!destination.has_value(), "{} was specified more than once", option);
+    ErrorHandling::Ensure(!value.empty(), "{} requires a non-empty file path", option);
+    destination = value;
+}
+
+}  // namespace
+
+DiagnosticCommandLine ParseDiagnosticCommandLine(std::span<const std::string_view> arguments)
+{
+    constexpr std::string_view kConfigOption = "--klvk-diagnostics";
+    constexpr std::string_view kRecordOption = "--klvk-record-input";
+
+    DiagnosticCommandLine result;
     for (size_t index = 0; index != arguments.size(); ++index)
     {
-        const std::string_view argument = arguments[index];
-        std::optional<std::string_view> value;
-        if (argument == option)
+        if (const auto value = MatchOption(arguments, index, kConfigOption))
         {
-            ErrorHandling::Ensure(index + 1 < arguments.size(), "{} requires a JSON file path", option);
-            value = arguments[++index];
-        }
-        else if (argument.starts_with(option) && argument.size() > option.size() && argument[option.size()] == '=')
-        {
-            value = argument.substr(option.size() + 1);
-        }
-        if (!value.has_value())
-        {
-            ErrorHandling::Ensure(!argument.starts_with("--klvk-"), "Unknown klvk command-line option '{}'", argument);
+            AssignOnce(result.config_path, *value, kConfigOption);
             continue;
         }
-        ErrorHandling::Ensure(!path.has_value(), "{} was specified more than once", option);
-        ErrorHandling::Ensure(!value->empty(), "{} requires a non-empty JSON file path", option);
-        path = *value;
+        if (const auto value = MatchOption(arguments, index, kRecordOption))
+        {
+            AssignOnce(result.input_record_path, *value, kRecordOption);
+            continue;
+        }
+        ErrorHandling::Ensure(
+            !arguments[index].starts_with("--klvk-"),
+            "Unknown klvk command-line option '{}'",
+            arguments[index]);
     }
-    if (!path.has_value()) return std::nullopt;
-    return LoadDiagnosticRunConfig(*path);
+    return result;
+}
+
+std::optional<DiagnosticRunConfig> LoadDiagnosticRunConfigFromArguments(std::span<const std::string_view> arguments)
+{
+    const DiagnosticCommandLine command_line = ParseDiagnosticCommandLine(arguments);
+    if (!command_line.config_path.has_value()) return std::nullopt;
+    return LoadDiagnosticRunConfig(*command_line.config_path);
+}
+
+namespace
+{
+
+std::string_view PresentationToString(DiagnosticPresentation presentation)
+{
+    switch (presentation)
+    {
+    case DiagnosticPresentation::Visible:
+        return "visible";
+    case DiagnosticPresentation::Hidden:
+        return "hidden";
+    case DiagnosticPresentation::Offscreen:
+        return "offscreen";
+    }
+    ErrorHandling::ThrowWithMessage("Unknown diagnostic presentation");
+}
+
+std::string_view EncodingToString(DiagnosticVideoEncoding encoding)
+{
+    switch (encoding)
+    {
+    case DiagnosticVideoEncoding::Av1:
+        return "av1";
+    case DiagnosticVideoEncoding::H264:
+        return "h264";
+    case DiagnosticVideoEncoding::Mpeg4:
+        return "mpeg4";
+    }
+    ErrorHandling::ThrowWithMessage("Unknown diagnostic video encoding");
+}
+
+std::string_view EncodingDeviceToString(DiagnosticVideoEncodingDevice device)
+{
+    switch (device)
+    {
+    case DiagnosticVideoEncodingDevice::Cpu:
+        return "cpu";
+    case DiagnosticVideoEncodingDevice::Gpu:
+        return "gpu";
+    }
+    ErrorHandling::ThrowWithMessage("Unknown diagnostic video encoding device");
+}
+
+std::string_view ActionToString(InputAction action)
+{
+    switch (action)
+    {
+    case InputAction::Press:
+        return "press";
+    case InputAction::Release:
+        return "release";
+    }
+    ErrorHandling::ThrowWithMessage("Unknown diagnostic input action");
+}
+
+std::string_view MouseButtonToString(MouseButton button)
+{
+    switch (button)
+    {
+    case MouseButton::Left:
+        return "left";
+    case MouseButton::Right:
+        return "right";
+    case MouseButton::Middle:
+        return "middle";
+    case MouseButton::Button4:
+        return "button4";
+    case MouseButton::Button5:
+        return "button5";
+    case MouseButton::Count:
+        break;
+    }
+    ErrorHandling::ThrowWithMessage("Unknown diagnostic mouse button");
+}
+
+// Writes the one trigger the entry carries. Recorded entries use frames, which
+// pin an event to the rendered frame it happened on regardless of the clock the
+// replay runs at; hand-authored entries may use time instead.
+void WriteTrigger(nlohmann::json& object, const std::optional<u64>& frame, const std::optional<u64>& time_ns)
+{
+    if (frame.has_value())
+    {
+        object["frame"] = *frame;
+        return;
+    }
+    ErrorHandling::Ensure(time_ns.has_value(), "Diagnostic entry has no trigger to serialize");
+    object["time_ns"] = *time_ns;
+}
+
+nlohmann::json InputEventToJson(const DiagnosticInputEvent& event)
+{
+    nlohmann::json result = nlohmann::json::object();
+    std::visit(
+        [&](const auto& value)
+        {
+            using Event = std::decay_t<decltype(value)>;
+            if constexpr (std::is_same_v<Event, DiagnosticMouseMoveInput>)
+            {
+                result["type"] = "mouse_move";
+                result["position"] = {value.position.x(), value.position.y()};
+            }
+            else if constexpr (std::is_same_v<Event, DiagnosticMouseButtonInput>)
+            {
+                result["type"] = "mouse_button";
+                result["button"] = MouseButtonToString(value.button);
+                result["action"] = ActionToString(value.action);
+            }
+            else if constexpr (std::is_same_v<Event, DiagnosticMouseScrollInput>)
+            {
+                result["type"] = "mouse_scroll";
+                result["offset"] = {value.offset.x(), value.offset.y()};
+            }
+            else
+            {
+                static_assert(std::is_same_v<Event, DiagnosticKeyInput>);
+                const std::optional<std::string_view> name = KeyToName(value.key);
+                ErrorHandling::Ensure(name.has_value(), "Recorded key has no diagnostic configuration name");
+                result["type"] = "key";
+                result["key"] = *name;
+                result["action"] = ActionToString(value.action);
+            }
+        },
+        event);
+    return result;
+}
+
+}  // namespace
+
+nlohmann::json DiagnosticRunConfigToJson(const DiagnosticRunConfig& config)
+{
+    nlohmann::json result = nlohmann::json::object();
+    result["version"] = DiagnosticRunConfig::kVersion;
+    result["presentation"] = PresentationToString(config.presentation);
+    if (config.framebuffer_size.has_value())
+    {
+        result["framebuffer_size"] = {config.framebuffer_size->x(), config.framebuffer_size->y()};
+    }
+    if (config.clock.fixed_step_ns.has_value())
+    {
+        result["clock"] = {{"mode", "fixed"}, {"step_ns", *config.clock.fixed_step_ns}};
+    }
+
+    if (!config.input.empty())
+    {
+        nlohmann::json input = nlohmann::json::array();
+        for (const DiagnosticInputConfig& entry : config.input)
+        {
+            nlohmann::json value = InputEventToJson(entry.event);
+            WriteTrigger(value, entry.frame, entry.time_ns);
+            input.push_back(std::move(value));
+        }
+        result["input"] = std::move(input);
+    }
+
+    if (!config.captures.empty())
+    {
+        nlohmann::json captures = nlohmann::json::array();
+        for (const DiagnosticCaptureConfig& capture : config.captures)
+        {
+            nlohmann::json value = nlohmann::json::object();
+            WriteTrigger(value, capture.frame, capture.time_ns);
+            value["path"] = capture.path.generic_string();
+            value["include_ui"] = capture.include_ui;
+            captures.push_back(std::move(value));
+        }
+        result["captures"] = std::move(captures);
+    }
+
+    if (config.video.has_value())
+    {
+        result["video"] = {
+            {"path", config.video->path.generic_string()},
+            {"encoding", EncodingToString(config.video->encoding)},
+            {"encoding_device", EncodingDeviceToString(config.video->encoding_device)},
+            {"compression_level", config.video->compression_level},
+            {"include_ui", config.video->include_ui},
+            {"log_ffmpeg", config.video->log_ffmpeg}};
+    }
+
+    nlohmann::json exit = nlohmann::json::object();
+    if (config.exit.after_last_capture)
+    {
+        exit["after_last_capture"] = true;
+    }
+    else
+    {
+        WriteTrigger(exit, config.exit.frame, config.exit.time_ns);
+    }
+    result["exit"] = std::move(exit);
+
+    if (!config.application.empty()) result["application"] = config.application;
+    return result;
 }
 
 }  // namespace klvk

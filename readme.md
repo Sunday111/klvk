@@ -140,6 +140,33 @@ With yae, pass application arguments after `--`:
 yae run klvk_painter2d_example -- --klvk-diagnostics /tmp/painter-capture.json
 ```
 
+### Recording real input for replay
+
+`--klvk-record-input <file>` writes the session's real mouse and keyboard input as a diagnostic configuration, so an
+interaction that reproduces a bug can be replayed headlessly and as often as needed. It needs no `--klvk-diagnostics`:
+the ordinary case is recording a normal interactive run.
+
+```sh
+yae run klvk_falling_sand_example -- --klvk-record-input /tmp/session.json   # interact, then close the window
+yae run klvk_falling_sand_example -- --klvk-diagnostics /tmp/session.json    # replay it
+```
+
+The recorder listens to the same four window entry points the replay path writes to, so the two share one vocabulary by
+construction; `DiagnosticRunConfigToJson` is the parser's inverse and is round-tripped in the tests. The file it writes
+is complete and immediately replayable — `offscreen` presentation (no display server needed), the recorded
+`framebuffer_size`, a fixed clock, the input, and an `exit` at the last frame of the session. Add `captures` or a
+`video` block to it to get output from the replay.
+
+- Events are pinned to the **frame** they arrived on, not to a timestamp. A frame trigger reproduces the original
+  input-to-frame association whatever clock the replay runs at, whereas a wall-clock timestamp recorded at a variable
+  frame rate would land on a different frame under a fixed step.
+- Redundant cursor events are collapsed to at most one per frame, which is all a replay can apply — input is dispatched
+  once per frame — and keeps the file small.
+- Replay reproduces **input**, not the whole world. A live session has a variable frame duration while the replay uses a
+  fixed step, so anything else that is non-deterministic — an unseeded RNG, a wall-clock read, thread scheduling — still
+  has to be pinned for the replayed run to diverge from the recorded one. Applications can seed themselves from the
+  `application` object, which is carried through the recording unchanged.
+
 For repeatable main-versus-branch rendering checks, see the
 [diagnostic smoke-test suite](diagnostics/smoke/readme.md).
 

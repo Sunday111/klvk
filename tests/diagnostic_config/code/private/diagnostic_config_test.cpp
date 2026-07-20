@@ -104,8 +104,133 @@ void TestExactNanosecondTimes()
     std::filesystem::remove_all(root);
 }
 
+// The recorder writes configurations through DiagnosticRunConfigToJson and the
+// replay reads them back through the parser. If the two vocabularies ever drift
+// apart a recording stops replaying, so round-trip every field here.
+void TestConfigSerializationRoundTrip()
+{
+    const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
+    const std::filesystem::path root =
+        std::filesystem::temp_directory_path() / ("klvk_diagnostic_roundtrip_test_" + std::to_string(nonce));
+    std::filesystem::create_directories(root);
+
+    klvk::DiagnosticRunConfig original;
+    original.presentation = klvk::DiagnosticPresentation::Offscreen;
+    original.framebuffer_size = edt::Vec2<u32>{640, 480};
+    original.clock.fixed_step_ns = 16'666'667;
+    original.input = {
+        {.frame = 1, .time_ns = std::nullopt, .event = klvk::DiagnosticMouseMoveInput{.position = {12.5f, 34.25f}}},
+        {.frame = 2,
+         .time_ns = std::nullopt,
+         .event =
+             klvk::DiagnosticMouseButtonInput{
+                 .button = klvk::MouseButton::Button5,
+                 .action = klvk::InputAction::Press}},
+        {.frame = 3, .time_ns = std::nullopt, .event = klvk::DiagnosticMouseScrollInput{.offset = {-1.5f, 2.f}}},
+        {.frame = 4,
+         .time_ns = std::nullopt,
+         .event = klvk::DiagnosticKeyInput{.key = klvk::Key::LeftCtrl, .action = klvk::InputAction::Release}}};
+    original.captures = {{.frame = 5, .time_ns = std::nullopt, .path = "captures/a.ppm", .include_ui = false}};
+    original.video = klvk::DiagnosticVideoConfig{
+        .path = "captures/a.mp4",
+        .encoding = klvk::DiagnosticVideoEncoding::H264,
+        .encoding_device = klvk::DiagnosticVideoEncodingDevice::Cpu,
+        .compression_level = 7,
+        .include_ui = false,
+        .log_ffmpeg = false};
+    original.exit.frame = 42;
+    original.application = nlohmann::json{{"seed", 7}};
+
+    const std::filesystem::path path = root / "roundtrip.json";
+    Write(path, klvk::DiagnosticRunConfigToJson(original).dump(2));
+    const klvk::DiagnosticRunConfig parsed = klvk::LoadDiagnosticRunConfig(path);
+
+    Ensure(parsed.presentation == original.presentation, "presentation did not survive the round trip");
+    Ensure(parsed.framebuffer_size == original.framebuffer_size, "framebuffer_size did not survive the round trip");
+    Ensure(parsed.clock.fixed_step_ns == original.clock.fixed_step_ns, "clock step did not survive the round trip");
+    Ensure(parsed.exit.frame == original.exit.frame, "exit did not survive the round trip");
+    Ensure(parsed.application == original.application, "application config did not survive the round trip");
+
+    Ensure(parsed.input.size() == original.input.size(), "input count did not survive the round trip");
+    for (size_t index = 0; index != original.input.size(); ++index)
+    {
+        Ensure(parsed.input[index].frame == original.input[index].frame, "an input frame did not survive");
+        Ensure(parsed.input[index].time_ns == original.input[index].time_ns, "an input time did not survive");
+        Ensure(parsed.input[index].event == original.input[index].event, "an input event did not survive");
+    }
+
+    Ensure(parsed.captures.size() == 1, "capture count did not survive the round trip");
+    Ensure(parsed.captures[0].frame == original.captures[0].frame, "a capture frame did not survive");
+    Ensure(parsed.captures[0].path == original.captures[0].path, "a capture path did not survive");
+    Ensure(parsed.captures[0].include_ui == original.captures[0].include_ui, "a capture include_ui did not survive");
+
+    Ensure(parsed.video.has_value(), "video did not survive the round trip");
+    Ensure(parsed.video->path == original.video->path, "video path did not survive");
+    Ensure(parsed.video->encoding == original.video->encoding, "video encoding did not survive");
+    Ensure(parsed.video->encoding_device == original.video->encoding_device, "video device did not survive");
+    Ensure(
+        parsed.video->compression_level == original.video->compression_level,
+        "video compression level did not survive");
+    Ensure(parsed.video->include_ui == original.video->include_ui, "video include_ui did not survive");
+    Ensure(parsed.video->log_ffmpeg == original.video->log_ffmpeg, "video log_ffmpeg did not survive");
+
+    // Trigger domains cannot be mixed within one configuration, so exercise the
+    // time domain separately - an exact nanosecond must survive serialization too.
+    klvk::DiagnosticRunConfig timed;
+    timed.framebuffer_size = edt::Vec2<u32>{64, 48};
+    timed.input = {
+        {.frame = std::nullopt,
+         .time_ns = 250'000'001,
+         .event = klvk::DiagnosticKeyInput{.key = klvk::Key::W, .action = klvk::InputAction::Press}}};
+    timed.exit.time_ns = 1'000'000'001;
+
+    const std::filesystem::path timed_path = root / "timed.json";
+    Write(timed_path, klvk::DiagnosticRunConfigToJson(timed).dump(2));
+    const klvk::DiagnosticRunConfig parsed_timed = klvk::LoadDiagnosticRunConfig(timed_path);
+    Ensure(parsed_timed.input.size() == 1, "timed input did not survive the round trip");
+    Ensure(parsed_timed.input[0].time_ns == 250'000'001, "an exact input nanosecond did not survive");
+    Ensure(parsed_timed.exit.time_ns == 1'000'000'001, "an exact exit nanosecond did not survive");
+
+    std::filesystem::remove_all(root);
+}
+
+void TestCommandLineParsing()
+{
+    using klvk::ParseDiagnosticCommandLine;
+    const auto parse = [](std::initializer_list<std::string_view> arguments)
+    {
+        const std::vector<std::string_view> storage(arguments);
+        return ParseDiagnosticCommandLine(storage);
+    };
+
+    const auto separated = parse({"--klvk-diagnostics", "a.json", "--klvk-record-input", "b.json"});
+    Ensure(separated.config_path == std::filesystem::path("a.json"), "separated config path was not parsed");
+    Ensure(separated.input_record_path == std::filesystem::path("b.json"), "separated record path was not parsed");
+
+    const auto joined = parse({"--klvk-record-input=b.json", "--klvk-diagnostics=a.json"});
+    Ensure(joined.config_path == std::filesystem::path("a.json"), "joined config path was not parsed");
+    Ensure(joined.input_record_path == std::filesystem::path("b.json"), "joined record path was not parsed");
+
+    // Recording without replaying is the ordinary case: an interactive session.
+    const auto record_only = parse({"--seed", "7", "--klvk-record-input", "b.json"});
+    Ensure(!record_only.config_path.has_value(), "a config path appeared without the option");
+    Ensure(record_only.input_record_path == std::filesystem::path("b.json"), "record path was not parsed alone");
+
+    const auto none = parse({"--seed", "7"});
+    Ensure(!none.config_path.has_value() && !none.input_record_path.has_value(), "application arguments were consumed");
+
+    EnsureThrows([&] { (void)parse({"--klvk-unknown", "x"}); }, "an unknown klvk option was accepted");
+    EnsureThrows([&] { (void)parse({"--klvk-record-input"}); }, "a missing option value was accepted");
+    EnsureThrows([&] { (void)parse({"--klvk-record-input="}); }, "an empty option value was accepted");
+    EnsureThrows(
+        [&] { (void)parse({"--klvk-record-input", "a", "--klvk-record-input", "b"}); },
+        "a repeated option was accepted");
+}
+
 void Run()
 {
+    TestConfigSerializationRoundTrip();
+    TestCommandLineParsing();
     TestExactNanosecondTimes();
     const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
     const std::filesystem::path root =

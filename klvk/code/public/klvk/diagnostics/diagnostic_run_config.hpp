@@ -66,23 +66,31 @@ struct DiagnosticVideoConfig
 struct DiagnosticMouseMoveInput
 {
     edt::Vec2f position{};
+
+    friend bool operator==(const DiagnosticMouseMoveInput&, const DiagnosticMouseMoveInput&) = default;
 };
 
 struct DiagnosticMouseButtonInput
 {
     MouseButton button = MouseButton::Left;
     InputAction action = InputAction::Release;
+
+    friend bool operator==(const DiagnosticMouseButtonInput&, const DiagnosticMouseButtonInput&) = default;
 };
 
 struct DiagnosticMouseScrollInput
 {
     edt::Vec2f offset{};
+
+    friend bool operator==(const DiagnosticMouseScrollInput&, const DiagnosticMouseScrollInput&) = default;
 };
 
 struct DiagnosticKeyInput
 {
     Key key = Key::Tab;
     InputAction action = InputAction::Release;
+
+    friend bool operator==(const DiagnosticKeyInput&, const DiagnosticKeyInput&) = default;
 };
 
 using DiagnosticInputEvent =
@@ -118,8 +126,24 @@ struct DiagnosticRunConfig
 
 [[nodiscard]] DiagnosticRunConfig LoadDiagnosticRunConfig(const std::filesystem::path& path);
 
-// Finds --klvk-diagnostics <path> or --klvk-diagnostics=<path>. Other arguments
-// belong to the application and are ignored by this parser.
+// Inverse of the parser, kept beside it so the two cannot drift apart: the
+// result is a document LoadDiagnosticRunConfig accepts verbatim. Times are
+// written as exact 'time_ns'/'step_ns', never as seconds.
+[[nodiscard]] nlohmann::json DiagnosticRunConfigToJson(const DiagnosticRunConfig& config);
+
+struct DiagnosticCommandLine
+{
+    std::optional<std::filesystem::path> config_path;
+    std::optional<std::filesystem::path> input_record_path;
+};
+
+// Recognizes every klvk option in one pass, each spelled either as
+// '<option> <value>' or '<option>=<value>'. Arguments that do not begin with
+// '--klvk-' belong to the application and are ignored; an unrecognized
+// '--klvk-' argument is an error, so a typo cannot be silently swallowed.
+[[nodiscard]] DiagnosticCommandLine ParseDiagnosticCommandLine(std::span<const std::string_view> arguments);
+
+// Convenience over ParseDiagnosticCommandLine for --klvk-diagnostics alone.
 [[nodiscard]] std::optional<DiagnosticRunConfig> LoadDiagnosticRunConfigFromArguments(
     std::span<const std::string_view> arguments);
 

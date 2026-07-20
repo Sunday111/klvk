@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "diagnostics/diagnostic_runner.hpp"
+#include "diagnostics/input_recorder.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/events/application_events.hpp"
 #include "klvk/events/event_listener_method.hpp"
@@ -81,6 +82,8 @@ struct Application::State
     events::EventManager event_manager_;
     std::optional<DiagnosticRunConfig> diagnostic_config_;
     std::unique_ptr<DiagnosticRunner> diagnostic_runner_;
+    std::optional<std::filesystem::path> input_record_path_;
+    std::unique_ptr<DiagnosticInputRecorder> input_recorder_;
 
     // The fixed step is exact nanoseconds, so logical time is an integer product
     // rather than an accumulated float and a replayed run lands on precisely the
@@ -487,6 +490,13 @@ void Application::Run()
 void Application::RunImpl()
 {
     Initialize();
+    // Recording is independent of replaying: the point is to capture an ordinary
+    // interactive session, which has no diagnostic configuration at all.
+    if (state_->input_record_path_.has_value())
+    {
+        state_->input_recorder_ =
+            std::make_unique<DiagnosticInputRecorder>(*state_->input_record_path_, state_->event_manager_);
+    }
     if (state_->diagnostic_config_.has_value())
     {
         if (state_->diagnostic_config_->framebuffer_size.has_value())
@@ -525,6 +535,16 @@ void Application::RunImpl()
             state_->diagnostic_runner_->EnsureComplete();
         }
     }
+    if (state_->input_recorder_)
+    {
+        constexpr u64 kDefaultRecordedStepNs = 16'666'667;
+        const u64 step_ns = state_->GetFixedStepNanoseconds().value_or(kDefaultRecordedStepNs);
+        state_->input_recorder_->Write(
+            state_->window_->GetFramebufferSize(),
+            step_ns,
+            state_->diagnostic_config_.has_value() ? state_->diagnostic_config_->application : nlohmann::json::object(),
+            state_->executable_dir_);
+    }
 }
 
 void Application::RunWithArguments(int argc, char** argv)
@@ -537,7 +557,12 @@ void Application::RunWithArguments(int argc, char** argv)
         ErrorHandling::Ensure(argv[index] != nullptr, "Null command-line argument at index {}", index);
         arguments.emplace_back(argv[index]);
     }
-    state_->diagnostic_config_ = LoadDiagnosticRunConfigFromArguments(arguments);
+    const DiagnosticCommandLine command_line = ParseDiagnosticCommandLine(arguments);
+    if (command_line.config_path.has_value())
+    {
+        state_->diagnostic_config_ = LoadDiagnosticRunConfig(*command_line.config_path);
+    }
+    state_->input_record_path_ = command_line.input_record_path;
     Run();
 }
 
@@ -877,6 +902,9 @@ void Application::PostTick()
 
     ++state_->completed_frames_;
     state_->frame_index_ = (state_->frame_index_ + 1) % kFramesInFlight;
+    // Events arrive during PollEvents and are first observable by the tick that
+    // follows, so they belong to the next frame.
+    if (state_->input_recorder_) state_->input_recorder_->BeginFrame(state_->completed_frames_ + 1);
     if (!state_->offscreen_) state_->glfw_.PollEvents();
 }
 
