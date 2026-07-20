@@ -114,7 +114,8 @@ target_link_libraries(klvk PUBLIC ass
                                   VulkanMemoryAllocator
                                   imgui_vulkan)
 target_link_libraries(klvk PRIVATE glfw
-                                   spdlog::spdlog)
+                                   spdlog::spdlog
+                                   slang::slang)
 target_include_directories(klvk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/code/public)
 target_include_directories(klvk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/code/private)
 include(${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg.cmake)

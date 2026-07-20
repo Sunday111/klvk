@@ -1,6 +1,9 @@
 #include "klvk/shader/shader_cache_manager.hpp"
 
 #include <fmt/format.h>
+#include <slang-com-ptr.h>
+#include <slang-tag-version.h>
+#include <slang.h>
 
 #include <array>
 #include <atomic>
@@ -85,6 +88,10 @@ shaderc_shader_kind ShaderKind(const std::filesystem::path& path)
     return shaderc_glsl_infer_from_source;
 }
 
+// Distinguishes a Slang cache entry from a GLSL one so identical bytes under the
+// two languages never collide.
+constexpr u32 kSlangLanguageTag = 0x5'1A;
+
 u64 MakeKey(std::string_view source, shaderc_shader_kind kind, u32 spirv_version, u32 spirv_revision)
 {
     u64 hash = HashBytes(kFnvOffset, source.data(), source.size());
@@ -98,6 +105,125 @@ u64 MakeKey(std::string_view source, shaderc_shader_kind kind, u32 spirv_version
     constexpr bool optimize = false;
 #endif
     return HashValue(hash, optimize);
+}
+
+// A Slang source fully determines its output - the stage lives in a [shader(...)]
+// attribute, not a caller-supplied kind - so the source bytes and the toolchain
+// version are the whole key. SLANG_TAG_VERSION is compile-time, so bumping the
+// Slang SDK invalidates every cached entry automatically.
+u64 MakeSlangKey(std::string_view source)
+{
+    u64 hash = HashBytes(kFnvOffset, source.data(), source.size());
+    hash = HashValue(hash, kSlangLanguageTag);
+    constexpr std::string_view toolchain = SLANG_TAG_VERSION;
+    hash = HashBytes(hash, toolchain.data(), toolchain.size());
+    hash = HashValue(hash, kCacheFormatVersion);
+    return hash;
+}
+
+slang::IGlobalSession& SlangGlobalSession()
+{
+    // The Slang global session is a process-wide, reusable compiler. Created on
+    // first use so a run that compiles only GLSL never pays to spin it up.
+    static Slang::ComPtr<slang::IGlobalSession> session = []
+    {
+        Slang::ComPtr<slang::IGlobalSession> created;
+        ErrorHandling::Ensure(
+            SLANG_SUCCEEDED(slang::createGlobalSession(created.writeRef())) && created,
+            "Failed to create Slang global session");
+        return created;
+    }();
+    return *session;
+}
+
+std::string BlobText(slang::IBlob* blob)
+{
+    if (blob == nullptr || blob->getBufferSize() == 0) return {};
+    std::string text(static_cast<const char*>(blob->getBufferPointer()), blob->getBufferSize());
+    return text;
+}
+
+std::vector<u32> CompileSlangToSpirv(const std::string& source, const std::filesystem::path& source_path)
+{
+    slang::IGlobalSession& global = SlangGlobalSession();
+
+    slang::TargetDesc target{};
+    target.format = SLANG_SPIRV;
+    target.profile = global.findProfile("spirv_1_6");
+
+    slang::SessionDesc session_desc{};
+    session_desc.targets = &target;
+    session_desc.targetCount = 1;
+    // These shaders were authored for GLSL's column-major matrices; matching it
+    // lets ports keep their matrix math unchanged.
+    session_desc.defaultMatrixLayoutMode = SLANG_MATRIX_LAYOUT_COLUMN_MAJOR;
+
+    Slang::ComPtr<slang::ISession> session;
+    ErrorHandling::Ensure(
+        SLANG_SUCCEEDED(global.createSession(session_desc, session.writeRef())) && session,
+        "Failed to create Slang session for '{}'",
+        source_path.string());
+
+    const std::string module_name = source_path.stem().string();
+    Slang::ComPtr<slang::IBlob> diagnostics;
+    slang::IModule* module = session->loadModuleFromSourceString(
+        module_name.c_str(),
+        source_path.string().c_str(),
+        source.c_str(),
+        diagnostics.writeRef());
+    ErrorHandling::Ensure(
+        module != nullptr,
+        "Failed to compile Slang shader '{}':\n{}",
+        source_path.string(),
+        BlobText(diagnostics));
+
+    // One stage per file, entry point named main so the pipeline's hardcoded
+    // "main" entry name resolves in the emitted SPIR-V.
+    Slang::ComPtr<slang::IEntryPoint> entry_point;
+    ErrorHandling::Ensure(
+        SLANG_SUCCEEDED(module->findEntryPointByName("main", entry_point.writeRef())) && entry_point,
+        "Slang shader '{}' must define an entry point named 'main'",
+        source_path.string());
+
+    const std::array<slang::IComponentType*, 2> components{module, entry_point.get()};
+    Slang::ComPtr<slang::IComponentType> composed;
+    diagnostics.setNull();
+    ErrorHandling::Ensure(
+        SLANG_SUCCEEDED(session->createCompositeComponentType(
+            components.data(),
+            components.size(),
+            composed.writeRef(),
+            diagnostics.writeRef())) &&
+            composed,
+        "Failed to compose Slang program '{}':\n{}",
+        source_path.string(),
+        BlobText(diagnostics));
+
+    Slang::ComPtr<slang::IComponentType> linked;
+    diagnostics.setNull();
+    ErrorHandling::Ensure(
+        SLANG_SUCCEEDED(composed->link(linked.writeRef(), diagnostics.writeRef())) && linked,
+        "Failed to link Slang program '{}':\n{}",
+        source_path.string(),
+        BlobText(diagnostics));
+
+    Slang::ComPtr<slang::IBlob> spirv;
+    diagnostics.setNull();
+    ErrorHandling::Ensure(
+        SLANG_SUCCEEDED(linked->getEntryPointCode(0, 0, spirv.writeRef(), diagnostics.writeRef())) && spirv,
+        "Failed to emit SPIR-V for Slang shader '{}':\n{}",
+        source_path.string(),
+        BlobText(diagnostics));
+
+    const size_t byte_size = spirv->getBufferSize();
+    ErrorHandling::Ensure(
+        byte_size != 0 && byte_size % sizeof(u32) == 0,
+        "Slang produced an invalid SPIR-V size for '{}'",
+        source_path.string());
+    const auto* words = static_cast<const u32*>(spirv->getBufferPointer());
+    const size_t word_count = byte_size / sizeof(u32);
+    std::vector<u32> spirv_words(words, words + word_count);
+    return spirv_words;
 }
 
 }  // namespace
@@ -144,8 +270,12 @@ std::shared_ptr<const std::vector<u32>> ShaderCacheManager::GetOrCompile(const s
 
     std::string source;
     Filesystem::ReadFile(canonical_path, source);
-    const shaderc_shader_kind kind = ShaderKind(canonical_path);
-    const u64 key = MakeKey(source, kind, compiler_spirv_version_, compiler_spirv_revision_);
+    // A .slang source routes to the Slang compiler; every other extension stays
+    // on shaderc. Both emit SPIR-V, so nothing downstream of the cache changes.
+    const bool is_slang = canonical_path.extension() == ".slang";
+    const u64 key =
+        is_slang ? MakeSlangKey(source)
+                 : MakeKey(source, ShaderKind(canonical_path), compiler_spirv_version_, compiler_spirv_revision_);
 
     std::unique_lock lock(mutex_);
     auto iterator = entries_.find(key);
@@ -211,27 +341,36 @@ void ShaderCacheManager::Compile(const CompileJob& job)
             return;
         }
 
-        shaderc::Compiler compiler;
-        shaderc::CompileOptions options;
-        options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
-        options.SetTargetSpirv(shaderc_spirv_version_1_6);
+        std::vector<u32> spirv_words;
+        if (job.source_path.extension() == ".slang")
+        {
+            spirv_words = CompileSlangToSpirv(job.source, job.source_path);
+        }
+        else
+        {
+            shaderc::Compiler compiler;
+            shaderc::CompileOptions options;
+            options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
+            options.SetTargetSpirv(shaderc_spirv_version_1_6);
 #ifdef NDEBUG
-        options.SetOptimizationLevel(shaderc_optimization_level_performance);
+            options.SetOptimizationLevel(shaderc_optimization_level_performance);
 #else
-        options.SetOptimizationLevel(shaderc_optimization_level_zero);
-        options.SetGenerateDebugInfo();
+            options.SetOptimizationLevel(shaderc_optimization_level_zero);
+            options.SetGenerateDebugInfo();
 #endif
-        const auto result = compiler.CompileGlslToSpv(
-            job.source,
-            ShaderKind(job.source_path),
-            job.source_path.string().c_str(),
-            options);
-        ErrorHandling::Ensure(
-            result.GetCompilationStatus() == shaderc_compilation_status_success,
-            "Failed to compile shader '{}':\n{}",
-            job.source_path.string(),
-            result.GetErrorMessage());
-        auto words = std::make_shared<const std::vector<u32>>(result.cbegin(), result.cend());
+            const auto result = compiler.CompileGlslToSpv(
+                job.source,
+                ShaderKind(job.source_path),
+                job.source_path.string().c_str(),
+                options);
+            ErrorHandling::Ensure(
+                result.GetCompilationStatus() == shaderc_compilation_status_success,
+                "Failed to compile shader '{}':\n{}",
+                job.source_path.string(),
+                result.GetErrorMessage());
+            spirv_words.assign(result.cbegin(), result.cend());
+        }
+        auto words = std::make_shared<const std::vector<u32>>(std::move(spirv_words));
         ErrorHandling::Ensure(!words->empty() && words->front() == kSpirvMagic, "Compiler returned invalid SPIR-V");
         {
             std::scoped_lock lock(mutex_);

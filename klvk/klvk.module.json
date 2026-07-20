@@ -18,7 +18,8 @@
         ],
         "Private": [
             "glfw",
-            "spdlog"
+            "spdlog",
+            "slang"
         ]
     },
     "ExtraCMakeFiles": [

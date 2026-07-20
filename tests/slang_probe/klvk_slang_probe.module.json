@@ -1,8 +1,0 @@
-{
-    "ModuleType": "Executable",
-    "Dependencies": {
-        "Public": [
-            "slang"
-        ]
-    }
-}

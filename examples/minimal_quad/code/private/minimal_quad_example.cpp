@@ -55,8 +55,8 @@ class QuadApp : public klvk::Application
             device,
             klvk::GraphicsPipelineBuilder(*this)
                 .Layout(pipeline_layout_)
-                .VertexShaderFile(shader_dir / "just_color_2d.vert")
-                .FragmentShaderFile(shader_dir / "just_color_2d.frag")
+                .VertexShaderFile(shader_dir / "just_color_2d.vert.slang")
+                .FragmentShaderFile(shader_dir / "just_color_2d.frag.slang")
                 .Build()};
     }
 
