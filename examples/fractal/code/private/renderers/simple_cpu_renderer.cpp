@@ -119,7 +119,7 @@ void SimpleCpuRenderer::ApplySettings(const FractalSettings& settings)
             .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
             .imageType = VK_IMAGE_TYPE_2D,
             .format = VK_FORMAT_R8G8B8A8_UNORM,
-            .extent = {static_cast<u32>(s.x()), static_cast<u32>(s.y()), 1},
+            .extent = {.width = static_cast<u32>(s.x()), .height = static_cast<u32>(s.y()), .depth = 1},
             .mipLevels = 1,
             .arrayLayers = 1,
             .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -234,7 +234,7 @@ void SimpleCpuRenderer::PrepareFrame(VkCommandBuffer command_buffer, const Fract
 
     const VkBufferImageCopy region{
         .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1},
-        .imageExtent = {static_cast<u32>(w), static_cast<u32>(h), 1},
+        .imageExtent = {.width = static_cast<u32>(w), .height = static_cast<u32>(h), .depth = 1},
     };
     klvk::Vulkan::CmdCopyBufferToImage(
         command_buffer,

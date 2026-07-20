@@ -121,19 +121,19 @@ struct Application::State
             .count();
     }
 
-    float GetRelativeTimeSeconds() const
+    [[nodiscard]] float GetRelativeTimeSeconds() const
     {
         if (const auto step = GetFixedStep()) return static_cast<float>(static_cast<double>(completed_frames_) * *step);
         return State::DurationToSeconds(GetTime() - app_start_time_);
     }
 
-    double GetElapsedTimeSeconds() const
+    [[nodiscard]] double GetElapsedTimeSeconds() const
     {
         if (const auto step = GetFixedStep()) return static_cast<double>(completed_frames_) * *step;
         return State::DurationToSeconds<double>(GetTime() - app_start_time_);
     }
 
-    float GetCurrentFrameStartTime() const
+    [[nodiscard]] float GetCurrentFrameStartTime() const
     {
         if (GetFixedStep().has_value()) return GetRelativeTimeSeconds();
         return State::DurationToSeconds(frame_start_time_history_[current_frame_time_index_] - app_start_time_);
@@ -281,7 +281,9 @@ Application::~Application()
     if (state_->device_context_)
     {
         if (state_->imgui_descriptor_pool_)
+        {
             Vulkan::DestroyDescriptorPoolNE(state_->device_context_->GetDevice(), state_->imgui_descriptor_pool_);
+        }
         state_->DestroyFrames();
         state_->swapchain_.reset();
         state_->device_context_.reset();
@@ -336,13 +338,17 @@ void Application::Initialize()
         state_->window_ = std::make_unique<Window>(*this, window_width, window_height);
     }
     if (state_->diagnostic_config_.has_value() && state_->diagnostic_config_->framebuffer_size.has_value())
+    {
         state_->window_->SetFixedFramebufferSize(*state_->diagnostic_config_->framebuffer_size);
+    }
     if (realize_hidden_x11)
     {
         glfwShowWindow(state_->window_->GetGlfwWindow());
         glfwPollEvents();
         if (state_->diagnostic_config_->framebuffer_size.has_value())
+        {
             state_->window_->SetFramebufferSize(*state_->diagnostic_config_->framebuffer_size);
+        }
     }
 
     state_->device_context_ = std::make_unique<DeviceContext>(state_->window_->GetGlfwWindow());
@@ -453,7 +459,9 @@ void Application::RunImpl()
             const auto framebuffer_size = state_->window_->GetFramebufferSize();
             const VkExtent2D swapchain_extent = state_->swapchain_->GetExtent();
             if (swapchain_extent.width != framebuffer_size.x() || swapchain_extent.height != framebuffer_size.y())
+            {
                 state_->RecreateSwapchain();
+            }
         }
         state_->InitTime();
         state_->completed_frames_ = 0;
@@ -502,7 +510,9 @@ void Application::PreTick()
     // stretches the presented image instead of invalidating the swapchain.
     {
         if (state_->diagnostic_config_.has_value() && state_->diagnostic_config_->framebuffer_size.has_value())
+        {
             state_->window_->SetFramebufferSize(*state_->diagnostic_config_->framebuffer_size);
+        }
         const auto framebuffer_size = state_->window_->GetFramebufferSize();
         const VkExtent2D extent = state_->swapchain_->GetExtent();
         if (framebuffer_size.x() != extent.width || framebuffer_size.y() != extent.height)
@@ -627,7 +637,7 @@ void Application::PreTick()
     };
     const VkRenderingInfo rendering_info{
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .renderArea = {.offset = {0, 0}, .extent = extent},
+        .renderArea = {.offset = {.x = 0, .y = 0}, .extent = extent},
         .layerCount = 1,
         .colorAttachmentCount = color_attachments.size(),
         .pColorAttachments = color_attachments.data(),
@@ -645,7 +655,7 @@ void Application::PreTick()
         .maxDepth = 1.f,
     }};
     Vulkan::CmdSetViewport(frame.command_buffer, 0, viewports);
-    const std::array scissors{VkRect2D{.offset = {0, 0}, .extent = extent}};
+    const std::array scissors{VkRect2D{.offset = {.x = 0, .y = 0}, .extent = extent}};
     Vulkan::CmdSetScissor(frame.command_buffer, 0, scissors);
 
     ImGui_ImplVulkan_NewFrame();
@@ -662,7 +672,9 @@ void Application::PostTick()
 {
     auto& frame = state_->CurrentFrame();
     if (state_->diagnostic_runner_)
+    {
         state_->diagnostic_runner_->Advance(state_->completed_frames_ + 1, state_->GetElapsedTimeSeconds());
+    }
     const bool capture_without_ui = state_->diagnostic_runner_ && state_->diagnostic_runner_->HasQueuedCaptures(false);
 
     // ImGui's pipeline is color-only. End an application's depth-enabled pass and
@@ -693,7 +705,7 @@ void Application::PostTick()
         }};
         const VkRenderingInfo rendering_info{
             .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-            .renderArea = {.offset = {0, 0}, .extent = state_->swapchain_->GetExtent()},
+            .renderArea = {.offset = {.x = 0, .y = 0}, .extent = state_->swapchain_->GetExtent()},
             .layerCount = 1,
             .colorAttachmentCount = color_attachments.size(),
             .pColorAttachments = color_attachments.data(),

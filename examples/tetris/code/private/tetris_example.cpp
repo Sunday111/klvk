@@ -5,6 +5,7 @@
 #include <limits>
 #include <optional>
 #include <random>
+#include <utility>
 #include <variant>
 
 #include "klvk/application.hpp"
@@ -59,8 +60,8 @@ public:
 
     [[nodiscard]] constexpr bool IsInside(edt::Vec2i coordinate) const
     {
-        return coordinate.x() >= 0 && coordinate.y() >= 0 && static_cast<size_t>(coordinate.x()) < kSize.x() &&
-               static_cast<size_t>(coordinate.y()) < kSize.y();
+        return coordinate.x() >= 0 && coordinate.y() >= 0 && std::cmp_less(coordinate.x(), kSize.x()) &&
+               std::cmp_less(coordinate.y(), kSize.y());
     }
 
     [[nodiscard]] auto BlockGridCoords(const BlockPrefab& prefab, edt::Vec2i position) const
@@ -115,7 +116,9 @@ public:
         const auto old = RemoveBlock(id);
         klvk::ErrorHandling::Ensure(old.has_value(), "Failed to remove block from grid");
         if (const BlockId replacement_id = AddBlock(replacement); replacement_id.IsValid())
+        {
             return {replacement_id, true};
+        }
         const BlockId reverted = AddBlock(*old);
         klvk::ErrorHandling::Ensure(reverted.IsValid(), "Failed to restore block");
         return {reverted, false};
@@ -135,7 +138,7 @@ public:
         const auto iterator = blocks_.find(id);
         klvk::ErrorHandling::Ensure(iterator != blocks_.end(), "Block not found");
         Block replacement = iterator->second;
-        const size_t rotation = static_cast<size_t>(delta % 4 + 4);
+        const auto rotation = static_cast<size_t>(delta % 4 + 4);
         replacement.rotation_index = (replacement.rotation_index + rotation) % 4;
         return ReplaceBlock(id, replacement);
     }
@@ -143,10 +146,14 @@ public:
     [[nodiscard]] std::optional<size_t> FindFullRow(size_t first) const
     {
         for (size_t y = first; y != kSize.y(); ++y)
+        {
             if (std::ranges::all_of(
                     std::views::iota(size_t{0}, kSize.x()),
                     [&](size_t x) { return GetCell({x, y}).block_id.IsValid(); }))
+            {
                 return y;
+            }
+        }
         return {};
     }
 
@@ -267,7 +274,9 @@ class TetrisApp : public klvk::Application
         if (KeyReleased(KeyboardKey::E)) ++rotation;
         if (KeyReleased(KeyboardKey::Q)) --rotation;
         if (rotation != 0 && current_block_.IsValid())
+        {
             current_block_ = std::get<0>(grid_.RotateBlock(current_block_, rotation));
+        }
 
         auto instant_move = [&](KeyboardKey key, edt::Vec2i delta)
         {
@@ -291,9 +300,13 @@ class TetrisApp : public klvk::Application
             if (!success)
             {
                 if (const auto row = grid_.FindFullRow(0))
+                {
                     state_ = DeleteRowsState{.row_index = *row};
+                }
                 else
+                {
                     state_ = SpawnBlockState{};
+                }
             }
         }
 
@@ -324,6 +337,7 @@ class TetrisApp : public klvk::Application
             subdivision.size /= static_cast<float>(subdivisions);
             std::uniform_real_distribution<float> distance(0.f, subdivision.size.x() * 5.f);
             for (size_t x = 0; x != subdivisions; ++x)
+            {
                 for (size_t y = 0; y != subdivisions; ++y)
                 {
                     AnimatedRect& animation = animations_.emplace_back();
@@ -336,10 +350,13 @@ class TetrisApp : public klvk::Application
                     animation.finish.color.w() = 0;
                     animation.finish.center += edt::Vec2f{distance(random_), distance(random_)};
                 }
+            }
             ++state.next_x;
         }
         else
+        {
             state_ = MoveDeletedRowUp{.deleted_row = state.row_index, .current_row = state.row_index};
+        }
     }
 
     void Tick(SpawnBlockState&) {}
@@ -355,16 +372,22 @@ class TetrisApp : public klvk::Application
         if (next < TetrisGrid::kSize.y())
         {
             for (size_t x = 0; x != TetrisGrid::kSize.x(); ++x)
+            {
                 std::swap(grid_.GetCell({x, state.current_row}), grid_.GetCell({x, next}));
+            }
             ++state.current_row;
         }
         else if (const auto row = grid_.FindFullRow(state.deleted_row))
+        {
             state_ = DeleteRowsState{.row_index = *row};
+        }
         else
+        {
             state_ = SpawnBlockState{};
+        }
     }
 
-    Rect MakeCellRect(edt::Vec2<size_t> coordinate) const
+    [[nodiscard]] Rect MakeCellRect(edt::Vec2<size_t> coordinate) const
     {
         const edt::Vec2f size = edt::Vec2f{2.f, 2.f} / TetrisGrid::kSize.Cast<float>();
         return {
@@ -426,7 +449,7 @@ class TetrisApp : public klvk::Application
         renderer_->Render(edt::Mat3f::Identity());
     }
 
-    bool KeyReleased(KeyboardKey key) const
+    [[nodiscard]] bool KeyReleased(KeyboardKey key) const
     {
         const KeyboardState& state = keys_[static_cast<size_t>(key)];
         return state.changed && !state.is_down;

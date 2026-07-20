@@ -28,8 +28,8 @@ public:
     [[nodiscard]] Vec2f GetCursorPos() const noexcept { return cursor_; }
     [[nodiscard]] bool IsInInputMode() const noexcept { return input_mode_; }
 
-    Vec2<u32> GetSize() const { return {width_, height_}; }
-    Vec2f GetSize2f() const { return GetSize().Cast<float>(); }
+    [[nodiscard]] Vec2<u32> GetSize() const { return {width_, height_}; }
+    [[nodiscard]] Vec2f GetSize2f() const { return GetSize().Cast<float>(); }
 
     // Size of the surface to render to, in pixels. Differs from GetSize on high-dpi displays.
     [[nodiscard]] Vec2<u32> GetFramebufferSize() const noexcept;
@@ -46,7 +46,7 @@ public:
     void SetFramebufferSize(Vec2<u32> size);
     void SetTitle(const char* title);
 
-    bool IsKeyPressed(int key) const;
+    [[nodiscard]] bool IsKeyPressed(int key) const;
 
 private:
     friend class Application;

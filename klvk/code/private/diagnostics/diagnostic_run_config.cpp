@@ -115,16 +115,24 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
         ErrorHandling::Ensure(root.at("presentation").is_string(), "presentation must be a string");
         const std::string presentation = root.at("presentation").get<std::string>();
         if (presentation == "hidden")
+        {
             result.presentation = DiagnosticPresentation::Hidden;
+        }
         else if (presentation == "visible")
+        {
             result.presentation = DiagnosticPresentation::Visible;
+        }
         else if (presentation == "offscreen")
+        {
             ErrorHandling::ThrowWithMessage(
                 "Diagnostic presentation 'offscreen' is not available yet; use 'hidden' for the first-stage backend");
+        }
         else
+        {
             ErrorHandling::ThrowWithMessage(
                 "Unknown diagnostic presentation '{}' (expected 'visible' or 'hidden')",
                 presentation);
+        }
     }
 
     if (root.contains("framebuffer_size"))
@@ -152,7 +160,7 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
         ErrorHandling::Ensure(mode == "fixed", "Unknown diagnostic clock mode '{}' (expected 'fixed')", mode);
         ErrorHandling::Ensure(clock.contains("step_seconds"), "Fixed diagnostic clock requires clock.step_seconds");
         const double step = ReadNonNegativeNumber(clock.at("step_seconds"), "clock.step_seconds", false);
-        const float runtime_step = static_cast<float>(step);
+        const auto runtime_step = static_cast<float>(step);
         ErrorHandling::Ensure(
             std::isfinite(runtime_step) && runtime_step > 0.f && std::isfinite(1.f / runtime_step),
             "clock.step_seconds must have a finite positive float duration and reciprocal");
@@ -207,16 +215,20 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
     if (result.exit.frame.has_value())
     {
         for (const auto& capture : result.captures)
+        {
             ErrorHandling::Ensure(
                 capture.frame.has_value() && *capture.frame <= *result.exit.frame,
                 "A frame-based exit must not precede or use a different trigger domain from a capture");
+        }
     }
     if (result.exit.time_seconds.has_value())
     {
         for (const auto& capture : result.captures)
+        {
             ErrorHandling::Ensure(
                 capture.time_seconds.has_value() && *capture.time_seconds <= *result.exit.time_seconds,
                 "A time-based exit must not precede or use a different trigger domain from a capture");
+        }
     }
 
     if (root.contains("application"))
@@ -237,7 +249,9 @@ DiagnosticRunConfig LoadDiagnosticRunConfig(const std::filesystem::path& path)
     const auto callback = [&](int, nlohmann::json::parse_event_t event, nlohmann::json& parsed)
     {
         if (event == nlohmann::json::parse_event_t::object_start)
+        {
             object_keys.emplace_back();
+        }
         else if (event == nlohmann::json::parse_event_t::key)
         {
             const std::string key = parsed.get<std::string>();

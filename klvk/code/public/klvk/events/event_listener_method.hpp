@@ -32,7 +32,7 @@ public:
 
     static constexpr size_t kEventsCount = sizeof...(methods);
 
-    std::vector<const cppreflection::Type*> GetEventTypes() const override
+    [[nodiscard]] std::vector<const cppreflection::Type*> GetEventTypes() const override
     {
         return {cppreflection::GetTypeInfo<std::decay_t<detail::ArgByIndex<decltype(methods), 0>>>()...};
     }
@@ -75,7 +75,7 @@ private:
     }
 
 private:
-    std::array<CallbackFunction, kEventsCount> wrappers_;
+    std::array<CallbackFunction, kEventsCount> wrappers_{};
     ObjectType* object_ = nullptr;
 };
 }  // namespace klvk::events

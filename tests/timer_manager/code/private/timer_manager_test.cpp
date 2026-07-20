@@ -324,7 +324,9 @@ void TestHeapModel()
 
         std::vector<size_t> expected_calls;
         for (size_t index = 0; index != expected.size(); ++index)
+        {
             if (expected[index].active) expected_calls.push_back(index);
+        }
         std::ranges::sort(
             expected_calls,
             [&](size_t left, size_t right)
@@ -333,9 +335,11 @@ void TestHeapModel()
                 return expected[left].sequence < expected[right].sequence;
             });
         if (!expected_calls.empty())
+        {
             Ensure(
                 timers.GetNextFrameDeadline() == expected[expected_calls.front()].frame,
                 "randomized heap exposed an incorrect root deadline");
+        }
         Ensure(
             timers.Advance(Seconds(static_cast<double>(round)), 100 + round) == expected_calls.size(),
             "randomized heap dispatched the wrong number of timers");
@@ -375,8 +379,10 @@ void TestRelativeSchedulingAndValidation()
     EnsureThrows(
         [&]
         {
-            [[maybe_unused]] const TimerHandle invalid =
-                timers.ScheduleEvery(Seconds(1), [](const TimerEvent&) {}, static_cast<TimerMissedTickPolicy>(255));
+            [[maybe_unused]] const TimerHandle invalid = timers.ScheduleEvery(
+                Seconds(1),
+                [](const TimerEvent&) {},
+                static_cast<TimerMissedTickPolicy>(255));  // NOLINT(clang-analyzer-optin.core.EnumCastOutOfRange)
         },
         "invalid missed-tick policy was accepted");
     EnsureThrows(

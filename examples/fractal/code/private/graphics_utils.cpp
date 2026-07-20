@@ -51,9 +51,9 @@ void CmdSetGlStyleViewport(VkCommandBuffer command_buffer, const klvk::Viewport&
 
     const VkRect2D scissor{
         .offset =
-            {static_cast<i32>(viewport.position.x()),
-             static_cast<i32>(framebuffer.y() - viewport.position.y() - viewport.size.y())},
-        .extent = {viewport.size.x(), viewport.size.y()},
+            {.x = static_cast<i32>(viewport.position.x()),
+             .y = static_cast<i32>(framebuffer.y() - viewport.position.y() - viewport.size.y())},
+        .extent = {.width = viewport.size.x(), .height = viewport.size.y()},
     };
     klvk::Vulkan::CmdSetScissor(command_buffer, 0, std::span{&scissor, 1});
 }

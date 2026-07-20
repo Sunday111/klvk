@@ -48,7 +48,9 @@ std::filesystem::path GetExecutableDir()
         const ssize_t length = readlink("/proc/self/exe", path.data(), path.size());
         ErrorHandling::Ensure(length > 0, "Failed to read /proc/self/exe (readlink returned {})", length);
         if (static_cast<size_t>(length) < path.size())
+        {
             return std::filesystem::path(std::string_view(path.data(), static_cast<size_t>(length))).parent_path();
+        }
         path.resize(path.size() * 2);
     }
 }

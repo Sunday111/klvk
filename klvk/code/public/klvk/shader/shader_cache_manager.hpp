@@ -28,8 +28,8 @@ public:
         std::chrono::milliseconds flush_interval{2000};
     };
 
-    ShaderCacheManager(std::filesystem::path source_root, std::filesystem::path cache_root = {});
-    ShaderCacheManager(std::filesystem::path source_root, std::filesystem::path cache_root, Settings settings);
+    explicit ShaderCacheManager(const std::filesystem::path& source_root, std::filesystem::path cache_root = {});
+    ShaderCacheManager(const std::filesystem::path& source_root, std::filesystem::path cache_root, Settings settings);
     ShaderCacheManager(const ShaderCacheManager&) = delete;
     ShaderCacheManager(ShaderCacheManager&&) = delete;
     ~ShaderCacheManager();

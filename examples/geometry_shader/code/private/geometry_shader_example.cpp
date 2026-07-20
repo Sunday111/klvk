@@ -20,7 +20,8 @@
 #pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
 #endif
 
-enum class ShapeType : u32
+// The shader ABI stores this beside u32 padding; shrinking it would break Object's std430 layout.
+enum class ShapeType : u32  // NOLINT(performance-enum-size)
 {
     Quad = 0,
     Circle,
@@ -128,7 +129,7 @@ class GeometryShaderApp : public klvk::Application
         const size_t n = 1 + static_cast<size_t>(999 * std::abs(std::sin(GetTimeSeconds() / 4)));
         for (const size_t i : std::views::iota(size_t{0}, n))
         {
-            const float fi = static_cast<float>(i);
+            const auto fi = static_cast<float>(i);
             const float k = fi / static_cast<float>(n - 1);
             const float rotation_around_origin = edt::Math::DegToRad(15.f - 6 * k) * fi - spiral_rotation;
 

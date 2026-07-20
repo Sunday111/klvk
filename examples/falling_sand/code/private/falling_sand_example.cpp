@@ -1,9 +1,11 @@
+#include <fmt/format.h>
 #include <imgui.h>
 
 #include <EverydayTools/Math/Math.hpp>
 #include <EverydayTools/Template/TaggedIdentifier.hpp>
 #include <ass/fixed_bitset.hpp>
 #include <set>
+#include <string>
 
 #include "klvk/application.hpp"
 #include "klvk/camera/camera_2d.hpp"
@@ -174,11 +176,17 @@ class FallingSandApp : public klvk::Application
                         const Vec2i down_left = down_point + left;
                         const Vec2i down_right = down_point + right;
                         if (!grid_.HasParticleAt(down_point))
+                        {
                             destination = down_point;
+                        }
                         else if (!grid_.HasParticleAt(down_left))
+                        {
                             destination = down_left;
+                        }
                         else if (!grid_.HasParticleAt(down_right))
+                        {
                             destination = down_right;
+                        }
                     }
                     if (destination)
                     {
@@ -225,7 +233,9 @@ class FallingSandApp : public klvk::Application
 
             const GridRegion& container = grid_.containers.at(region_id);
             for (u32 y = 0; y != GridRegion::kSize.y(); ++y)
+            {
                 for (u32 x = 0; x != GridRegion::kSize.x(); ++x)
+                {
                     if (container.bits[y].Get(x))
                     {
                         const Vec2i particle = begin + Vec2u32{x, y}.Cast<int>();
@@ -234,18 +244,24 @@ class FallingSandApp : public klvk::Application
                             kRed,
                             Vec2f{kParticleSize, kParticleSize} * 0.5f);
                     }
+                }
+            }
         }
 
         for (const auto& [id, data] : grid_.particles)
+        {
             renderer_->Add(
                 data.position.Cast<float>() * kParticleSize,
                 data.color,
                 Vec2f{kParticleSize, kParticleSize} * 0.5f);
+        }
 
         HandleInput();
         renderer_->Render(transforms_.world_to_view);
-        ImGui::Text("Fps: %f", static_cast<double>(GetFramerate()));
-        ImGui::Text("Count: %zu", grid_.particles.size());
+        const std::string fps = fmt::format("Fps: {}", GetFramerate());
+        ImGui::TextUnformatted(fps.c_str());
+        const std::string count = fmt::format("Count: {}", grid_.particles.size());
+        ImGui::TextUnformatted(count.c_str());
     }
 
     void HandleInput()
@@ -281,7 +297,9 @@ class FallingSandApp : public klvk::Application
             for (Vec2i position = begin; position.y() != end.y(); ++position.y())
             {
                 for (position.x() = begin.x(); position.x() != end.x(); ++position.x())
+                {
                     if (!grid_.HasParticleAt(position)) grid_.AddParticleAt({.color = kRed, .position = position});
+                }
             }
         }
     }

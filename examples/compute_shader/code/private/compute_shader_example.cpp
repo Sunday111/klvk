@@ -1,7 +1,9 @@
+#include <fmt/format.h>
 #include <imgui.h>
 
 #include <EverydayTools/Math/Math.hpp>
 #include <optional>
+#include <string>
 
 #include "klvk/application.hpp"
 #include "klvk/camera/camera_3d.hpp"
@@ -123,12 +125,16 @@ class ComputeShaderApp : public klvk::Application
         const Vec3f delta = Vec3f{} + 2.f / static_cast<float>(side);
         u32 index = 0;
         for (u32 x = 0; x != side && index != kParticleCount; ++x)
+        {
             for (u32 y = 0; y != side && index != kParticleCount; ++y)
+            {
                 for (u32 z = 0; z != side && index != kParticleCount; ++z)
                 {
                     const Vec3f position = Vec3<u32>{x, y, z}.Cast<float>() * delta - 1.f;
                     particles[index++].position = Vec4f(position, 1.f);
                 }
+            }
+        }
         return particles;
     }
 
@@ -242,9 +248,11 @@ class ComputeShaderApp : public klvk::Application
         }
         std::array<Vec4f, 2> positions{};
         for (size_t i = 0; i != bodies_.size(); ++i)
+        {
             positions[i] = Vec4f(
                 edt::Math::TransformPos(bodies_[i].rotation.ToMatrix(), Vec3f{bodies_[i].orbit_radius, 0.f, 0.f}),
                 1.f);
+        }
         return positions;
     }
 
@@ -337,7 +345,8 @@ class ComputeShaderApp : public klvk::Application
         ImGui::Begin("Settings");
         camera_.Widget();
         ImGui::SliderFloat("Camera speed", &camera_speed_, 0.1f, 20.f);
-        ImGui::Text("Framerate: %.1f", static_cast<double>(GetFramerate()));
+        const std::string framerate = fmt::format("Framerate: {:.1f}", GetFramerate());
+        ImGui::TextUnformatted(framerate.c_str());
         ImGui::SliderFloat("Time step", &time_step_, 0.f, 0.0001f, "%.6f");
         ImGui::SliderInt("Time steps per frame", &time_steps_per_frame_, 0, 40);
         ImGui::SliderFloat("Particle alpha", &particle_alpha_, 0.0001f, 1.f, "%.4f");
@@ -395,7 +404,9 @@ class ComputeShaderApp : public klvk::Application
         Vec3f delta = camera_.GetForwardAxis() * static_cast<float>(forward) +
                       camera_.GetRightAxis() * static_cast<float>(right) + camera_.GetUpAxis() * static_cast<float>(up);
         if (delta.SquaredLength() > 0.f)
+        {
             camera_.SetEye(camera_.GetEye() + delta * camera_speed_ * GetLastFrameDurationSeconds());
+        }
     }
 
     void OnMouseMove(const klvk::events::OnMouseMove& event)

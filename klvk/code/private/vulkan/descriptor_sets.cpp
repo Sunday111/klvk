@@ -47,9 +47,8 @@ DescriptorSets DescriptorSets::Builder::Build(u32 set_count)
     for (const VkDescriptorSetLayoutBinding& b : bindings_)
     {
         const u32 needed = b.descriptorCount * set_count;
-        auto it = std::find_if(
-            pool_sizes.begin(),
-            pool_sizes.end(),
+        auto it = std::ranges::find_if(
+            pool_sizes,
             [&](const VkDescriptorPoolSize& size) { return size.type == b.descriptorType; });
         if (it == pool_sizes.end())
         {
@@ -101,10 +100,8 @@ DescriptorSets::DescriptorSets(
 
 VkDescriptorType DescriptorSets::TypeOfBinding(u32 binding) const
 {
-    const auto it = std::find_if(
-        bindings_.begin(),
-        bindings_.end(),
-        [&](const VkDescriptorSetLayoutBinding& b) { return b.binding == binding; });
+    const auto it =
+        std::ranges::find_if(bindings_, [&](const VkDescriptorSetLayoutBinding& b) { return b.binding == binding; });
     ErrorHandling::Ensure(it != bindings_.end(), "DescriptorSets: unknown binding {}", binding);
     return it->descriptorType;
 }

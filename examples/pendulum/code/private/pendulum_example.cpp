@@ -110,6 +110,7 @@ class PendulumApp : public klvk::Application
         white_texture_ = klvk::Texture::CreateR8(GetDeviceContext(), {1, 1}, white);
         std::array<u8, kCircleTextureSize * kCircleTextureSize> circle{};
         for (u32 y = 0; y != kCircleTextureSize; ++y)
+        {
             for (u32 x = 0; x != kCircleTextureSize; ++x)
             {
                 const Vec2f point{
@@ -118,6 +119,7 @@ class PendulumApp : public klvk::Application
                 circle[y * kCircleTextureSize + x] =
                     static_cast<u8>(std::clamp((1.02f - point.Length()) * 2550.f, 0.f, 255.f));
             }
+        }
         circle_texture_ = klvk::Texture::CreateR8(GetDeviceContext(), {kCircleTextureSize, kCircleTextureSize}, circle);
         line_renderer_ = std::make_unique<klvk::InstancedSpriteRenderer2d>(*this, *white_texture_);
         circle_renderer_ = std::make_unique<klvk::InstancedSpriteRenderer2d>(*this, *circle_texture_);
@@ -142,7 +144,7 @@ class PendulumApp : public klvk::Application
     {
         klvk::Application::Tick();
         ImGui::SliderFloat("Time scale", &time_scale_, 0.1f, 10.f);
-        const double target_time = static_cast<double>(GetTimeSeconds() * time_scale_);
+        const auto target_time = static_cast<double>(GetTimeSeconds() * time_scale_);
         while (pendulums_[0].current_time < target_time)
         {
             pendulums_[0].TimeStep(0.0001);
@@ -179,9 +181,13 @@ class PendulumApp : public klvk::Application
 
         constexpr size_t max_points = 3000;
         if (trail_.size() > max_points)
+        {
             trail_.erase(trail_.begin(), trail_.begin() + static_cast<ptrdiff_t>(trail_.size() - max_points));
+        }
         for (size_t index = 1; auto& point : trail_)
+        {
             point.color.w() = static_cast<float>(index++) / static_cast<float>(trail_.size());
+        }
         if (trail_.size() > 10)
         {
             klvk::CurveRenderer2d::BuildVertices(

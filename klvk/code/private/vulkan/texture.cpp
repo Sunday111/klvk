@@ -35,7 +35,7 @@ std::unique_ptr<Texture> Texture::CreateR8(DeviceContext& context, edt::Vec2<u32
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
         .format = format,
-        .extent = {size.x(), size.y(), 1},
+        .extent = {.width = size.x(), .height = size.y(), .depth = 1},
         .mipLevels = 1,
         .arrayLayers = 1,
         .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -84,7 +84,7 @@ std::unique_ptr<Texture> Texture::CreateR8(DeviceContext& context, edt::Vec2<u32
 
             const std::array regions{VkBufferImageCopy{
                 .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1},
-                .imageExtent = {size.x(), size.y(), 1},
+                .imageExtent = {.width = size.x(), .height = size.y(), .depth = 1},
             }};
             Vulkan::CmdCopyBufferToImageNE(
                 command_buffer,

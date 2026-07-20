@@ -105,8 +105,12 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, VkSwapchainKHR old_swapc
     else
     {
         extent_ = {
-            std::clamp(framebuffer_size.x(), capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
-            std::clamp(framebuffer_size.y(), capabilities.minImageExtent.height, capabilities.maxImageExtent.height),
+            .width =
+                std::clamp(framebuffer_size.x(), capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+            .height = std::clamp(
+                framebuffer_size.y(),
+                capabilities.minImageExtent.height,
+                capabilities.maxImageExtent.height),
         };
     }
 
@@ -144,11 +148,11 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, VkSwapchainKHR old_swapc
 
     image_views_.clear();
     image_views_.reserve(images_.size());
-    for (size_t index = 0; index != images_.size(); ++index)
+    for (auto& image : images_)
     {
         const VkImageViewCreateInfo view_info{
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-            .image = images_[index],
+            .image = image,
             .viewType = VK_IMAGE_VIEW_TYPE_2D,
             .format = format_.format,
             .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
@@ -165,7 +169,7 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, VkSwapchainKHR old_swapc
             .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
             .imageType = VK_IMAGE_TYPE_2D,
             .format = kDepthFormat,
-            .extent = {extent_.width, extent_.height, 1},
+            .extent = {.width = extent_.width, .height = extent_.height, .depth = 1},
             .mipLevels = 1,
             .arrayLayers = 1,
             .samples = VK_SAMPLE_COUNT_1_BIT,

@@ -54,7 +54,7 @@ public:
 
     void DrawGUI();
 
-    Vec3f LerpColors(Vec3f a, Vec3f b, float t) const;
+    [[nodiscard]] Vec3f LerpColors(Vec3f a, Vec3f b, float t) const;
 
     template <typename Callback>
     void ComputeColors(size_t n, Callback cb) const

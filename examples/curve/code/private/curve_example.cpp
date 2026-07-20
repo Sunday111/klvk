@@ -65,20 +65,20 @@ class CurveApp : public klvk::Application
         }
 
         secondary_.points = {
-            klvk::CurveRenderer2d::ControlPoint{{-1.f, -1.f}, {1.f, 0.f, 0.f, 1.f}},
-            klvk::CurveRenderer2d::ControlPoint{{0.f, 1.f}, {0.f, 1.f, 0.f, 0.5f}},
-            klvk::CurveRenderer2d::ControlPoint{{1.f, -1.f}, {0.f, 0.f, 1.f, 0.f}},
+            klvk::CurveRenderer2d::ControlPoint{.position = {-1.f, -1.f}, .color = {1.f, 0.f, 0.f, 1.f}},
+            klvk::CurveRenderer2d::ControlPoint{.position = {0.f, 1.f}, .color = {0.f, 1.f, 0.f, 0.5f}},
+            klvk::CurveRenderer2d::ControlPoint{.position = {1.f, -1.f}, .color = {0.f, 0.f, 1.f, 0.f}},
         };
         secondary_.thickness = 20.f;
 
         extreme_.points = {
-            klvk::CurveRenderer2d::ControlPoint{{-0.8f, 0.6f}, {1.f, 1.f, 0.f, 0.3f}},
-            klvk::CurveRenderer2d::ControlPoint{{-0.4f, 0.6f}, {1.f, 1.f, 0.f, 0.3f}},
-            klvk::CurveRenderer2d::ControlPoint{{0.28f, 0.6f}, {1.f, 1.f, 0.f, 0.3f}},
-            klvk::CurveRenderer2d::ControlPoint{{0.42f, 0.5f}, {1.f, 1.f, 0.f, 0.3f}},
-            klvk::CurveRenderer2d::ControlPoint{{0.28f, 0.4f}, {1.f, 1.f, 0.f, 0.3f}},
-            klvk::CurveRenderer2d::ControlPoint{{-0.4f, 0.4f}, {1.f, 1.f, 0.f, 0.3f}},
-            klvk::CurveRenderer2d::ControlPoint{{-0.8f, 0.4f}, {1.f, 1.f, 0.f, 0.3f}},
+            klvk::CurveRenderer2d::ControlPoint{.position = {-0.8f, 0.6f}, .color = {1.f, 1.f, 0.f, 0.3f}},
+            klvk::CurveRenderer2d::ControlPoint{.position = {-0.4f, 0.6f}, .color = {1.f, 1.f, 0.f, 0.3f}},
+            klvk::CurveRenderer2d::ControlPoint{.position = {0.28f, 0.6f}, .color = {1.f, 1.f, 0.f, 0.3f}},
+            klvk::CurveRenderer2d::ControlPoint{.position = {0.42f, 0.5f}, .color = {1.f, 1.f, 0.f, 0.3f}},
+            klvk::CurveRenderer2d::ControlPoint{.position = {0.28f, 0.4f}, .color = {1.f, 1.f, 0.f, 0.3f}},
+            klvk::CurveRenderer2d::ControlPoint{.position = {-0.4f, 0.4f}, .color = {1.f, 1.f, 0.f, 0.3f}},
+            klvk::CurveRenderer2d::ControlPoint{.position = {-0.8f, 0.4f}, .color = {1.f, 1.f, 0.f, 0.3f}},
         };
         extreme_.thickness = 120.f;
         extreme_.segment_pixel_length = 100.f;

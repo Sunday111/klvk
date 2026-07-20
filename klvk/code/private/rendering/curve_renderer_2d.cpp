@@ -169,9 +169,9 @@ void CurveRenderer2d::BuildVertices(
     out.reserve((samples.size() - 1) * 12);
     auto emit_triangle = [&](Vec2f a, Vec2f b, Vec2f c, Vec4f ca, Vec4f cb, Vec4f cc)
     {
-        out.push_back({a, PackColor(ca)});
-        out.push_back({b, PackColor(cb)});
-        out.push_back({c, PackColor(cc)});
+        out.push_back({.position = a, .color = PackColor(ca)});
+        out.push_back({.position = b, .color = PackColor(cb)});
+        out.push_back({.position = c, .color = PackColor(cc)});
     };
     for (size_t i = 0; i + 1 < samples.size(); ++i)
     {

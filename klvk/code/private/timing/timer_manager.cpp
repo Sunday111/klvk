@@ -149,7 +149,9 @@ struct TimerManager::State
             if (left.time_deadline != right.time_deadline) return left.time_deadline < right.time_deadline;
         }
         else if (left.frame_deadline != right.frame_deadline)
+        {
             return left.frame_deadline < right.frame_deadline;
+        }
         return left.sequence < right.sequence;
     }
 
@@ -208,9 +210,13 @@ struct TimerManager::State
         heap[index] = replacement;
         slots[replacement].heap_index = static_cast<u32>(index);
         if (index != 0 && ComesBefore(replacement, heap[(index - 1) / 2]))
+        {
             SiftUp(heap, index);
+        }
         else
+        {
             SiftDown(heap, index);
+        }
     }
 
     [[nodiscard]] TimerHandle MakeHandle(u32 slot_index) const
@@ -342,7 +348,9 @@ struct TimerManager::State
             if (left.time_deadline != right.time_deadline) return left.time_deadline < right.time_deadline;
         }
         else if (left.frame_deadline != right.frame_deadline)
+        {
             return left.frame_deadline < right.frame_deadline;
+        }
         return left.timer_sequence < right.timer_sequence;
     }
 
@@ -439,7 +447,9 @@ struct TimerManager::State
                 ReleaseSlot(entry.slot);
             }
             else if (slot.state == SlotState::Pending)
+            {
                 ReleaseSlot(entry.slot);
+            }
         }
     }
 
@@ -528,11 +538,15 @@ struct TimerManager::State
             .occurrence = slot.occurrence + offset,
             .missed_occurrences = coalesced ? plan.additional_occurrences : 0};
         if (slot.domain == TimerDomain::Time)
+        {
             result.scheduled_time = coalesced
                                         ? plan.latest_time
                                         : AnchoredTime(slot.time_anchor, slot.time_interval, slot.occurrence + offset);
+        }
         else
+        {
             result.scheduled_frame = coalesced ? plan.latest_frame : slot.frame_deadline + slot.frame_interval * offset;
+        }
         return result;
     }
 
@@ -549,9 +563,13 @@ struct TimerManager::State
         slot.callback = std::move(callback);
         slot.occurrence += plan.additional_occurrences + 1;
         if (slot.domain == TimerDomain::Time)
+        {
             slot.time_deadline = plan.next_time;
+        }
         else
+        {
             slot.frame_deadline = plan.next_frame;
+        }
 
         const bool remains_due = slot.missed_tick_policy == TimerMissedTickPolicy::InvokeAll &&
                                  (slot.domain == TimerDomain::Time ? slot.time_deadline <= current_time
@@ -746,9 +764,13 @@ void TimerManager::Clear() noexcept
     {
         State::Slot& slot = state_->slots[slot_index];
         if (slot.state == State::SlotState::Dispatching)
+        {
             slot.state = State::SlotState::CancelRequested;
+        }
         else if (slot.state != State::SlotState::Free && slot.state != State::SlotState::CancelRequested)
+        {
             state_->ReleaseSlot(slot_index);
+        }
     }
 }
 
@@ -807,17 +829,25 @@ u64 TimerManager::Advance(TimerDuration elapsed, u64 frame, u64 callback_budget)
 
             TimerDomain domain = TimerDomain::Time;
             if (time_due.empty())
+            {
                 domain = TimerDomain::Frame;
+            }
             else if (
                 !frame_due.empty() && (frame_due.front().ready_order < time_due.front().ready_order ||
                                        (frame_due.front().ready_order == time_due.front().ready_order &&
                                         frame_due.front().timer_sequence < time_due.front().timer_sequence)))
+            {
                 domain = TimerDomain::Frame;
+            }
 
             if (domain == TimerDomain::Time)
+            {
                 current_entry = state_->PopDue(time_due, domain);
+            }
             else
+            {
                 current_entry = state_->PopDue(frame_due, domain);
+            }
 
             const u64 remaining_budget = callback_budget - invocation_count;
             const u64 dispatch_budget = time_due.empty() && frame_due.empty() ? remaining_budget : 1;
@@ -840,9 +870,13 @@ u64 TimerManager::Advance(TimerDuration elapsed, u64 frame, u64 callback_budget)
                                                  : slot.frame_deadline <= state_->current_frame;
                     ErrorHandling::Ensure(remains_due, "Pending catch-up timer has a future deadline");
                     if (slot.domain == TimerDomain::Time)
+                    {
                         state_->PushDue(time_due, state_->MakeDueEntry(current_entry.slot), slot.domain);
+                    }
                     else
+                    {
                         state_->PushDue(frame_due, state_->MakeDueEntry(current_entry.slot), slot.domain);
+                    }
                 }
             }
             current_entry = {};
@@ -859,7 +893,9 @@ u64 TimerManager::Advance(TimerDuration elapsed, u64 frame, u64 callback_budget)
             if (slot.generation == current_entry.generation &&
                 (slot.state == State::SlotState::Pending || slot.state == State::SlotState::Dispatching ||
                  slot.state == State::SlotState::CancelRequested))
+            {
                 state_->ReleaseSlot(current_entry.slot);
+            }
         }
         try
         {

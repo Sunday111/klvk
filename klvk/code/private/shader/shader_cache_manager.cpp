@@ -10,6 +10,7 @@
 #include <shaderc/shaderc.hpp>
 #include <span>
 #include <sstream>
+#include <utility>
 
 #include "klvk/error_handling.hpp"
 #include "klvk/filesystem/filesystem.hpp"
@@ -101,16 +102,16 @@ u64 MakeKey(std::string_view source, shaderc_shader_kind kind, u32 spirv_version
 
 }  // namespace
 
-ShaderCacheManager::ShaderCacheManager(std::filesystem::path source_root, std::filesystem::path cache_root)
-    : ShaderCacheManager(std::move(source_root), std::move(cache_root), Settings{})
+ShaderCacheManager::ShaderCacheManager(const std::filesystem::path& source_root, std::filesystem::path cache_root)
+    : ShaderCacheManager(source_root, std::move(cache_root), Settings{})
 {
 }
 
 ShaderCacheManager::ShaderCacheManager(
-    std::filesystem::path source_root,
+    const std::filesystem::path& source_root,
     std::filesystem::path cache_root,
     Settings settings)
-    : source_root_(std::filesystem::weakly_canonical(std::move(source_root))),
+    : source_root_(std::filesystem::weakly_canonical(source_root)),
       cache_root_(std::move(cache_root)),
       settings_(settings)
 {
@@ -124,7 +125,7 @@ ShaderCacheManager::ShaderCacheManager(
 ShaderCacheManager::~ShaderCacheManager()
 {
     {
-        std::lock_guard lock(mutex_);
+        std::scoped_lock lock(mutex_);
         stopping_ = true;
     }
     condition_.notify_all();
@@ -188,7 +189,7 @@ void ShaderCacheManager::WorkerMain()
             next_flush = std::chrono::steady_clock::now() + settings_.flush_interval;
         }
 
-        std::lock_guard lock(mutex_);
+        std::scoped_lock lock(mutex_);
         // Shutdown makes one final best-effort flush. A read-only/full disk must
         // never turn application destruction into an infinite join.
         if (stopping_ && jobs_.empty()) break;
@@ -202,7 +203,7 @@ void ShaderCacheManager::Compile(const CompileJob& job)
         if (auto cached = TryLoad(job.key))
         {
             {
-                std::lock_guard lock(mutex_);
+                std::scoped_lock lock(mutex_);
                 job.entry->spirv = std::move(cached);
                 job.entry->state = EntryState::Ready;
             }
@@ -233,7 +234,7 @@ void ShaderCacheManager::Compile(const CompileJob& job)
         auto words = std::make_shared<const std::vector<u32>>(result.cbegin(), result.cend());
         ErrorHandling::Ensure(!words->empty() && words->front() == kSpirvMagic, "Compiler returned invalid SPIR-V");
         {
-            std::lock_guard lock(mutex_);
+            std::scoped_lock lock(mutex_);
             job.entry->spirv = std::move(words);
             job.entry->generation = next_generation_++;
             job.entry->state = EntryState::Ready;
@@ -241,7 +242,7 @@ void ShaderCacheManager::Compile(const CompileJob& job)
     }
     catch (...)
     {
-        std::lock_guard lock(mutex_);
+        std::scoped_lock lock(mutex_);
         job.entry->failure = std::current_exception();
         job.entry->state = EntryState::Failed;
     }
@@ -259,11 +260,14 @@ void ShaderCacheManager::FlushDirtyEntries()
     };
     std::vector<Snapshot> snapshots;
     {
-        std::lock_guard lock(mutex_);
+        std::scoped_lock lock(mutex_);
         for (const auto& [key, entry] : entries_)
         {
             if (entry->state == EntryState::Ready && entry->spirv && entry->generation != entry->persisted_generation)
-                snapshots.push_back({key, entry->generation, entry->spirv, entry});
+            {
+                snapshots.push_back(
+                    {.key = key, .generation = entry->generation, .spirv = entry->spirv, .entry = entry});
+            }
         }
     }
 
@@ -301,9 +305,11 @@ void ShaderCacheManager::FlushDirtyEntries()
                 ErrorHandling::Ensure(!file.fail(), "Failed to close shader cache file '{}'", temporary.string());
             }
             Filesystem::InstallFileAtomically(temporary, destination);
-            std::lock_guard lock(mutex_);
+            std::scoped_lock lock(mutex_);
             if (snapshot.entry->generation == snapshot.generation)
+            {
                 snapshot.entry->persisted_generation = snapshot.generation;
+            }
         }
         catch (const std::exception& exception)
         {
@@ -323,17 +329,20 @@ std::shared_ptr<const std::vector<u32>> ShaderCacheManager::TryLoad(u64 key) con
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) return {};
     const std::streamsize size = file.tellg();
-    if (size < static_cast<std::streamsize>(sizeof(CacheHeader)) ||
-        size > static_cast<std::streamsize>(sizeof(CacheHeader) + kMaximumSpirvBytes))
+    if (std::cmp_less(size, sizeof(CacheHeader)) || std::cmp_greater(size, sizeof(CacheHeader) + kMaximumSpirvBytes))
+    {
         return {};
+    }
     file.seekg(0);
     CacheHeader header{};
     file.read(reinterpret_cast<char*>(&header), sizeof(header));
     if (!file || header.magic != kCacheMagic || header.format_version != kCacheFormatVersion || header.key != key ||
         header.spirv_version != compiler_spirv_version_ || header.spirv_revision != compiler_spirv_revision_ ||
         header.word_count == 0 || header.word_count > kMaximumSpirvBytes / sizeof(u32) ||
-        size != static_cast<std::streamsize>(sizeof(CacheHeader) + header.word_count * sizeof(u32)))
+        std::cmp_not_equal(size, sizeof(CacheHeader) + header.word_count * sizeof(u32)))
+    {
         return {};
+    }
     auto words = std::make_shared<std::vector<u32>>(static_cast<size_t>(header.word_count));
     file.read(reinterpret_cast<char*>(words->data()), static_cast<std::streamsize>(words->size() * sizeof(u32)));
     if (!file || words->front() != kSpirvMagic || HashWords(*words) != header.payload_hash) return {};

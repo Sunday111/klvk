@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <utility>
 
 #include "GLFW/glfw3.h"
 #include "klvk/application.hpp"
@@ -51,7 +52,7 @@ void Window::SetFramebufferSize(Vec2<u32> size)
         int framebuffer_width = 0;
         int framebuffer_height = 0;
         glfwGetFramebufferSize(window_, &framebuffer_width, &framebuffer_height);
-        if (framebuffer_width == static_cast<int>(size.x()) && framebuffer_height == static_cast<int>(size.y())) return;
+        if (std::cmp_equal(framebuffer_width, size.x()) && std::cmp_equal(framebuffer_height, size.y())) return;
 
         int window_width = 0;
         int window_height = 0;

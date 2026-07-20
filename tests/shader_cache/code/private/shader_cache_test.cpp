@@ -27,7 +27,9 @@ std::vector<std::filesystem::path> CacheFiles(const std::filesystem::path& direc
 {
     std::vector<std::filesystem::path> result;
     for (const auto& entry : std::filesystem::directory_iterator(directory))
+    {
         if (entry.is_regular_file() && entry.path().extension() == ".cache") result.push_back(entry.path());
+    }
     return result;
 }
 
@@ -47,10 +49,14 @@ void Run()
         klvk::ShaderCacheManager manager(sources, cache, {.flush_interval = std::chrono::milliseconds(20)});
         std::vector<std::future<std::shared_ptr<const std::vector<u32>>>> futures;
         for (size_t i = 0; i != 16; ++i)
+        {
             futures.push_back(std::async(std::launch::async, [&] { return manager.GetOrCompile(shader); }));
+        }
         expected = futures.front().get();
         for (size_t i = 1; i != futures.size(); ++i)
+        {
             Ensure(futures[i].get() == expected, "concurrent requests were not coalesced");
+        }
 
         Write(shader, "#version 450\nthis is not GLSL\n");
         std::atomic<size_t> failures = 0;

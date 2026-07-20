@@ -54,7 +54,7 @@ size_t CheckedPixelCount(VkExtent2D extent)
 }  // namespace
 
 DiagnosticRunner::DiagnosticRunner(
-    DiagnosticRunConfig config,
+    const DiagnosticRunConfig& config,
     const std::filesystem::path& executable_directory,
     size_t frames_in_flight,
     events::EventManager& event_manager)
@@ -80,7 +80,9 @@ DiagnosticRunner::DiagnosticRunner(
         captures_.push_back({.config = std::move(capture)});
     }
     for (size_t capture_index = 0; capture_index != captures_.size(); ++capture_index)
+    {
         ScheduleCapture(capture_index, config.exit.after_last_capture);
+    }
     ScheduleQuit(config.exit);
 
     event_listener_ = events::EventListenerMethodCallbacks<&DiagnosticRunner::OnCaptureDue>::CreatePtr(this);
@@ -100,7 +102,9 @@ void DiagnosticRunner::ScheduleCapture(size_t capture_index, bool quit_after_las
     {
         event_manager_.Emit(events::DiagnosticCaptureDue{.capture_index = capture_index});
         if (quit_after_last_capture && triggered_capture_count_ == captures_.size())
+        {
             event_manager_.Emit(events::OnApplicationQuitRequested{});
+        }
     };
     const DiagnosticCaptureConfig& capture = captures_[capture_index].config;
     if (capture.frame.has_value())
@@ -331,7 +335,7 @@ void DiagnosticRunner::ProcessAllCompleted()
 
 void DiagnosticRunner::EnsureComplete() const
 {
-    const size_t missing =
+    const auto missing =
         static_cast<size_t>(std::ranges::count_if(captures_, [](const Capture& capture) { return !capture.recorded; }));
     ErrorHandling::Ensure(
         missing == 0,

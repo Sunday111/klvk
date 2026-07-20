@@ -32,7 +32,9 @@ IEventListener* EventManager::AddEventListener(IEventListener& listener)
     catch (...)
     {
         for (const cppreflection::Type* type : iterator->second.registered_types)
+        {
             StopListeningEventType(&listener, type);
+        }
         all_listeners_.erase(iterator);
         throw;
     }

@@ -24,7 +24,7 @@ class DiagnosticRunner
 {
 public:
     DiagnosticRunner(
-        DiagnosticRunConfig config,
+        const DiagnosticRunConfig& config,
         const std::filesystem::path& executable_directory,
         size_t frames_in_flight,
         events::EventManager& event_manager);

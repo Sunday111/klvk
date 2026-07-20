@@ -222,7 +222,7 @@ class SimpleLitCubeApp : public klvk::Application
         {
             const auto delta = (event.current - event.previous) * sensitivity;
             const auto [yaw, pitch, roll] = camera_.GetRotation();
-            camera_.SetRotation({yaw + delta.x(), pitch + delta.y(), roll});
+            camera_.SetRotation({.yaw = yaw + delta.x(), .pitch = pitch + delta.y(), .roll = roll});
         }
     }
 
