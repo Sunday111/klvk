@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "curve",
+      "target": "klvk_curve_example",
+      "config": "configs/rendering.json"
+    },
+    {
+      "name": "falling_sand_input",
+      "target": "klvk_falling_sand_example",
+      "config": "configs/falling_sand_input.json"
+    },
+    {
+      "name": "fractal",
+      "target": "klvk_fractal_example",
+      "config": "configs/rendering.json"
+    },
+    {
+      "name": "geometry_shader",
+      "target": "klvk_geometry_shader_example",
+      "config": "configs/rendering.json"
+    },
+    {
+      "name": "minimal_quad",
+      "target": "klvk_minimal_quad_example",
+      "config": "configs/rendering.json"
+    },
+    {
+      "name": "render_to_texture",
+      "target": "klvk_render_to_texture_example",
+      "config": "configs/rendering.json"
+    },
+    {
+      "name": "simple_lit_cube",
+      "target": "klvk_simple_lit_cube_example",
+      "config": "configs/rendering.json"
+    }
+  ]
+}

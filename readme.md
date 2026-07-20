@@ -109,6 +109,9 @@ With yae, pass application arguments after `--`:
 yae run klvk_painter2d_example -- --klvk-diagnostics /tmp/painter-capture.json
 ```
 
+For repeatable main-versus-branch rendering checks, see the
+[diagnostic smoke-test suite](diagnostics/smoke/readme.md).
+
 ## Vulkan API wrappers
 
 `klvk::Vulkan` provides three forms for Vulkan calls that return `VkResult`:
