@@ -71,6 +71,14 @@ float ReadFiniteFloat(const nlohmann::json& value, std::string_view name)
     return result;
 }
 
+std::optional<DiagnosticPresentation> PresentationFromName(std::string_view name) noexcept
+{
+    if (name == "visible") return DiagnosticPresentation::Visible;
+    if (name == "hidden") return DiagnosticPresentation::Hidden;
+    if (name == "offscreen") return DiagnosticPresentation::Offscreen;
+    return std::nullopt;
+}
+
 std::optional<u64> ReadOptionalFrame(const nlohmann::json& object, std::string_view prefix)
 {
     if (!object.contains("frame")) return std::nullopt;
@@ -328,24 +336,12 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
     {
         ErrorHandling::Ensure(root.at("presentation").is_string(), "presentation must be a string");
         const std::string presentation = root.at("presentation").get<std::string>();
-        if (presentation == "hidden")
-        {
-            result.presentation = DiagnosticPresentation::Hidden;
-        }
-        else if (presentation == "visible")
-        {
-            result.presentation = DiagnosticPresentation::Visible;
-        }
-        else if (presentation == "offscreen")
-        {
-            result.presentation = DiagnosticPresentation::Offscreen;
-        }
-        else
-        {
-            ErrorHandling::ThrowWithMessage(
-                "Unknown diagnostic presentation '{}' (expected 'visible', 'hidden', or 'offscreen')",
-                presentation);
-        }
+        const auto parsed = PresentationFromName(presentation);
+        ErrorHandling::Ensure(
+            parsed.has_value(),
+            "Unknown diagnostic presentation '{}' (expected 'visible', 'hidden', or 'offscreen')",
+            presentation);
+        result.presentation = *parsed;
     }
 
     if (root.contains("framebuffer_size"))
@@ -591,6 +587,7 @@ DiagnosticCommandLine ParseDiagnosticCommandLine(std::span<const std::string_vie
 {
     constexpr std::string_view kConfigOption = "--klvk-diagnostics";
     constexpr std::string_view kRecordOption = "--klvk-record-input";
+    constexpr std::string_view kPresentationOption = "--klvk-presentation";
 
     DiagnosticCommandLine result;
     for (size_t index = 0; index != arguments.size(); ++index)
@@ -603,6 +600,21 @@ DiagnosticCommandLine ParseDiagnosticCommandLine(std::span<const std::string_vie
         if (const auto value = MatchOption(arguments, index, kRecordOption))
         {
             AssignOnce(result.input_record_path, *value, kRecordOption);
+            continue;
+        }
+        if (const auto value = MatchOption(arguments, index, kPresentationOption))
+        {
+            ErrorHandling::Ensure(
+                !result.presentation.has_value(),
+                "{} was specified more than once",
+                kPresentationOption);
+            const auto parsed = PresentationFromName(*value);
+            ErrorHandling::Ensure(
+                parsed.has_value(),
+                "Unknown value '{}' for {} (expected 'visible', 'hidden', or 'offscreen')",
+                *value,
+                kPresentationOption);
+            result.presentation = *parsed;
             continue;
         }
         ErrorHandling::Ensure(

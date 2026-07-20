@@ -219,6 +219,18 @@ void TestCommandLineParsing()
     const auto none = parse({"--seed", "7"});
     Ensure(!none.config_path.has_value() && !none.input_record_path.has_value(), "application arguments were consumed");
 
+    // The presentation override lets one recording replay offscreen in CI and in
+    // a window while debugging, without editing the file.
+    const auto visible = parse({"--klvk-diagnostics", "a.json", "--klvk-presentation", "visible"});
+    Ensure(visible.presentation == klvk::DiagnosticPresentation::Visible, "presentation override was not parsed");
+    const auto offscreen = parse({"--klvk-presentation=offscreen"});
+    Ensure(offscreen.presentation == klvk::DiagnosticPresentation::Offscreen, "joined presentation was not parsed");
+    Ensure(!none.presentation.has_value(), "a presentation appeared without the option");
+    EnsureThrows([&] { (void)parse({"--klvk-presentation", "windowed"}); }, "an unknown presentation was accepted");
+    EnsureThrows(
+        [&] { (void)parse({"--klvk-presentation", "visible", "--klvk-presentation", "hidden"}); },
+        "a repeated presentation was accepted");
+
     EnsureThrows([&] { (void)parse({"--klvk-unknown", "x"}); }, "an unknown klvk option was accepted");
     EnsureThrows([&] { (void)parse({"--klvk-record-input"}); }, "a missing option value was accepted");
     EnsureThrows([&] { (void)parse({"--klvk-record-input="}); }, "an empty option value was accepted");

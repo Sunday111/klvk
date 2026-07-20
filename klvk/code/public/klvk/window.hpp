@@ -69,6 +69,12 @@ private:
     Window(Application& app, u32 width, u32 height, Backend backend);
     [[nodiscard]] static std::unique_ptr<Window> CreateOffscreen(Application& app, u32 width, u32 height);
     void SetFixedFramebufferSize(Vec2<u32> size);
+    // While a recorded run is replaying, real cursor and key events must not
+    // reach the application: they would change the very run being reproduced.
+    // Only events delivered by the platform are dropped; the replay injects
+    // through OnMouseMove/OnMouseButton/OnMouseScroll/OnKey directly.
+    void SetPlatformInputEnabled(bool enabled) noexcept;
+    [[nodiscard]] bool IsPlatformInputEnabled() const noexcept;
     static u32 MakeWindowId();
 
     void Create();
@@ -94,6 +100,7 @@ private:
     std::bitset<static_cast<size_t>(Key::Count)> keys_;
     std::bitset<static_cast<size_t>(MouseButton::Count)> mouse_buttons_;
     bool input_mode_ = false;
+    bool platform_input_enabled_ = true;
 };
 
 }  // namespace klvk

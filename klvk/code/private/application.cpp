@@ -10,6 +10,7 @@
 #include <limits>
 #include <span>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -22,6 +23,7 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/platform/os/os.hpp"
 #include "klvk/reflection/register_types.hpp"
+#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/timing/timer_manager.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/offscreen_render_target.hpp"
@@ -166,8 +168,30 @@ struct Application::State
         return State::DurationToSeconds(frame_start_time_history_[current_frame_time_index_] - app_start_time_);
     }
 
+    // A fixed clock normally means "render as fast as possible", which is what
+    // an offscreen or hidden run wants. A visible one exists to be watched, so
+    // hold each frame until the wall clock catches up with logical time.
+    [[nodiscard]] bool ShouldPaceToRealTime() const
+    {
+        return diagnostic_config_.has_value() && diagnostic_config_->presentation == DiagnosticPresentation::Visible &&
+               GetFixedStepNanoseconds().has_value();
+    }
+
+    void PaceToRealTime() const
+    {
+        const u64 step_ns = *GetFixedStepNanoseconds();
+        if (completed_frames_ != 0 && step_ns > std::numeric_limits<u64>::max() / completed_frames_) return;
+        const auto elapsed = std::chrono::nanoseconds{static_cast<i64>(step_ns * completed_frames_)};
+        std::this_thread::sleep_until(app_start_time_ + elapsed);
+    }
+
     void AlignWithFramerate()
     {
+        if (ShouldPaceToRealTime())
+        {
+            PaceToRealTime();
+            return;
+        }
         if (GetFixedStep().has_value()) return;
         if (target_framerate_.has_value())
         {
@@ -510,6 +534,13 @@ void Application::RunImpl()
                 state_->RecreateSwapchain();
             }
         }
+        // A replay that carries its own input must not also receive the real
+        // thing: with a visible window, moving the cursor across it would alter
+        // the run being reproduced.
+        if (!state_->diagnostic_config_->input.empty())
+        {
+            state_->window_->SetPlatformInputEnabled(false);
+        }
         state_->InitTime();
         state_->completed_frames_ = 0;
         state_->diagnostic_runner_ = std::make_unique<DiagnosticRunner>(
@@ -561,6 +592,13 @@ void Application::RunWithArguments(int argc, char** argv)
     if (command_line.config_path.has_value())
     {
         state_->diagnostic_config_ = LoadDiagnosticRunConfig(*command_line.config_path);
+    }
+    if (command_line.presentation.has_value())
+    {
+        ErrorHandling::Ensure(
+            state_->diagnostic_config_.has_value(),
+            "--klvk-presentation overrides a diagnostic configuration and requires --klvk-diagnostics");
+        state_->diagnostic_config_->presentation = *command_line.presentation;
     }
     state_->input_record_path_ = command_line.input_record_path;
     Run();

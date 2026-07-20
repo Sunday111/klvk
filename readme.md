@@ -162,6 +162,26 @@ is complete and immediately replayable — `offscreen` presentation (no display 
   frame rate would land on a different frame under a fixed step.
 - Redundant cursor events are collapsed to at most one per frame, which is all a replay can apply — input is dispatched
   once per frame — and keeps the file small.
+#### Replaying in a real window
+
+By default a recording replays `offscreen`, which needs no display server and suits CI. To watch it instead, override the
+presentation on the command line rather than editing the file, so one recording serves both purposes:
+
+```sh
+yae run klvk_falling_sand_example -- --klvk-diagnostics /tmp/session.json --klvk-presentation visible
+```
+
+- `--klvk-presentation <visible|hidden|offscreen>` overrides the configuration's own `presentation`. It requires
+  `--klvk-diagnostics`, since there is nothing to override without it.
+- A **visible** replay is paced to real time: a fixed clock otherwise means "render as fast as possible", which is right
+  for an offscreen run but makes a windowed one flash past unwatchably. Each frame is held until the wall clock reaches
+  `frame * step`, so the replay runs at the rate it was recorded at. Offscreen and hidden runs are unaffected and still
+  render flat out.
+- While a configuration carrying `input` is replayed, real mouse and keyboard events are **dropped** before they reach
+  the application — otherwise moving the cursor across the window would alter the run being reproduced. One limitation:
+  klvk installs ImGui's own GLFW callbacks, so ImGui-side state such as hover still observes the real cursor. Keep the
+  pointer off the window if the application's UI feeds back into what you are reproducing.
+
 - Replay reproduces **input**, not the whole world. A live session has a variable frame duration while the replay uses a
   fixed step, so anything else that is non-deterministic — an unseeded RNG, a wall-clock read, thread scheduling — still
   has to be pinned for the replayed run to diverge from the recorded one. Applications can seed themselves from the

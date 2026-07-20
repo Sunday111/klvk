@@ -39,6 +39,17 @@ struct Window::Impl
         }
     }
 
+    // As CallWindowMethod, but drops the event while platform input is disabled.
+    template <auto method, typename... Args>
+    static void CallWindowInputMethod(GLFWwindow* glfw_window, Args&&... args)
+    {
+        [[likely]] if (Window* window = GetWindow(glfw_window))
+        {
+            if (!window->IsPlatformInputEnabled()) return;
+            (window->*method)(std::forward<Args>(args)...);
+        }
+    }
+
     static void FramebufferSizeCallback(GLFWwindow* glfw_window, int width, int height)
     {
         CallWindowMethod<&Window::OnResize>(glfw_window, width, height);
@@ -46,7 +57,7 @@ struct Window::Impl
 
     static void MouseCallback(GLFWwindow* glfw_window, double x, double y)
     {
-        CallWindowMethod<&Window::OnMouseMove>(glfw_window, Vec2<double>{x, y}.Cast<float>());
+        CallWindowInputMethod<&Window::OnMouseMove>(glfw_window, Vec2<double>{x, y}.Cast<float>());
     }
 
     static void MouseButtonCallback(GLFWwindow* glfw_window, int button, int action, int mods)
@@ -54,7 +65,7 @@ struct Window::Impl
         (void)mods;
         const std::optional<MouseButton> mapped = MouseButtonFromGlfw(button);
         if (!mapped.has_value()) return;
-        CallWindowMethod<&Window::OnMouseButton>(
+        CallWindowInputMethod<&Window::OnMouseButton>(
             glfw_window,
             *mapped,
             action == GLFW_RELEASE ? InputAction::Release : InputAction::Press);
@@ -62,7 +73,7 @@ struct Window::Impl
 
     static void MouseScrollCallback(GLFWwindow* glfw_window, double x_offset, double y_offset)
     {
-        CallWindowMethod<&Window::OnMouseScroll>(
+        CallWindowInputMethod<&Window::OnMouseScroll>(
             glfw_window,
             static_cast<float>(x_offset),
             static_cast<float>(y_offset));
@@ -74,7 +85,7 @@ struct Window::Impl
         (void)mods;
         const std::optional<Key> mapped = KeyFromGlfw(key);
         if (!mapped.has_value()) return;
-        CallWindowMethod<&Window::OnKey>(
+        CallWindowInputMethod<&Window::OnKey>(
             glfw_window,
             *mapped,
             action == GLFW_RELEASE ? InputAction::Release : InputAction::Press);
@@ -246,6 +257,16 @@ void Window::OnResize(int width, int height)
     height_ = static_cast<u32>(height);
 
     app_->GetEventManager().Emit(events::OnWindowResize{.previous = prev_size, .current{width, height}});
+}
+
+void Window::SetPlatformInputEnabled(bool enabled) noexcept
+{
+    platform_input_enabled_ = enabled;
+}
+
+bool Window::IsPlatformInputEnabled() const noexcept
+{
+    return platform_input_enabled_;
 }
 
 void Window::OnMouseMove(Vec2f new_cursor)

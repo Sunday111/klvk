@@ -135,6 +135,10 @@ struct DiagnosticCommandLine
 {
     std::optional<std::filesystem::path> config_path;
     std::optional<std::filesystem::path> input_record_path;
+    // Overrides the loaded configuration's presentation, so one recording can be
+    // replayed offscreen in CI and in a real window while debugging without
+    // editing the file.
+    std::optional<DiagnosticPresentation> presentation;
 };
 
 // Recognizes every klvk option in one pass, each spelled either as
