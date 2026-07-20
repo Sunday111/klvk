@@ -17,6 +17,10 @@ namespace
 {
 
 constexpr u32 kInvalidIndex = ~u32{};
+constexpr double kNanosecondsPerSecond = 1'000'000'000.0;
+constexpr double kExclusiveNanosecondLimit = 18'446'744'073'709'551'616.0;
+
+using TimerNanoseconds = u64;
 
 u64 NextManagerId()
 {
@@ -29,31 +33,48 @@ u64 NextManagerId()
     }
 }
 
-void ValidateTime(TimerDuration value, const char* name, bool allow_zero)
+TimerNanoseconds ToNanoseconds(TimerDuration value, const char* name, bool allow_zero)
 {
     ErrorHandling::Ensure(
         std::isfinite(value.count()) && (allow_zero ? value.count() >= 0.0 : value.count() > 0.0),
         "{} must be a finite {} duration",
         name,
         allow_zero ? "non-negative" : "positive");
-}
-
-TimerDuration AddTime(TimerDuration left, TimerDuration right, const char* operation)
-{
-    const TimerDuration result = left + right;
-    ErrorHandling::Ensure(std::isfinite(result.count()), "Timer duration overflow while {}", operation);
+    const double nanoseconds = std::round(value.count() * kNanosecondsPerSecond);
     ErrorHandling::Ensure(
-        right.count() == 0.0 || result > left,
-        "Timer duration is too small to advance time while {}",
-        operation);
+        std::isfinite(nanoseconds) && nanoseconds < kExclusiveNanosecondLimit,
+        "{} exceeds the timer's nanosecond range",
+        name);
+    const auto result = static_cast<TimerNanoseconds>(nanoseconds);
+    ErrorHandling::Ensure(
+        value.count() == 0.0 || result != 0,
+        "{} must be zero or round to at least one nanosecond",
+        name);
     return result;
 }
 
-TimerDuration AnchoredTime(TimerDuration anchor, TimerDuration interval, u64 occurrence)
+TimerDuration ToDuration(TimerNanoseconds value)
 {
-    // fma keeps a fixed-rate deadline to one final rounding on platforms where
-    // long double is only an alias for double (notably MSVC).
-    return TimerDuration{std::fma(interval.count(), static_cast<double>(occurrence), anchor.count())};
+    return TimerDuration{static_cast<double>(value) / kNanosecondsPerSecond};
+}
+
+TimerNanoseconds AddNanoseconds(TimerNanoseconds left, TimerNanoseconds right, const char* operation)
+{
+    ErrorHandling::Ensure(
+        right <= std::numeric_limits<TimerNanoseconds>::max() - left,
+        "Timer nanosecond overflow while {}",
+        operation);
+    return left + right;
+}
+
+TimerNanoseconds
+AnchoredNanoseconds(TimerNanoseconds anchor, TimerNanoseconds interval, u64 occurrence, const char* operation)
+{
+    ErrorHandling::Ensure(
+        occurrence == 0 || interval <= (std::numeric_limits<TimerNanoseconds>::max() - anchor) / occurrence,
+        "Timer nanosecond overflow while {}",
+        operation);
+    return anchor + interval * occurrence;
 }
 
 u64 AddFrames(u64 left, u64 right, const char* operation)
@@ -90,9 +111,9 @@ struct TimerManager::State
     struct Slot
     {
         Callback callback;
-        TimerDuration time_anchor{};
-        TimerDuration time_deadline{};
-        TimerDuration time_interval{};
+        TimerNanoseconds time_anchor = 0;
+        TimerNanoseconds time_deadline = 0;
+        TimerNanoseconds time_interval = 0;
         u64 frame_deadline = 0;
         u64 frame_interval = 0;
         u64 sequence = 0;
@@ -111,7 +132,7 @@ struct TimerManager::State
     {
         u32 slot = kInvalidIndex;
         u64 generation = 0;
-        TimerDuration time_deadline{};
+        TimerNanoseconds time_deadline = 0;
         u64 frame_deadline = 0;
         u64 timer_sequence = 0;
         u64 ready_order = 0;
@@ -122,7 +143,7 @@ struct TimerManager::State
     std::vector<u32> frame_heap;
     std::vector<DueEntry> time_due_scratch;
     std::vector<DueEntry> frame_due_scratch;
-    TimerDuration current_time{};
+    TimerNanoseconds current_time = 0;
     u64 current_frame = 0;
     u64 next_order = 1;
     u64 manager_id = 0;
@@ -282,9 +303,9 @@ struct TimerManager::State
 
     [[nodiscard]] TimerHandle Schedule(
         TimerDomain domain,
-        TimerDuration time_deadline,
+        TimerNanoseconds time_deadline,
         u64 frame_deadline,
-        TimerDuration time_interval,
+        TimerNanoseconds time_interval,
         u64 frame_interval,
         bool repeating,
         TimerMissedTickPolicy missed_tick_policy,
@@ -455,8 +476,8 @@ struct TimerManager::State
 
     struct DispatchPlan
     {
-        TimerDuration latest_time{};
-        TimerDuration next_time{};
+        TimerNanoseconds latest_time = 0;
+        TimerNanoseconds next_time = 0;
         u64 latest_frame = 0;
         u64 next_frame = 0;
         u64 additional_occurrences = 0;
@@ -488,42 +509,20 @@ struct TimerManager::State
             return result;
         }
 
-        const long double quotient =
-            (static_cast<long double>(current_time.count()) - static_cast<long double>(slot.time_anchor.count())) /
-            static_cast<long double>(slot.time_interval.count());
-        ErrorHandling::Ensure(quotient >= 0.0L, "Repeating time timer deadline exceeds its anchor");
-        ErrorHandling::Ensure(
-            quotient <= static_cast<long double>(std::numeric_limits<u64>::max()),
-            "Repeating time timer occurrence overflow");
-        u64 latest_occurrence = static_cast<u64>(std::floor(quotient));
-        result.latest_time = AnchoredTime(slot.time_anchor, slot.time_interval, latest_occurrence);
-        if (result.latest_time > current_time)
-        {
-            ErrorHandling::Ensure(latest_occurrence != 0, "Repeating time timer correction underflow");
-            --latest_occurrence;
-            result.latest_time = AnchoredTime(slot.time_anchor, slot.time_interval, latest_occurrence);
-        }
-        if (latest_occurrence != std::numeric_limits<u64>::max())
-        {
-            const TimerDuration candidate = AnchoredTime(slot.time_anchor, slot.time_interval, latest_occurrence + 1);
-            if (candidate <= current_time)
-            {
-                ErrorHandling::Ensure(candidate > result.latest_time, "Repeating time timer exhausted time precision");
-                ++latest_occurrence;
-                result.latest_time = candidate;
-            }
-        }
+        ErrorHandling::Ensure(current_time >= slot.time_anchor, "Repeating time timer deadline exceeds its anchor");
+        const u64 latest_occurrence = (current_time - slot.time_anchor) / slot.time_interval;
+        result.latest_time = AnchoredNanoseconds(
+            slot.time_anchor,
+            slot.time_interval,
+            latest_occurrence,
+            "calculating a repeating timer deadline");
         ErrorHandling::Ensure(
             latest_occurrence >= slot.occurrence && result.latest_time <= current_time,
-            "Repeating time timer correction failed");
+            "Repeating time timer occurrence is inconsistent");
         result.additional_occurrences = latest_occurrence - slot.occurrence;
-        if (latest_occurrence != std::numeric_limits<u64>::max())
+        if (slot.time_interval <= std::numeric_limits<TimerNanoseconds>::max() - result.latest_time)
         {
-            const TimerDuration next = AnchoredTime(slot.time_anchor, slot.time_interval, latest_occurrence + 1);
-            ErrorHandling::Ensure(
-                std::isfinite(next.count()) && next > current_time && next > result.latest_time,
-                "Repeating time timer cannot represent its next deadline");
-            result.next_time = next;
+            result.next_time = result.latest_time + slot.time_interval;
             result.has_next = true;
         }
         return result;
@@ -539,9 +538,13 @@ struct TimerManager::State
             .missed_occurrences = coalesced ? plan.additional_occurrences : 0};
         if (slot.domain == TimerDomain::Time)
         {
-            result.scheduled_time = coalesced
-                                        ? plan.latest_time
-                                        : AnchoredTime(slot.time_anchor, slot.time_interval, slot.occurrence + offset);
+            result.scheduled_time = ToDuration(
+                coalesced ? plan.latest_time
+                          : AnchoredNanoseconds(
+                                slot.time_anchor,
+                                slot.time_interval,
+                                slot.occurrence + offset,
+                                "creating a timer event"));
         }
         else
         {
@@ -628,14 +631,16 @@ struct TimerManager::State
             completion_plan.additional_occurrences = invocation_count - 1;
             if (final_slot.domain == TimerDomain::Time)
             {
-                completion_plan.latest_time = AnchoredTime(
+                completion_plan.latest_time = AnchoredNanoseconds(
                     final_slot.time_anchor,
                     final_slot.time_interval,
-                    final_slot.occurrence + completion_plan.additional_occurrences);
-                completion_plan.next_time = AnchoredTime(
+                    final_slot.occurrence + completion_plan.additional_occurrences,
+                    "finishing timer catch-up");
+                completion_plan.next_time = AnchoredNanoseconds(
                     final_slot.time_anchor,
                     final_slot.time_interval,
-                    final_slot.occurrence + invocation_count);
+                    final_slot.occurrence + invocation_count,
+                    "finishing timer catch-up");
             }
             else
             {
@@ -661,15 +666,30 @@ TimerManager::~TimerManager() = default;
 
 TimerHandle TimerManager::ScheduleAt(TimerDuration deadline, Callback callback)
 {
-    ValidateTime(deadline, "Timer deadline", true);
-    return state_
-        ->Schedule(TimerDomain::Time, deadline, 0, {}, 0, false, TimerMissedTickPolicy::Coalesce, std::move(callback));
+    const TimerNanoseconds deadline_ns = ToNanoseconds(deadline, "Timer deadline", true);
+    return state_->Schedule(
+        TimerDomain::Time,
+        deadline_ns,
+        0,
+        0,
+        0,
+        false,
+        TimerMissedTickPolicy::Coalesce,
+        std::move(callback));
 }
 
 TimerHandle TimerManager::ScheduleAfter(TimerDuration delay, Callback callback)
 {
-    ValidateTime(delay, "Timer delay", true);
-    return ScheduleAt(AddTime(state_->current_time, delay, "scheduling a relative timer"), std::move(callback));
+    const TimerNanoseconds delay_ns = ToNanoseconds(delay, "Timer delay", true);
+    return state_->Schedule(
+        TimerDomain::Time,
+        AddNanoseconds(state_->current_time, delay_ns, "scheduling a relative timer"),
+        0,
+        0,
+        0,
+        false,
+        TimerMissedTickPolicy::Coalesce,
+        std::move(callback));
 }
 
 TimerHandle TimerManager::ScheduleAtFrame(u64 frame, Callback callback)
@@ -688,12 +708,20 @@ TimerHandle TimerManager::ScheduleAfterFrames(u64 frames, Callback callback)
 TimerHandle
 TimerManager::ScheduleEvery(TimerDuration interval, Callback callback, TimerMissedTickPolicy missed_tick_policy)
 {
-    ValidateTime(interval, "Timer interval", false);
-    return ScheduleEveryAt(
-        AddTime(state_->current_time, interval, "scheduling a repeating timer"),
-        interval,
-        std::move(callback),
-        missed_tick_policy);
+    const TimerNanoseconds interval_ns = ToNanoseconds(interval, "Timer interval", false);
+    const TimerNanoseconds first_deadline_ns =
+        AddNanoseconds(state_->current_time, interval_ns, "scheduling a repeating timer");
+    [[maybe_unused]] const TimerNanoseconds second_deadline_ns =
+        AnchoredNanoseconds(first_deadline_ns, interval_ns, 1, "validating a repeating timer");
+    return state_->Schedule(
+        TimerDomain::Time,
+        first_deadline_ns,
+        0,
+        interval_ns,
+        0,
+        true,
+        missed_tick_policy,
+        std::move(callback));
 }
 
 TimerHandle TimerManager::ScheduleEveryAt(
@@ -702,14 +730,19 @@ TimerHandle TimerManager::ScheduleEveryAt(
     Callback callback,
     TimerMissedTickPolicy missed_tick_policy)
 {
-    ValidateTime(first_deadline, "First timer deadline", true);
-    ValidateTime(interval, "Timer interval", false);
-    const TimerDuration second_deadline = AnchoredTime(first_deadline, interval, 1);
-    ErrorHandling::Ensure(
-        std::isfinite(second_deadline.count()) && second_deadline > first_deadline,
-        "Timer interval is too small to advance the first deadline");
-    return state_
-        ->Schedule(TimerDomain::Time, first_deadline, 0, interval, 0, true, missed_tick_policy, std::move(callback));
+    const TimerNanoseconds first_deadline_ns = ToNanoseconds(first_deadline, "First timer deadline", true);
+    const TimerNanoseconds interval_ns = ToNanoseconds(interval, "Timer interval", false);
+    [[maybe_unused]] const TimerNanoseconds second_deadline_ns =
+        AnchoredNanoseconds(first_deadline_ns, interval_ns, 1, "validating a repeating timer");
+    return state_->Schedule(
+        TimerDomain::Time,
+        first_deadline_ns,
+        0,
+        interval_ns,
+        0,
+        true,
+        missed_tick_policy,
+        std::move(callback));
 }
 
 TimerHandle TimerManager::ScheduleEveryFrames(u64 interval, Callback callback, TimerMissedTickPolicy missed_tick_policy)
@@ -776,14 +809,14 @@ void TimerManager::Clear() noexcept
 
 u64 TimerManager::Advance(TimerDuration elapsed, u64 frame, u64 callback_budget)
 {
-    ValidateTime(elapsed, "TimerManager elapsed time", true);
+    const TimerNanoseconds elapsed_ns = ToNanoseconds(elapsed, "TimerManager elapsed time", true);
     ErrorHandling::Ensure(!state_->advancing, "TimerManager::Advance cannot be called recursively");
-    ErrorHandling::Ensure(elapsed >= state_->current_time, "TimerManager time cannot move backwards");
+    ErrorHandling::Ensure(elapsed_ns >= state_->current_time, "TimerManager time cannot move backwards");
     ErrorHandling::Ensure(frame >= state_->current_frame, "TimerManager frame cannot move backwards");
 
     if (callback_budget == 0)
     {
-        state_->current_time = elapsed;
+        state_->current_time = elapsed_ns;
         state_->current_frame = frame;
         return 0;
     }
@@ -793,12 +826,12 @@ u64 TimerManager::Advance(TimerDuration elapsed, u64 frame, u64 callback_budget)
     time_due.clear();
     frame_due.clear();
     const bool has_due_time =
-        !state_->time_heap.empty() && state_->slots[state_->time_heap.front()].time_deadline <= elapsed;
+        !state_->time_heap.empty() && state_->slots[state_->time_heap.front()].time_deadline <= elapsed_ns;
     const bool has_due_frame =
         !state_->frame_heap.empty() && state_->slots[state_->frame_heap.front()].frame_deadline <= frame;
     if (has_due_time && time_due.capacity() < state_->time_heap.size()) time_due.reserve(state_->time_heap.size());
     if (has_due_frame && frame_due.capacity() < state_->frame_heap.size()) frame_due.reserve(state_->frame_heap.size());
-    state_->current_time = elapsed;
+    state_->current_time = elapsed_ns;
     state_->current_frame = frame;
     state_->advancing = true;
     auto reset_advancing = OnScopeLeave([this] { state_->advancing = false; });
@@ -925,7 +958,7 @@ size_t TimerManager::GetTimerCount() const noexcept
 
 TimerDuration TimerManager::GetCurrentTime() const noexcept
 {
-    return state_->current_time;
+    return ToDuration(state_->current_time);
 }
 
 u64 TimerManager::GetCurrentFrame() const noexcept
@@ -936,7 +969,7 @@ u64 TimerManager::GetCurrentFrame() const noexcept
 std::optional<TimerDuration> TimerManager::GetNextTimeDeadline() const noexcept
 {
     if (state_->time_heap.empty()) return std::nullopt;
-    return state_->slots[state_->time_heap.front()].time_deadline;
+    return ToDuration(state_->slots[state_->time_heap.front()].time_deadline);
 }
 
 std::optional<u64> TimerManager::GetNextFrameDeadline() const noexcept

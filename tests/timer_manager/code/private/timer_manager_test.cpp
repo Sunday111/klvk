@@ -402,15 +402,35 @@ void TestRelativeSchedulingAndValidation()
         "relative frame overflow was accepted");
 
     TimerManager precision;
-    const double large_time = std::ldexp(1.0, 53);
-    Ensure(precision.Advance(Seconds(large_time), 0) == 0, "large-time precision setup fired");
+    constexpr double ten_years = 10.0 * 365.0 * 24.0 * 60.0 * 60.0;
+    Ensure(precision.Advance(Seconds(ten_years), 0) == 0, "large-time precision setup fired");
+    size_t precise_calls = 0;
+    [[maybe_unused]] const TimerHandle precise =
+        precision.ScheduleAfter(Seconds(1e-9), [&](const TimerEvent&) { ++precise_calls; });
+    Ensure(
+        precision.Advance(Seconds(std::nextafter(ten_years, std::numeric_limits<double>::infinity())), 0) == 1 &&
+            precise_calls == 1,
+        "integer nanosecond scheduling lost a relative deadline at a large API time");
     EnsureThrows(
         [&]
         {
             [[maybe_unused]] const TimerHandle invalid =
-                precision.ScheduleAfter(Seconds(0.5), [](const TimerEvent&) {});
+                precision.ScheduleEvery(Seconds(0.1e-9), [](const TimerEvent&) {});
         },
-        "relative time that cannot advance the clock was accepted");
+        "sub-nanosecond timer interval was accepted");
+
+    TimerManager time_range;
+    EnsureThrows(
+        [&] { [[maybe_unused]] const u64 callback_count = time_range.Advance(Seconds(std::ldexp(1.0, 35)), 0); },
+        "elapsed time beyond the u64 nanosecond range was accepted");
+    Ensure(time_range.Advance(Seconds(1e10), 0) == 0, "timer range-overflow setup fired");
+    EnsureThrows(
+        [&]
+        {
+            [[maybe_unused]] const TimerHandle invalid =
+                time_range.ScheduleAfter(Seconds(1e10), [](const TimerEvent&) {});
+        },
+        "relative nanosecond deadline overflow was accepted");
 
     TimerManager budget;
     size_t budget_calls = 0;

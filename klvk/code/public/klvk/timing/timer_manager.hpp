@@ -11,6 +11,9 @@
 namespace klvk
 {
 
+// Public time values are expressed as double-precision seconds. TimerManager
+// rounds them once at its boundary and stores all scheduling state as u64
+// nanoseconds.
 using TimerDuration = std::chrono::duration<double>;
 
 enum class TimerDomain : u8
