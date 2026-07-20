@@ -17,10 +17,12 @@
             "imgui_vulkan"
         ],
         "Private": [
-            "glfw"
+            "glfw",
+            "spdlog"
         ]
     },
     "ExtraCMakeFiles": [
+        "ffmpeg",
         "shader_cache",
         "vulkan_api"
     ],

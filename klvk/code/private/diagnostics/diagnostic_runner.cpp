@@ -7,6 +7,7 @@
 #include <array>
 #include <atomic>
 #include <fstream>
+#include <iterator>
 #include <limits>
 #include <set>
 #include <type_traits>
@@ -66,6 +67,27 @@ DiagnosticRunner::DiagnosticRunner(
       event_manager_(event_manager),
       window_(window)
 {
+    if (config.video.has_value())
+    {
+        ErrorHandling::Ensure(
+            config.framebuffer_size.has_value() && config.clock.fixed_step_seconds.has_value(),
+            "Diagnostic video configuration was not validated");
+        std::filesystem::path path = config.video->path;
+        if (path.is_relative()) path = executable_directory / path;
+        path = path.lexically_normal();
+        const auto size = *config.framebuffer_size;
+        video_encoder_ = std::make_unique<DiagnosticVideoEncoder>(
+            path,
+            size.x(),
+            size.y(),
+            *config.clock.fixed_step_seconds,
+            config.video->encoding,
+            config.video->encoding_device,
+            config.video->compression_level,
+            config.video->log_ffmpeg);
+        video_includes_ui_ = config.video->include_ui;
+    }
+
     std::set<std::filesystem::path> resolved_paths;
     captures_.reserve(config.captures.size());
     queued_without_ui_.reserve(config.captures.size());
@@ -241,13 +263,13 @@ void DiagnosticRunner::AdvanceInput(u64 frame, double time_seconds)
         input_timers_.Advance(TimerDuration{time_seconds}, frame, std::numeric_limits<u64>::max());
 }
 
-bool DiagnosticRunner::HasQueuedCaptures(bool include_ui) const noexcept
+bool DiagnosticRunner::NeedsReadback(bool include_ui) const noexcept
 {
     const auto& queue = include_ui ? queued_with_ui_ : queued_without_ui_;
-    return !queue.empty();
+    return !queue.empty() || (video_encoder_ != nullptr && video_includes_ui_ == include_ui);
 }
 
-bool DiagnosticRunner::RecordQueuedCaptures(
+bool DiagnosticRunner::RecordReadback(
     DeviceContext& context,
     VkCommandBuffer command_buffer,
     size_t frame_in_flight,
@@ -260,7 +282,8 @@ bool DiagnosticRunner::RecordQueuedCaptures(
     static_assert(std::is_nothrow_move_constructible_v<PendingCapture>);
 
     auto& queue = include_ui ? queued_with_ui_ : queued_without_ui_;
-    if (queue.empty()) return false;
+    const bool record_video = video_encoder_ != nullptr && video_includes_ui_ == include_ui;
+    if (queue.empty() && !record_video) return false;
 
     std::vector<std::filesystem::path> paths;
     paths.reserve(queue.size());
@@ -278,7 +301,7 @@ bool DiagnosticRunner::RecordQueuedCaptures(
     ErrorHandling::Ensure(extent.width != 0 && extent.height != 0, "Cannot capture an empty framebuffer");
     ErrorHandling::Ensure(
         IsCaptureFormat(format),
-        "Diagnostic PPM capture does not support Vulkan format {}",
+        "Diagnostic readback does not support Vulkan format {}",
         static_cast<int>(format));
     const size_t pixel_count = CheckedPixelCount(extent);
     const VkDeviceSize byte_size = static_cast<VkDeviceSize>(pixel_count) * 4;
@@ -309,7 +332,8 @@ bool DiagnosticRunner::RecordQueuedCaptures(
         .buffer = GpuBuffer(context, VK_BUFFER_USAGE_TRANSFER_DST_BIT, byte_size, GpuBufferHostAccess::Random),
         .format = format,
         .extent = extent,
-        .paths = std::move(paths)};
+        .paths = std::move(paths),
+        .video_frame = record_video ? std::optional<u64>{video_frame_count_++} : std::nullopt};
 
     VkImageMemoryBarrier2 barrier{
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -357,70 +381,96 @@ bool DiagnosticRunner::RecordQueuedCaptures(
     return true;
 }
 
-void DiagnosticRunner::WritePpm(PendingCapture& capture)
+void DiagnosticRunner::ProcessReadback(PendingCapture& capture)
 {
     const bool bgra = capture.format == VK_FORMAT_B8G8R8A8_UNORM || capture.format == VK_FORMAT_B8G8R8A8_SRGB;
     ErrorHandling::Ensure(IsCaptureFormat(capture.format), "Pending diagnostic capture has an invalid format");
     const size_t pixel_count = CheckedPixelCount(capture.extent);
     std::vector<std::byte> source(pixel_count * 4);
     capture.buffer.Read(source);
-    std::vector<char> rgb(pixel_count * 3);
-    for (size_t pixel = 0; pixel != pixel_count; ++pixel)
+    if (!capture.paths.empty())
     {
-        const auto channel = [&](size_t index)
+        std::vector<char> rgb(pixel_count * 3);
+        for (size_t pixel = 0; pixel != pixel_count; ++pixel)
         {
-            return static_cast<char>(source[pixel * 4 + index]);
-        };
-        rgb[pixel * 3] = channel(bgra ? 2 : 0);
-        rgb[pixel * 3 + 1] = channel(1);
-        rgb[pixel * 3 + 2] = channel(bgra ? 0 : 2);
+            const auto channel = [&](size_t index)
+            {
+                return static_cast<char>(source[pixel * 4 + index]);
+            };
+            rgb[pixel * 3] = channel(bgra ? 2 : 0);
+            rgb[pixel * 3 + 1] = channel(1);
+            rgb[pixel * 3 + 2] = channel(bgra ? 0 : 2);
+        }
+
+        for (const std::filesystem::path& path : capture.paths)
+        {
+            if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path());
+            std::filesystem::path temporary = path;
+            static std::atomic<u64> temporary_sequence = 0;
+            temporary += fmt::format(
+                ".tmp.{}.{}",
+                os::GetProcessId(),
+                temporary_sequence.fetch_add(1, std::memory_order_relaxed));
+            bool installed = false;
+            auto remove_temporary = OnScopeLeave(
+                [&]
+                {
+                    if (installed) return;
+                    std::error_code ignored;
+                    std::filesystem::remove(temporary, ignored);
+                });
+            {
+                std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
+                ErrorHandling::Ensure(stream.is_open(), "Failed to open diagnostic capture '{}'", temporary.string());
+                stream << fmt::format("P6\n{} {}\n255\n", capture.extent.width, capture.extent.height);
+                stream.write(rgb.data(), static_cast<std::streamsize>(rgb.size()));
+                stream.flush();
+                ErrorHandling::Ensure(stream.good(), "Failed to flush diagnostic capture '{}'", temporary.string());
+                stream.close();
+                ErrorHandling::Ensure(!stream.fail(), "Failed to close diagnostic capture '{}'", temporary.string());
+            }
+            Filesystem::InstallFileAtomically(temporary, path);
+            installed = true;
+            fmt::println(
+                "klvk: captured {}x{} framebuffer to {}",
+                capture.extent.width,
+                capture.extent.height,
+                path.string());
+        }
     }
 
-    for (const std::filesystem::path& path : capture.paths)
+    if (capture.video_frame.has_value())
     {
-        if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path());
-        std::filesystem::path temporary = path;
-        static std::atomic<u64> temporary_sequence = 0;
-        temporary +=
-            fmt::format(".tmp.{}.{}", os::GetProcessId(), temporary_sequence.fetch_add(1, std::memory_order_relaxed));
-        bool installed = false;
-        auto remove_temporary = OnScopeLeave(
-            [&]
-            {
-                if (installed) return;
-                std::error_code ignored;
-                std::filesystem::remove(temporary, ignored);
-            });
-        {
-            std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
-            ErrorHandling::Ensure(stream.is_open(), "Failed to open diagnostic capture '{}'", temporary.string());
-            stream << fmt::format("P6\n{} {}\n255\n", capture.extent.width, capture.extent.height);
-            stream.write(rgb.data(), static_cast<std::streamsize>(rgb.size()));
-            stream.flush();
-            ErrorHandling::Ensure(stream.good(), "Failed to flush diagnostic capture '{}'", temporary.string());
-            stream.close();
-            ErrorHandling::Ensure(!stream.fail(), "Failed to close diagnostic capture '{}'", temporary.string());
-        }
-        Filesystem::InstallFileAtomically(temporary, path);
-        installed = true;
-        fmt::println(
-            "klvk: captured {}x{} framebuffer to {}",
-            capture.extent.width,
-            capture.extent.height,
-            path.string());
+        ErrorHandling::Ensure(video_encoder_ != nullptr, "Pending diagnostic video frame has no encoder");
+        video_encoder_->WriteFrame(std::move(source), bgra, *capture.video_frame);
     }
 }
 
 void DiagnosticRunner::ProcessCompletedFrame(size_t frame_in_flight)
 {
     ErrorHandling::Ensure(frame_in_flight < pending_.size(), "Invalid diagnostic frame-in-flight index");
-    for (PendingCapture& capture : pending_[frame_in_flight]) WritePpm(capture);
+    for (PendingCapture& capture : pending_[frame_in_flight]) ProcessReadback(capture);
     pending_[frame_in_flight].clear();
 }
 
 void DiagnosticRunner::ProcessAllCompleted()
 {
-    for (size_t frame = 0; frame != pending_.size(); ++frame) ProcessCompletedFrame(frame);
+    std::vector<PendingCapture> remaining;
+    for (auto& pending_frame : pending_)
+    {
+        std::ranges::move(pending_frame, std::back_inserter(remaining));
+        pending_frame.clear();
+    }
+    std::ranges::stable_sort(
+        remaining,
+        [](const PendingCapture& lhs, const PendingCapture& rhs)
+        {
+            if (!lhs.video_frame.has_value()) return false;
+            if (!rhs.video_frame.has_value()) return true;
+            return *lhs.video_frame < *rhs.video_frame;
+        });
+    for (PendingCapture& capture : remaining) ProcessReadback(capture);
+    if (video_encoder_) video_encoder_->Finish();
 }
 
 void DiagnosticRunner::EnsureComplete() const
