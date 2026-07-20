@@ -108,6 +108,87 @@ DiagnosticCaptureConfig ParseCapture(const nlohmann::json& value, size_t index)
     return result;
 }
 
+DiagnosticVideoConfig ParseVideo(const nlohmann::json& value)
+{
+    EnsureKnownKeys(
+        value,
+        "video",
+        {"path", "encoding", "encoding_device", "compression_level", "include_ui", "log_ffmpeg"});
+    ErrorHandling::Ensure(
+        value.contains("path") && value.at("path").is_string(),
+        "Diagnostic configuration field 'video.path' must be a string");
+    DiagnosticVideoConfig result{.path = value.at("path").get<std::string>()};
+    ErrorHandling::Ensure(!result.path.empty(), "video.path cannot be empty");
+    ErrorHandling::Ensure(result.path.extension() == ".mp4", "video.path must use the .mp4 extension");
+    if (value.contains("encoding"))
+    {
+        ErrorHandling::Ensure(value.at("encoding").is_string(), "video.encoding must be a string");
+        const std::string encoding = value.at("encoding").get<std::string>();
+        if (encoding == "av1")
+        {
+            result.encoding = DiagnosticVideoEncoding::Av1;
+        }
+        else if (encoding == "h264")
+        {
+            result.encoding = DiagnosticVideoEncoding::H264;
+        }
+        else if (encoding == "mpeg4")
+        {
+            result.encoding = DiagnosticVideoEncoding::Mpeg4;
+        }
+        else
+        {
+            ErrorHandling::ThrowWithMessage(
+                "Unknown diagnostic video encoding '{}' (expected 'av1', 'h264', or 'mpeg4')",
+                encoding);
+        }
+    }
+    if (value.contains("encoding_device"))
+    {
+        ErrorHandling::Ensure(value.at("encoding_device").is_string(), "video.encoding_device must be a string");
+        const std::string device = value.at("encoding_device").get<std::string>();
+        if (device == "cpu")
+        {
+            result.encoding_device = DiagnosticVideoEncodingDevice::Cpu;
+        }
+        else if (device == "gpu")
+        {
+            result.encoding_device = DiagnosticVideoEncodingDevice::Gpu;
+        }
+        else
+        {
+            ErrorHandling::ThrowWithMessage(
+                "Unknown diagnostic video encoding device '{}' (expected 'cpu' or 'gpu')",
+                device);
+        }
+    }
+    ErrorHandling::Ensure(
+        result.encoding_device != DiagnosticVideoEncodingDevice::Gpu ||
+            result.encoding != DiagnosticVideoEncoding::Mpeg4,
+        "Diagnostic video encoding 'mpeg4' does not support encoding_device 'gpu'; "
+        "use encoding_device 'cpu', encoding 'h264', or encoding 'av1'");
+    if (value.contains("compression_level"))
+    {
+        const u64 compression_level = ReadNonNegativeInteger(value.at("compression_level"), "video.compression_level");
+        ErrorHandling::Ensure(
+            compression_level <= DiagnosticVideoConfig::kMaximumCompressionLevel,
+            "video.compression_level must be between 0 and {}",
+            DiagnosticVideoConfig::kMaximumCompressionLevel);
+        result.compression_level = static_cast<u8>(compression_level);
+    }
+    if (value.contains("include_ui"))
+    {
+        ErrorHandling::Ensure(value.at("include_ui").is_boolean(), "video.include_ui must be a boolean");
+        result.include_ui = value.at("include_ui").get<bool>();
+    }
+    if (value.contains("log_ffmpeg"))
+    {
+        ErrorHandling::Ensure(value.at("log_ffmpeg").is_boolean(), "video.log_ffmpeg must be a boolean");
+        result.log_ffmpeg = value.at("log_ffmpeg").get<bool>();
+    }
+    return result;
+}
+
 InputAction ParseInputAction(const nlohmann::json& value, std::string_view name)
 {
     ErrorHandling::Ensure(value.is_string(), "Diagnostic configuration field '{}' must be a string", name);
@@ -222,7 +303,7 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
     EnsureKnownKeys(
         root,
         "root",
-        {"version", "presentation", "framebuffer_size", "clock", "input", "captures", "exit", "application"});
+        {"version", "presentation", "framebuffer_size", "clock", "input", "captures", "video", "exit", "application"});
     ErrorHandling::Ensure(root.contains("version"), "Diagnostic configuration is missing 'version'");
     const u64 version = ReadNonNegativeInteger(root.at("version"), "version");
     ErrorHandling::Ensure(
@@ -320,7 +401,26 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
     ErrorHandling::Ensure(
         result.captures.empty() || result.framebuffer_size.has_value(),
         "Diagnostic captures require an explicit framebuffer_size");
-    if (!result.captures.empty())
+
+    if (root.contains("video"))
+    {
+        result.video = ParseVideo(root.at("video"));
+        ErrorHandling::Ensure(
+            result.presentation == DiagnosticPresentation::Offscreen,
+            "Diagnostic video capture requires offscreen presentation");
+        ErrorHandling::Ensure(
+            result.framebuffer_size.has_value(),
+            "Diagnostic video capture requires an explicit framebuffer_size");
+        ErrorHandling::Ensure(
+            result.clock.fixed_step_seconds.has_value(),
+            "Diagnostic video capture requires a fixed clock");
+        const auto size = *result.framebuffer_size;
+        ErrorHandling::Ensure(
+            size.x() % 2 == 0 && size.y() % 2 == 0,
+            "Diagnostic video capture requires even framebuffer dimensions");
+    }
+
+    if (!result.captures.empty() || result.video.has_value())
     {
         constexpr u64 maximum_readback_bytes = u64{1} << 30;
         const auto size = *result.framebuffer_size;

@@ -35,6 +35,31 @@ struct DiagnosticCaptureConfig
     bool include_ui = true;
 };
 
+enum class DiagnosticVideoEncoding : u8
+{
+    Av1,
+    H264,
+    Mpeg4,
+};
+
+enum class DiagnosticVideoEncodingDevice : u8
+{
+    Cpu,
+    Gpu,
+};
+
+struct DiagnosticVideoConfig
+{
+    static constexpr u8 kMaximumCompressionLevel = 10;
+
+    std::filesystem::path path;
+    DiagnosticVideoEncoding encoding = DiagnosticVideoEncoding::Av1;
+    DiagnosticVideoEncodingDevice encoding_device = DiagnosticVideoEncodingDevice::Cpu;
+    u8 compression_level = 3;
+    bool include_ui = true;
+    bool log_ffmpeg = true;
+};
+
 struct DiagnosticMouseMoveInput
 {
     edt::Vec2f position{};
@@ -83,6 +108,7 @@ struct DiagnosticRunConfig
     DiagnosticClockConfig clock;
     std::vector<DiagnosticInputConfig> input;
     std::vector<DiagnosticCaptureConfig> captures;
+    std::optional<DiagnosticVideoConfig> video;
     DiagnosticExitConfig exit;
     nlohmann::json application = nlohmann::json::object();
 };

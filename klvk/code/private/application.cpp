@@ -714,7 +714,7 @@ void Application::PostTick()
     {
         state_->diagnostic_runner_->Advance(state_->completed_frames_ + 1, state_->GetElapsedTimeSeconds());
     }
-    const bool capture_without_ui = state_->diagnostic_runner_ && state_->diagnostic_runner_->HasQueuedCaptures(false);
+    const bool capture_without_ui = state_->diagnostic_runner_ && state_->diagnostic_runner_->NeedsReadback(false);
 
     // ImGui's pipeline is color-only. End an application's depth-enabled pass and
     // resume rendering the same color image without a depth attachment for the UI.
@@ -724,7 +724,7 @@ void Application::PostTick()
         Vulkan::CmdEndRendering(frame.command_buffer);
         if (capture_without_ui)
         {
-            const bool recorded = state_->diagnostic_runner_->RecordQueuedCaptures(
+            const bool recorded = state_->diagnostic_runner_->RecordReadback(
                 *state_->device_context_,
                 frame.command_buffer,
                 state_->frame_index_,
@@ -759,7 +759,7 @@ void Application::PostTick()
 
     const bool captured_with_ui =
         state_->diagnostic_runner_ &&
-        state_->diagnostic_runner_->RecordQueuedCaptures(
+        state_->diagnostic_runner_->RecordReadback(
             *state_->device_context_,
             frame.command_buffer,
             state_->frame_index_,

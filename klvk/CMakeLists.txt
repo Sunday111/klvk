@@ -7,6 +7,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_run_config.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_runner.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_runner.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_video_encoder.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_video_encoder.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/events/event_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/filesystem/filesystem.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/math/transform.cpp
@@ -109,9 +111,11 @@ target_link_libraries(klvk PUBLIC ass
                                   volk
                                   VulkanMemoryAllocator
                                   imgui_vulkan)
-target_link_libraries(klvk PRIVATE glfw)
+target_link_libraries(klvk PRIVATE glfw
+                                   spdlog::spdlog)
 target_include_directories(klvk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/code/public)
 target_include_directories(klvk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/code/private)
+include(${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/shader_cache.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/vulkan_api.cmake)
 add_custom_target(klvk_copy_files ALL

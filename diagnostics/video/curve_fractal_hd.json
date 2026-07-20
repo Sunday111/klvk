@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "presentation": "offscreen",
+  "framebuffer_size": [3840, 2160],
+  "clock": {
+    "mode": "fixed",
+    "step_seconds": 0.016666666666666666
+  },
+  "video": {
+    "path": "captures/curve_fractal_hd.mp4",
+    "encoding": "h264",
+    "encoding_device": "gpu",
+    "compression_level": 3,
+    "include_ui": false
+  },
+  "exit": {
+    "frame": 600
+  }
+}

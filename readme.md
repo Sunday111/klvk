@@ -44,12 +44,12 @@ their per-frame logic. Diagnostics use a separate manager so application catch-u
 captures. The main loop owns `Advance`; application code uses the returned manager only to schedule, cancel, and inspect
 timers.
 
-## Diagnostic runs and framebuffer capture
+## Diagnostic runs, framebuffer capture, and video
 
 `Application::RunWithArguments(argc, argv)` recognizes `--klvk-diagnostics <file>` and
 `--klvk-diagnostics=<file>`. The JSON file
-controls presentation, deterministic timing, any number of framebuffer captures, and automatic exit. All klvk examples
-use this entry point.
+controls presentation, deterministic timing, framebuffer and video capture, and automatic exit. All klvk examples use
+this entry point.
 
 ```json
 {
@@ -70,6 +70,13 @@ use this entry point.
     {"time_seconds": 0.25, "path": "captures/quarter-second.ppm"},
     {"time_seconds": 0.5, "path": "captures/half-second.ppm"}
   ],
+  "video": {
+    "path": "captures/run.mp4",
+    "encoding": "h264",
+    "encoding_device": "gpu",
+    "compression_level": 3,
+    "include_ui": true
+  },
   "exit": {"after_last_capture": true},
   "application": {"seed": 7}
 }
@@ -96,8 +103,23 @@ use this entry point.
   time reaches the requested point. `include_ui` defaults to `true`.
 - Capture files are binary RGB PPM (`P6`). Relative paths are resolved against the executable directory, not the process
   working directory. Parent directories are created and completed files atomically replace older captures.
+- `video` records every rendered frame in an MP4 file. `encoding` is `av1` (the default), `h264`, or `mpeg4`.
+  `encoding_device` is `cpu` (the default) or `gpu`. CPU AV1 uses the system FFmpeg's `libaom-av1` encoder and falls
+  back to `librav1e`; CPU H.264 uses `libx264`. GPU AV1 and H.264 use FFmpeg's `av1_nvenc` and `h264_nvenc` encoders,
+  respectively, and require matching NVIDIA hardware support. Requesting unavailable GPU support fails during
+  initialization with an explicit error. MPEG-4 supports only CPU encoding. `compression_level` is an integer from 0
+  through 10 and defaults to 3. Higher values produce stronger compression and lower quality. Level 0 selects lossless
+  AV1 or H.264; MPEG-4 does not support lossless output, so level 0 selects its highest-quality quantizer. Video is
+  currently available only with `offscreen` presentation and requires a fixed clock and even framebuffer dimensions.
+  The fixed clock sets the output frame rate; `include_ui` defaults to `true`. The system FFmpeg development packages
+  must provide `libavformat`, `libavcodec`, `libavutil`, and `libswscale` through `pkg-config`. klvk links their shared
+  libraries and does not require a custom FFmpeg build. Pixel conversion and encoding run on a background thread behind
+  a bounded three-frame queue; rendering waits when that queue is full, and shutdown drains and joins the encoder.
+  Informational FFmpeg and encoder output is enabled by default through spdlog's `ffmpeg` logger; set `log_ffmpeg` to
+  `false` in the `video` object to silence it.
 - `exit` contains exactly one of `frame`, `time_seconds`, or `after_last_capture`. The last form waits for every requested
-  capture to be submitted; klvk waits for GPU completion and finishes writing the files before `Run` returns.
+  capture to be submitted; klvk waits for GPU completion and finishes writing capture and video files before `Run`
+  returns.
 - Capture and exit points are one-shot `TimerManager` jobs. Their callbacks emit typed capture/application-quit events;
   an interactive run creates no diagnostic timers and does no trigger-list polling.
 - A fixed clock controls klvk and ImGui frame time, and diagnostic runs ignore persisted `imgui.ini` state. Applications
