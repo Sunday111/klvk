@@ -18,8 +18,9 @@ struct FractalPushConstants
 
 static_assert(sizeof(FractalPushConstants) == 72);
 
-[[nodiscard]] FractalPushConstants
-MakeFractalPushConstants(const class FractalSettings& settings, const edt::Mat3f& screen_to_world);
+[[nodiscard]] FractalPushConstants MakeFractalPushConstants(
+    const class FractalSettings& settings,
+    const edt::Mat3f& screen_to_world);
 
 // Fullscreen triangle list (6 vertices, no vertex buffers), no blending, dynamic
 // viewport and scissor, targeting the swapchain format. Stages usually come from

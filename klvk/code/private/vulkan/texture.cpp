@@ -3,6 +3,7 @@
 #include <vk_mem_alloc.h>
 
 #include "klvk/error_handling.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
@@ -16,8 +17,7 @@
 namespace klvk
 {
 
-std::unique_ptr<Texture>
-Texture::CreateR8(DeviceContext& context, edt::Vec2<uint32_t> size, std::span<const uint8_t> pixels)
+std::unique_ptr<Texture> Texture::CreateR8(DeviceContext& context, edt::Vec2<u32> size, std::span<const u8> pixels)
 {
     ErrorHandling::Ensure(
         pixels.size() == static_cast<size_t>(size.x()) * size.y(),
@@ -35,7 +35,7 @@ Texture::CreateR8(DeviceContext& context, edt::Vec2<uint32_t> size, std::span<co
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
         .format = format,
-        .extent = {size.x(), size.y(), 1},
+        .extent = {.width = size.x(), .height = size.y(), .depth = 1},
         .mipLevels = 1,
         .arrayLayers = 1,
         .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -84,7 +84,7 @@ Texture::CreateR8(DeviceContext& context, edt::Vec2<uint32_t> size, std::span<co
 
             const std::array regions{VkBufferImageCopy{
                 .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1},
-                .imageExtent = {size.x(), size.y(), 1},
+                .imageExtent = {.width = size.x(), .height = size.y(), .depth = 1},
             }};
             Vulkan::CmdCopyBufferToImageNE(
                 command_buffer,

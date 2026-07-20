@@ -7,6 +7,7 @@
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
@@ -100,7 +101,7 @@ class PostProcessingApp : public klvk::Application
             .Build();
     }
 
-    void EnsureTargets(edt::Vec2<uint32_t> size)
+    void EnsureTargets(edt::Vec2<u32> size)
     {
         if (size == size_) return;
         auto& context = GetDeviceContext();
@@ -111,7 +112,7 @@ class PostProcessingApp : public klvk::Application
             .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
             .imageType = VK_IMAGE_TYPE_2D,
             .format = kTargetFormat,
-            .extent = {size.x(), size.y(), 1},
+            .extent = {.width = size.x(), .height = size.y(), .depth = 1},
             .mipLevels = 1,
             .arrayLayers = 1,
             .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -170,7 +171,7 @@ class PostProcessingApp : public klvk::Application
             .storeOp = VK_ATTACHMENT_STORE_OP_STORE};
         const VkRenderingInfo rendering{
             .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-            .renderArea = {.extent = {size_.x(), size_.y()}},
+            .renderArea = {.extent = {.width = size_.x(), .height = size_.y()}},
             .layerCount = 1,
             .colorAttachmentCount = 1,
             .pColorAttachments = &attachment};
@@ -198,7 +199,7 @@ class PostProcessingApp : public klvk::Application
             .height = -static_cast<float>(size_.y()),
             .minDepth = 0.f,
             .maxDepth = 1.f};
-        const VkRect2D scissor{.extent = {size_.x(), size_.y()}};
+        const VkRect2D scissor{.extent = {.width = size_.x(), .height = size_.y()}};
         klvk::Vulkan::CmdSetViewport(command_buffer, 0, std::span{&viewport, 1});
         klvk::Vulkan::CmdSetScissor(command_buffer, 0, std::span{&scissor, 1});
     }
@@ -251,21 +252,20 @@ private:
     klvk::VkObject<VkPipeline> scene_pipeline_;
     klvk::VkObject<VkPipeline> blur_pipeline_;
     std::array<Target, kFramesInFlight> targets_{};
-    edt::Vec2<uint32_t> size_{};
+    edt::Vec2<u32> size_{};
     int radius_ = 4;
     float spread_ = 12.f;
     float mix_ = 1.f;
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     PostProcessingApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 }  // namespace
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

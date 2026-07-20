@@ -2,6 +2,7 @@
 
 #include "EverydayTools/Math/Constants.hpp"
 #include "EverydayTools/Math/Math.hpp"
+#include "klvk/integral_aliases.hpp"
 
 namespace klvk
 {
@@ -61,7 +62,7 @@ std::optional<GeneratedMeshData2d> ProceduralMeshGenerator::GenerateCircleMesh(s
     {
         result.vertices[index] = edt::Math::TransformVector(rotation, result.vertices[index - 1]);
     }
-    for (uint32_t index = 0; index != static_cast<uint32_t>(result.indices.size()); ++index)
+    for (u32 index = 0; index != static_cast<u32>(result.indices.size()); ++index)
     {
         result.indices[index] = index;
     }

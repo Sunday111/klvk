@@ -13,14 +13,11 @@ namespace klvk
 template <typename Handle>
 struct VkObjectTraits;
 
-#define KLVK_DEFINE_VK_OBJECT_TRAITS(HandleType, DestroyCall)             \
-    template <>                                                           \
-    struct VkObjectTraits<HandleType>                                     \
-    {                                                                     \
-        static void Destroy(VkDevice device, HandleType handle) noexcept  \
-        {                                                                 \
-            Vulkan::DestroyCall(device, handle);                          \
-        }                                                                 \
+#define KLVK_DEFINE_VK_OBJECT_TRAITS(HandleType, DestroyCall)                                                     \
+    template <>                                                                                                   \
+    struct VkObjectTraits<HandleType>                                                                             \
+    {                                                                                                             \
+        static void Destroy(VkDevice device, HandleType handle) noexcept { Vulkan::DestroyCall(device, handle); } \
     }
 
 KLVK_DEFINE_VK_OBJECT_TRAITS(VkPipeline, DestroyPipelineNE);

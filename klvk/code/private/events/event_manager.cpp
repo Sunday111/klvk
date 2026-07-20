@@ -7,16 +7,37 @@ namespace klvk::events
 
 IEventListener* EventManager::AddEventListener(std::unique_ptr<IEventListener> listener)
 {
+    klvk::ErrorHandling::Ensure(listener != nullptr, "Attempt to register a null event listener!");
     auto [iterator, inserted] = owned_listeners_.insert(std::move(listener));
     klvk::ErrorHandling::Ensure(inserted, "Attempt to register the same listener twice!");
-    return AddEventListener(*iterator->get());
+    try
+    {
+        return AddEventListener(*iterator->get());
+    }
+    catch (...)
+    {
+        owned_listeners_.erase(iterator);
+        throw;
+    }
 }
 
 IEventListener* EventManager::AddEventListener(IEventListener& listener)
 {
     auto [iterator, inserted] = all_listeners_.try_emplace(&listener);
     klvk::ErrorHandling::Ensure(inserted, "Attempt to register the same listener twice!");
-    UpdateListenTypes(&listener);
+    try
+    {
+        UpdateListenTypes(&listener);
+    }
+    catch (...)
+    {
+        for (const cppreflection::Type* type : iterator->second.registered_types)
+        {
+            StopListeningEventType(&listener, type);
+        }
+        all_listeners_.erase(iterator);
+        throw;
+    }
     return &listener;
 }
 
@@ -91,6 +112,7 @@ void EventManager::StopListeningEventType(IEventListener* listener, const cppref
         // Yes, it is stable algorithm because I want to preserve the order of event invocation
         const auto [erase_begin, erase_end] = std::ranges::remove(entries, listener, &ListenerTypeEntry::listener);
         entries.erase(erase_begin, erase_end);
+        if (entries.empty()) type_lookup_.erase(it);
     }
 }
 }  // namespace klvk::events

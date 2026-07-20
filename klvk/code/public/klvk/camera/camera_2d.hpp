@@ -3,6 +3,7 @@
 #include <EverydayTools/Math/FloatRange.hpp>
 #include <EverydayTools/Math/Math.hpp>
 
+#include "klvk/integral_aliases.hpp"
 #include "viewport.hpp"
 
 namespace klvk
@@ -11,7 +12,7 @@ namespace klvk
 class Camera2d;
 class Viewport;
 
-enum class AspectRatioPolicy : uint8_t
+enum class AspectRatioPolicy : u8
 {
     Stretch,
     ShrinkToFit,

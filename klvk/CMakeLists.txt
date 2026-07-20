@@ -3,6 +3,10 @@ include(set_compiler_options)
 set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/camera/camera_3d.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_events.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_run_config.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_runner.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_runner.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/events/event_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/filesystem/filesystem.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/math/transform.cpp
@@ -14,6 +18,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_cache_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/texture/procedural_texture_generator.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/timing/timer_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/simple_imgui_combo.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/type_id_widget.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/descriptor_sets.cpp
@@ -30,7 +35,9 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/camera/camera_2d.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/camera/camera_3d.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/camera/viewport.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/diagnostics/diagnostic_run_config.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/error_handling.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/application_events.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/detail.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/event_listener.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/event_listener_interface.hpp
@@ -39,6 +46,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/mouse_events.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/window_events.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/filesystem/filesystem.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/integral_aliases.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/macro/ensure_enum_size.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/math/rotator.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/math/transform.hpp
@@ -51,6 +59,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/define_handle.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/shader.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/shader_cache_manager.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/signed_integral_aliases.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/class_member_traits.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/constexpr_string_hash.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/get_enum_underlying.hpp
@@ -59,6 +68,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/tagged_id_hash.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/tuple_type_by_index.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/texture/procedural_texture_generator.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/timing/timer_manager.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/imgui_helpers.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/imgui_value_combo.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/simple_imgui_combo.hpp

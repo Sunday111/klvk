@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "EverydayTools/Math/Matrix.hpp"
+#include "klvk/diagnostics/diagnostic_run_config.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk::events
@@ -18,6 +19,7 @@ namespace klvk
 class Window;
 class DeviceContext;
 class Swapchain;
+class TimerManager;
 
 class Application
 {
@@ -35,6 +37,7 @@ public:
 
     virtual void Initialize();
     virtual void Run();
+    void RunWithArguments(int argc, char** argv);
     virtual void PreTick();
     virtual void BeforeSwapchainRender(VkCommandBuffer command_buffer);
     virtual void Tick();
@@ -45,25 +48,32 @@ public:
     [[nodiscard]] virtual bool WantsToClose() const;
 
     Window& GetWindow();
-    const Window& GetWindow() const;
+    [[nodiscard]] const Window& GetWindow() const;
 
-    const std::filesystem::path& GetExecutableDir() const;
-    virtual std::filesystem::path GetContentDir() const;
-    virtual std::filesystem::path GetShaderDir() const;
+    [[nodiscard]] const std::filesystem::path& GetExecutableDir() const;
+    [[nodiscard]] virtual std::filesystem::path GetContentDir() const;
+    [[nodiscard]] virtual std::filesystem::path GetShaderDir() const;
+
+    // Present only when RunWithArguments loaded --klvk-diagnostics. Applications
+    // may read their opaque "application" object during Initialize().
+    [[nodiscard]] const nlohmann::json* GetDiagnosticApplicationConfig() const noexcept;
 
     events::EventManager& GetEventManager();
 
+    // The application main loop owns Advance; callers schedule and cancel only.
+    TimerManager& GetTimerManager();
+
     // Current time. Relative to app start
-    float GetTimeSeconds() const;
+    [[nodiscard]] float GetTimeSeconds() const;
 
     // Time (in seconds) when the current fame started. Relative to app start
-    float GetCurrentFrameStartTime() const;
+    [[nodiscard]] float GetCurrentFrameStartTime() const;
 
     // How many ticks app does per second (on average among last 128 ticks)
-    float GetFramerate() const;
+    [[nodiscard]] float GetFramerate() const;
 
     // Duration of the previous tick (in seconds)
-    float GetLastFrameDurationSeconds() const;
+    [[nodiscard]] float GetLastFrameDurationSeconds() const;
 
     void SetTargetFramerate(std::optional<float> framerate);
 
@@ -82,6 +92,8 @@ public:
     [[nodiscard]] size_t GetFrameInFlightIndex() const;
 
 private:
+    void RunImpl();
+
     std::unique_ptr<State> state_;
 };
 

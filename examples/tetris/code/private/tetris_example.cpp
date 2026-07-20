@@ -2,12 +2,17 @@
 
 #include <EverydayTools/Math/Math.hpp>
 #include <EverydayTools/Template/TaggedIdentifier.hpp>
+#include <limits>
+#include <optional>
 #include <random>
+#include <utility>
 #include <variant>
 
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/rendering/instanced_sprite_renderer_2d.hpp"
+#include "klvk/timing/timer_manager.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/texture.hpp"
 #include "klvk/window.hpp"
@@ -21,10 +26,12 @@ constexpr edt::Vec4u8 kBlack{0, 0, 0, 255};
 constexpr edt::Vec4u8 kRed{255, 0, 0, 255};
 }  // namespace colors
 
+constexpr float kGameStepSeconds = 0.06f;
+
 struct BlockIdTag
 {
 };
-using BlockId = edt::TaggedIdentifier<BlockIdTag, uint32_t>;
+using BlockId = edt::TaggedIdentifier<BlockIdTag, u32>;
 constexpr BlockId kInvalidBlockId{};
 
 struct Block
@@ -37,7 +44,7 @@ struct Block
 
 struct BlockIdHash
 {
-    size_t operator()(BlockId id) const noexcept { return std::hash<uint32_t>{}(id.GetValue()); }
+    size_t operator()(BlockId id) const noexcept { return std::hash<u32>{}(id.GetValue()); }
 };
 
 struct TetrisCell
@@ -53,8 +60,8 @@ public:
 
     [[nodiscard]] constexpr bool IsInside(edt::Vec2i coordinate) const
     {
-        return coordinate.x() >= 0 && coordinate.y() >= 0 && static_cast<size_t>(coordinate.x()) < kSize.x() &&
-               static_cast<size_t>(coordinate.y()) < kSize.y();
+        return coordinate.x() >= 0 && coordinate.y() >= 0 && std::cmp_less(coordinate.x(), kSize.x()) &&
+               std::cmp_less(coordinate.y(), kSize.y());
     }
 
     [[nodiscard]] auto BlockGridCoords(const BlockPrefab& prefab, edt::Vec2i position) const
@@ -109,7 +116,9 @@ public:
         const auto old = RemoveBlock(id);
         klvk::ErrorHandling::Ensure(old.has_value(), "Failed to remove block from grid");
         if (const BlockId replacement_id = AddBlock(replacement); replacement_id.IsValid())
+        {
             return {replacement_id, true};
+        }
         const BlockId reverted = AddBlock(*old);
         klvk::ErrorHandling::Ensure(reverted.IsValid(), "Failed to restore block");
         return {reverted, false};
@@ -129,7 +138,7 @@ public:
         const auto iterator = blocks_.find(id);
         klvk::ErrorHandling::Ensure(iterator != blocks_.end(), "Block not found");
         Block replacement = iterator->second;
-        const size_t rotation = static_cast<size_t>(delta % 4 + 4);
+        const auto rotation = static_cast<size_t>(delta % 4 + 4);
         replacement.rotation_index = (replacement.rotation_index + rotation) % 4;
         return ReplaceBlock(id, replacement);
     }
@@ -137,10 +146,14 @@ public:
     [[nodiscard]] std::optional<size_t> FindFullRow(size_t first) const
     {
         for (size_t y = first; y != kSize.y(); ++y)
+        {
             if (std::ranges::all_of(
                     std::views::iota(size_t{0}, kSize.x()),
                     [&](size_t x) { return GetCell({x, y}).block_id.IsValid(); }))
+            {
                 return y;
+            }
+        }
         return {};
     }
 
@@ -160,7 +173,7 @@ private:
     BlockId next_block_id_ = BlockId::FromValue(0);
 };
 
-enum class KeyboardKey : uint8_t
+enum class KeyboardKey : u8
 {
     W,
     A,
@@ -224,10 +237,22 @@ class TetrisApp : public klvk::Application
         GetWindow().SetSize(500, 1000);
         GetWindow().SetTitle("Tetris Example");
         SetTargetFramerate(60.f);
-        constexpr std::array<uint8_t, 1> white{255};
+        constexpr std::array<u8, 1> white{255};
         texture_ = klvk::Texture::CreateR8(GetDeviceContext(), {1, 1}, white);
         renderer_ = std::make_unique<klvk::InstancedSpriteRenderer2d>(*this, *texture_);
         state_ = SpawnBlockState{};
+        const klvk::TimerDuration interval{static_cast<double>(kGameStepSeconds)};
+        game_step_timer_ = GetTimerManager().ScheduleEveryAt(
+            interval,
+            interval,
+            [this](const klvk::TimerEvent& event)
+            {
+                klvk::ErrorHandling::Ensure(
+                    event.occurrence != std::numeric_limits<u64>::max(),
+                    "Tetris game-step counter overflow");
+                pending_game_step_ = event.occurrence + 1;
+            },
+            klvk::TimerMissedTickPolicy::Coalesce);
     }
 
     [[nodiscard]] bool SpawnNewBlock()
@@ -249,7 +274,9 @@ class TetrisApp : public klvk::Application
         if (KeyReleased(KeyboardKey::E)) ++rotation;
         if (KeyReleased(KeyboardKey::Q)) --rotation;
         if (rotation != 0 && current_block_.IsValid())
+        {
             current_block_ = std::get<0>(grid_.RotateBlock(current_block_, rotation));
+        }
 
         auto instant_move = [&](KeyboardKey key, edt::Vec2i delta)
         {
@@ -262,7 +289,7 @@ class TetrisApp : public klvk::Application
         instant_move(KeyboardKey::W, {0, 1});
     }
 
-    void TimeStep(BlockFallState&, size_t step)
+    void TimeStep(BlockFallState&, u64 step)
     {
         constexpr size_t gravity_period = 15;
         const bool gravity_step = step % gravity_period == 0;
@@ -273,9 +300,13 @@ class TetrisApp : public klvk::Application
             if (!success)
             {
                 if (const auto row = grid_.FindFullRow(0))
+                {
                     state_ = DeleteRowsState{.row_index = *row};
+                }
                 else
+                {
                     state_ = SpawnBlockState{};
+                }
             }
         }
 
@@ -292,7 +323,7 @@ class TetrisApp : public klvk::Application
     }
 
     void Tick(DeleteRowsState&) {}
-    void TimeStep(DeleteRowsState& state, size_t)
+    void TimeStep(DeleteRowsState& state, u64)
     {
         if (state.next_x < TetrisGrid::kSize.x())
         {
@@ -306,6 +337,7 @@ class TetrisApp : public klvk::Application
             subdivision.size /= static_cast<float>(subdivisions);
             std::uniform_real_distribution<float> distance(0.f, subdivision.size.x() * 5.f);
             for (size_t x = 0; x != subdivisions; ++x)
+            {
                 for (size_t y = 0; y != subdivisions; ++y)
                 {
                     AnimatedRect& animation = animations_.emplace_back();
@@ -318,35 +350,44 @@ class TetrisApp : public klvk::Application
                     animation.finish.color.w() = 0;
                     animation.finish.center += edt::Vec2f{distance(random_), distance(random_)};
                 }
+            }
             ++state.next_x;
         }
         else
+        {
             state_ = MoveDeletedRowUp{.deleted_row = state.row_index, .current_row = state.row_index};
+        }
     }
 
     void Tick(SpawnBlockState&) {}
-    void TimeStep(SpawnBlockState&, size_t)
+    void TimeStep(SpawnBlockState&, u64)
     {
         if (SpawnNewBlock()) state_ = BlockFallState{};
     }
 
     void Tick(MoveDeletedRowUp&) {}
-    void TimeStep(MoveDeletedRowUp& state, size_t)
+    void TimeStep(MoveDeletedRowUp& state, u64)
     {
         const size_t next = state.current_row + 1;
         if (next < TetrisGrid::kSize.y())
         {
             for (size_t x = 0; x != TetrisGrid::kSize.x(); ++x)
+            {
                 std::swap(grid_.GetCell({x, state.current_row}), grid_.GetCell({x, next}));
+            }
             ++state.current_row;
         }
         else if (const auto row = grid_.FindFullRow(state.deleted_row))
+        {
             state_ = DeleteRowsState{.row_index = *row};
+        }
         else
+        {
             state_ = SpawnBlockState{};
+        }
     }
 
-    Rect MakeCellRect(edt::Vec2<size_t> coordinate) const
+    [[nodiscard]] Rect MakeCellRect(edt::Vec2<size_t> coordinate) const
     {
         const edt::Vec2f size = edt::Vec2f{2.f, 2.f} / TetrisGrid::kSize.Cast<float>();
         return {
@@ -366,7 +407,7 @@ class TetrisApp : public klvk::Application
                 .size = edt::Math::Lerp(animation.start.size, animation.finish.size, factor),
                 .color =
                     edt::Math::Lerp(animation.start.color.Cast<float>(), animation.finish.color.Cast<float>(), factor)
-                        .Cast<uint8_t>(),
+                        .Cast<u8>(),
                 .rotation_degrees =
                     std::lerp(animation.start.rotation_degrees, animation.finish.rotation_degrees, factor)};
             AddRect(rectangle);
@@ -389,13 +430,12 @@ class TetrisApp : public klvk::Application
     {
         klvk::Application::Tick();
         UpdateKeyboardState();
-        constexpr float step_seconds = 0.06f;
-        const size_t step = static_cast<size_t>(GetTimeSeconds() / step_seconds);
         std::visit([&](auto& state) { Tick(state); }, state_);
-        if (step != last_step_)
+        if (pending_game_step_.has_value())
         {
+            const u64 step = *pending_game_step_;
+            pending_game_step_.reset();
             std::visit([&](auto& state) { TimeStep(state, step); }, state_);
-            last_step_ = step;
         }
 
         renderer_->Clear();
@@ -409,7 +449,7 @@ class TetrisApp : public klvk::Application
         renderer_->Render(edt::Mat3f::Identity());
     }
 
-    bool KeyReleased(KeyboardKey key) const
+    [[nodiscard]] bool KeyReleased(KeyboardKey key) const
     {
         const KeyboardState& state = keys_[static_cast<size_t>(key)];
         return state.changed && !state.is_down;
@@ -435,6 +475,10 @@ class TetrisApp : public klvk::Application
 public:
     ~TetrisApp() override
     {
+        if (game_step_timer_.IsValid())
+        {
+            [[maybe_unused]] const bool cancelled = GetTimerManager().Cancel(game_step_timer_);
+        }
         if (renderer_) GetDeviceContext().WaitIdle();
     }
 
@@ -449,18 +493,18 @@ private:
     std::variant<SpawnBlockState, BlockFallState, DeleteRowsState, MoveDeletedRowUp> state_;
     std::array<KeyboardState, static_cast<size_t>(KeyboardKey::Count)> keys_{};
     std::vector<AnimatedRect> animations_;
-    size_t last_step_ = 0;
+    klvk::TimerHandle game_step_timer_;
+    std::optional<u64> pending_game_step_;
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     TetrisApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 }  // namespace
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

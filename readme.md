@@ -13,6 +13,84 @@ API (`Application`, `Window`, events, camera) built on Vulkan 1.3 with dynamic r
 
 This is a [yae](https://github.com/Sunday111/yae) package: add it as a package dependency and link the `klvk` module.
 
+## Integral aliases
+
+Public headers use the exact-width aliases from `klvk/integral_aliases.hpp`: `u8`, `u16`, `u32`, and `u64`.
+`klvk/signed_integral_aliases.hpp` additionally provides `i8`, `i16`, `i32`, and `i64`. Include the signed header only for
+domains that can meaningfully be negative, or when matching an explicitly signed external ABI. Sizes, counts,
+dimensions, indices, masks, and identifiers should remain unsigned.
+
+## Timers
+
+`klvk/timing/timer_manager.hpp` provides render-thread scheduling in elapsed-time and frame domains. It uses indexed
+binary min-heaps and generational handles: finding the next timer is O(1), while scheduling and immediate cancellation
+are O(log n) without cancelled tombstones. Equal deadlines are FIFO.
+
+Timers may be one-shot or fixed-rate repeating. Repeating timers explicitly choose whether missed occurrences are all
+invoked or coalesced into the latest logical occurrence. Callbacks may schedule timers, cancel themselves or other
+timers, and clear the manager. Work scheduled by a callback is deliberately deferred until the next `Advance`, which
+prevents recursive starvation. `Advance` also has a callback budget. `InvokeAll` occurrences are merged chronologically
+with other due work in the same domain rather than dispatched as one timer-sized batch; a rotating readiness order
+between the otherwise incomparable time and frame domains prevents either from monopolizing a small budget. Remaining
+catch-up work resumes on the next advance without skipping occurrences. A callback that throws cancels that timer,
+preserves all other due timers, and propagates the exception. `TimerManager` is intentionally not synchronized; advance
+it and mutate it from its owning engine thread. Supply logical elapsed time to `Advance` rather than letting the manager
+read a wall clock, so fixed-step and deterministic runtimes use the same scheduler.
+
+Every `Application` owns a `TimerManager`, exposed through `GetTimerManager()`. The main loop advances it after
+`PreTick` and immediately before the application's `Tick`, using the application's logical elapsed time and one-based
+rendered-frame number. Applications therefore receive timer callbacks at a stable point after frame setup and before
+their per-frame logic. Diagnostics use a separate manager so application catch-up work cannot delay deterministic
+captures. The main loop owns `Advance`; application code uses the returned manager only to schedule, cancel, and inspect
+timers.
+
+## Diagnostic runs and framebuffer capture
+
+`Application::RunWithArguments(argc, argv)` recognizes `--klvk-diagnostics <file>` and
+`--klvk-diagnostics=<file>`. The JSON file
+controls presentation, deterministic timing, any number of framebuffer captures, and automatic exit. All klvk examples
+use this entry point.
+
+```json
+{
+  "version": 1,
+  "presentation": "hidden",
+  "framebuffer_size": [800, 600],
+  "clock": {"mode": "fixed", "step_seconds": 0.016666666666666666},
+  "captures": [
+    {"frame": 1, "path": "captures/first.ppm", "include_ui": false},
+    {"time_seconds": 0.25, "path": "captures/quarter-second.ppm"},
+    {"time_seconds": 0.5, "path": "captures/half-second.ppm"}
+  ],
+  "exit": {"after_last_capture": true},
+  "application": {"seed": 7}
+}
+```
+
+- `presentation` is `visible` or `hidden`. Hidden presentation still uses a GLFW window, Vulkan surface, and swapchain,
+  so it requires a display server. It is not the future display-independent `offscreen` backend. On X11, klvk briefly
+  realizes the undecorated window outside the desktop before hiding it because some Vulkan drivers otherwise report a
+  fallback surface extent.
+- `framebuffer_size` is required when captures are present and is enforced exactly, including after an example changes
+  its window size during initialization.
+- `captures` is an array, so a run may contain any number of frame and time points. Each entry contains exactly one of
+  one-based `frame` or non-negative `time_seconds`. A time capture occurs on the first rendered frame whose diagnostic
+  time reaches the requested point. `include_ui` defaults to `true`.
+- Capture files are binary RGB PPM (`P6`). Relative paths are resolved against the executable directory, not the process
+  working directory. Parent directories are created and completed files atomically replace older captures.
+- `exit` contains exactly one of `frame`, `time_seconds`, or `after_last_capture`. The last form waits for every requested
+  capture to be submitted; klvk waits for GPU completion and finishes writing the files before `Run` returns.
+- Capture and exit points are one-shot `TimerManager` jobs. Their callbacks emit typed capture/application-quit events;
+  an interactive run creates no diagnostic timers and does no trigger-list polling.
+- A fixed clock controls klvk and ImGui frame time, and diagnostic runs ignore persisted `imgui.ini` state. Applications
+  can read their optional object through `GetDiagnosticApplicationConfig()`.
+
+With yae, pass application arguments after `--`:
+
+```sh
+yae run klvk_painter2d_example -- --klvk-diagnostics /tmp/painter-capture.json
+```
+
 ## Vulkan API wrappers
 
 `klvk::Vulkan` provides three forms for Vulkan calls that return `VkResult`:

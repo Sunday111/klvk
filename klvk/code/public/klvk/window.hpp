@@ -1,6 +1,9 @@
 #pragma once
 
+#include <optional>
+
 #include "EverydayTools/Math/Matrix.hpp"
+#include "klvk/integral_aliases.hpp"
 
 struct GLFWwindow;
 
@@ -14,22 +17,22 @@ class Application;
 class Window
 {
 public:
-    Window(Application& app, uint32_t width, uint32_t height);
+    Window(Application& app, u32 width, u32 height);
     ~Window();
 
     [[nodiscard]] bool ShouldClose() const noexcept;
-    [[nodiscard]] uint32_t GetWidth() const noexcept { return width_; }
-    [[nodiscard]] uint32_t GetHeight() const noexcept { return height_; }
+    [[nodiscard]] u32 GetWidth() const noexcept { return width_; }
+    [[nodiscard]] u32 GetHeight() const noexcept { return height_; }
     [[nodiscard]] bool IsFocused() const noexcept;
     [[nodiscard]] bool IsHovered() const noexcept;
     [[nodiscard]] Vec2f GetCursorPos() const noexcept { return cursor_; }
     [[nodiscard]] bool IsInInputMode() const noexcept { return input_mode_; }
 
-    Vec2<uint32_t> GetSize() const { return {width_, height_}; }
-    Vec2f GetSize2f() const { return GetSize().Cast<float>(); }
+    [[nodiscard]] Vec2<u32> GetSize() const { return {width_, height_}; }
+    [[nodiscard]] Vec2f GetSize2f() const { return GetSize().Cast<float>(); }
 
     // Size of the surface to render to, in pixels. Differs from GetSize on high-dpi displays.
-    [[nodiscard]] Vec2<uint32_t> GetFramebufferSize() const noexcept;
+    [[nodiscard]] Vec2<u32> GetFramebufferSize() const noexcept;
 
     [[nodiscard]] GLFWwindow* GetGlfwWindow() const noexcept { return window_; }
     [[nodiscard]] float GetAspect() const noexcept
@@ -38,12 +41,18 @@ public:
     }
 
     void SetSize(size_t width, size_t height);
+    // Adjusts the logical window size until the framebuffer has this exact pixel size.
+    // Intended for deterministic diagnostic runs on scaled displays.
+    void SetFramebufferSize(Vec2<u32> size);
     void SetTitle(const char* title);
 
-    bool IsKeyPressed(int key) const;
+    [[nodiscard]] bool IsKeyPressed(int key) const;
 
 private:
-    static uint32_t MakeWindowId();
+    friend class Application;
+
+    void SetFixedFramebufferSize(Vec2<u32> size);
+    static u32 MakeWindowId();
     static Window* GetWindow(GLFWwindow* glfw_window) noexcept;
 
     template <auto method, typename... Args>
@@ -71,9 +80,10 @@ private:
     Application* app_ = nullptr;
     GLFWwindow* window_ = nullptr;
     Vec2f cursor_;
-    uint32_t id_;
-    uint32_t width_;
-    uint32_t height_;
+    u32 id_;
+    u32 width_;
+    u32 height_;
+    std::optional<Vec2<u32>> fixed_framebuffer_size_;
     bool input_mode_ = false;
 };
 

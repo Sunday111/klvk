@@ -1,14 +1,13 @@
 #include "fractal_app.hpp"
 #include "klvk/error_handling.hpp"
 
-void Main()
+void Main(int argc, char** argv)
 {
     FractalApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

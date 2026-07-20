@@ -4,6 +4,7 @@
 #include <span>
 
 #include "EverydayTools/Math/Matrix.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
 VK_DEFINE_HANDLE(VmaAllocation)
@@ -18,10 +19,8 @@ class Texture
 {
 public:
     // Single channel texture. In shaders the red component holds the pixel value.
-    [[nodiscard]] static std::unique_ptr<Texture> CreateR8(
-        DeviceContext& context,
-        edt::Vec2<uint32_t> size,
-        std::span<const uint8_t> pixels);
+    [[nodiscard]] static std::unique_ptr<Texture>
+    CreateR8(DeviceContext& context, edt::Vec2<u32> size, std::span<const u8> pixels);
 
     Texture(const Texture&) = delete;
     Texture(Texture&&) = delete;
@@ -29,7 +28,7 @@ public:
 
     [[nodiscard]] VkImageView GetView() const noexcept { return view_; }
     [[nodiscard]] VkSampler GetSampler() const noexcept { return sampler_; }
-    [[nodiscard]] edt::Vec2<uint32_t> GetSize() const noexcept { return size_; }
+    [[nodiscard]] edt::Vec2<u32> GetSize() const noexcept { return size_; }
 
 private:
     Texture() = default;
@@ -39,7 +38,7 @@ private:
     VmaAllocation allocation_ = VK_NULL_HANDLE;
     VkImageView view_ = VK_NULL_HANDLE;
     VkSampler sampler_ = VK_NULL_HANDLE;
-    edt::Vec2<uint32_t> size_{};
+    edt::Vec2<u32> size_{};
 };
 
 }  // namespace klvk

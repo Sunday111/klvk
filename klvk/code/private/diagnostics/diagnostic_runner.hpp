@@ -1,0 +1,83 @@
+#pragma once
+
+#include <filesystem>
+#include <memory>
+#include <vector>
+
+#include "diagnostic_events.hpp"
+#include "klvk/diagnostics/diagnostic_run_config.hpp"
+#include "klvk/events/event_listener_interface.hpp"
+#include "klvk/integral_aliases.hpp"
+#include "klvk/timing/timer_manager.hpp"
+#include "klvk/vulkan/gpu_buffer.hpp"
+
+namespace klvk
+{
+
+class DeviceContext;
+namespace events
+{
+class EventManager;
+}
+
+class DiagnosticRunner
+{
+public:
+    DiagnosticRunner(
+        const DiagnosticRunConfig& config,
+        const std::filesystem::path& executable_directory,
+        size_t frames_in_flight,
+        events::EventManager& event_manager);
+    ~DiagnosticRunner();
+
+    void Advance(u64 frame, double time_seconds);
+    [[nodiscard]] bool HasQueuedCaptures(bool include_ui) const noexcept;
+
+    // The image must be in COLOR_ATTACHMENT_OPTIMAL. Returns true after recording
+    // a copy and leaves it in final_layout.
+    bool RecordQueuedCaptures(
+        DeviceContext& context,
+        VkCommandBuffer command_buffer,
+        size_t frame_in_flight,
+        bool include_ui,
+        VkImage image,
+        VkFormat format,
+        VkExtent2D extent,
+        VkImageLayout final_layout);
+
+    void ProcessCompletedFrame(size_t frame_in_flight);
+    void ProcessAllCompleted();
+    void EnsureComplete() const;
+
+private:
+    struct Capture
+    {
+        DiagnosticCaptureConfig config;
+        bool queued = false;
+        bool recorded = false;
+    };
+
+    struct PendingCapture
+    {
+        GpuBuffer buffer;
+        VkFormat format = VK_FORMAT_UNDEFINED;
+        VkExtent2D extent{};
+        std::vector<std::filesystem::path> paths;
+    };
+
+    void OnCaptureDue(const events::DiagnosticCaptureDue& event);
+    void ScheduleCapture(size_t capture_index, bool quit_after_last_capture);
+    void ScheduleQuit(const DiagnosticExitConfig& exit);
+    static void WritePpm(PendingCapture& capture);
+
+    std::vector<Capture> captures_;
+    std::vector<std::vector<PendingCapture>> pending_;
+    std::vector<size_t> queued_without_ui_;
+    std::vector<size_t> queued_with_ui_;
+    TimerManager timers_;
+    events::EventManager& event_manager_;
+    std::unique_ptr<events::IEventListener> event_listener_;
+    size_t triggered_capture_count_ = 0;
+};
+
+}  // namespace klvk

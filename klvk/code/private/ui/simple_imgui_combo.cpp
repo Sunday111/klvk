@@ -3,7 +3,6 @@
 #include "imgui.h"
 #include "klvk/error_handling.hpp"
 
-
 namespace klvk
 {
 bool ImGuiCombo::Draw() noexcept

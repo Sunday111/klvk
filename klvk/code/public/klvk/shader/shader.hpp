@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "klvk/error_handling.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/shader/define_handle.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
@@ -40,11 +41,11 @@ public:
     [[nodiscard]] DefineHandle GetDefine(std::string_view name) const;
 
     template <typename T>
-        requires(sizeof(T) == sizeof(uint32_t))
+        requires(sizeof(T) == sizeof(u32))
     void SetDefineValue(const DefineHandle& handle, const T& value)
     {
         ErrorHandling::Ensure(handle.index < define_values_.size(), "Unknown define '{}'", handle.name);
-        uint32_t raw = 0;
+        u32 raw = 0;
         std::memcpy(&raw, &value, sizeof(raw));
         if (define_values_[handle.index] != raw)
         {
@@ -54,7 +55,7 @@ public:
     }
 
     template <typename T>
-        requires(sizeof(T) == sizeof(uint32_t))
+        requires(sizeof(T) == sizeof(u32))
     [[nodiscard]] T GetDefineValue(const DefineHandle& handle) const
     {
         ErrorHandling::Ensure(handle.index < define_values_.size(), "Unknown define '{}'", handle.name);
@@ -78,7 +79,7 @@ private:
     std::string name_;
     std::vector<std::pair<VkShaderStageFlagBits, VkShaderModule>> stages_;
     std::vector<std::string> define_names_;
-    std::vector<uint32_t> define_values_;
+    std::vector<u32> define_values_;
     std::vector<VkSpecializationMapEntry> specialization_entries_;
     mutable VkSpecializationInfo specialization_info_{};
     size_t version_ = 0;

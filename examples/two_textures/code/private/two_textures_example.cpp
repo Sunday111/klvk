@@ -3,6 +3,7 @@
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/texture/procedural_texture_generator.hpp"
 #include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
@@ -48,14 +49,14 @@ class TwoTexturesApp : public klvk::Application
         // Generate triangle mask texture and mirror it
         constexpr auto texture_size = edt::Vec2<size_t>{} + 128;
         auto pixels = klvk::ProceduralTextureGenerator::TriangleMask(texture_size, 2);
-        right_triangle_texture_ = klvk::Texture::CreateR8(context, texture_size.Cast<uint32_t>(), std::span{pixels});
+        right_triangle_texture_ = klvk::Texture::CreateR8(context, texture_size.Cast<u32>(), std::span{pixels});
 
         klvk::ProceduralTextureGenerator::MirrorX(texture_size, pixels);
-        left_triangle_texture_ = klvk::Texture::CreateR8(context, texture_size.Cast<uint32_t>(), std::span{pixels});
+        left_triangle_texture_ = klvk::Texture::CreateR8(context, texture_size.Cast<u32>(), std::span{pixels});
 
         // Generate circle mask texture
         pixels = klvk::ProceduralTextureGenerator::CircleMask(texture_size, 2);
-        circle_texture_ = klvk::Texture::CreateR8(context, texture_size.Cast<uint32_t>(), std::span{pixels});
+        circle_texture_ = klvk::Texture::CreateR8(context, texture_size.Cast<u32>(), std::span{pixels});
     }
 
     // One descriptor set per texture pair, both written once here:
@@ -154,14 +155,13 @@ private:
     klvk::VkObject<VkPipeline> pipeline_;
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     TwoTexturesApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

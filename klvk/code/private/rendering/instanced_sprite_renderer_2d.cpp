@@ -1,6 +1,7 @@
 #include "klvk/rendering/instanced_sprite_renderer_2d.hpp"
 
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
 #include "klvk/vulkan/texture.hpp"
@@ -117,7 +118,7 @@ void InstancedSpriteRenderer2d::Render(const Mat3f& world_to_view)
     }
     Vulkan::CmdPushConstantsNE(command_buffer, pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, push_constants);
 
-    Vulkan::CmdDrawNE(command_buffer, 6, static_cast<uint32_t>(instances_.size()), 0, 0);
+    Vulkan::CmdDrawNE(command_buffer, 6, static_cast<u32>(instances_.size()), 0, 0);
 }
 
 }  // namespace klvk

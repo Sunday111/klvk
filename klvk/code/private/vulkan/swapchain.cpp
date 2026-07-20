@@ -5,6 +5,7 @@
 #include <algorithm>
 
 #include "klvk/error_handling.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 
@@ -20,7 +21,13 @@ namespace klvk
 namespace
 {
 
-VkSurfaceFormatKHR ChooseSurfaceFormat(VkPhysicalDevice device, VkSurfaceKHR surface)
+bool IsDiagnosticCaptureFormat(VkFormat format)
+{
+    return format == VK_FORMAT_B8G8R8A8_UNORM || format == VK_FORMAT_B8G8R8A8_SRGB ||
+           format == VK_FORMAT_R8G8B8A8_UNORM || format == VK_FORMAT_R8G8B8A8_SRGB;
+}
+
+VkSurfaceFormatKHR ChooseSurfaceFormat(VkPhysicalDevice device, VkSurfaceKHR surface, bool diagnostic_capture)
 {
     const std::vector<VkSurfaceFormatKHR> formats = Vulkan::GetPhysicalDeviceSurfaceFormatsKHR(device, surface);
     ErrorHandling::Ensure(!formats.empty(), "Surface reports no formats");
@@ -31,6 +38,14 @@ VkSurfaceFormatKHR ChooseSurfaceFormat(VkPhysicalDevice device, VkSurfaceKHR sur
         {
             return format;
         }
+    }
+    if (diagnostic_capture)
+    {
+        for (const auto& format : formats)
+        {
+            if (IsDiagnosticCaptureFormat(format.format)) return format;
+        }
+        ErrorHandling::ThrowWithMessage("Surface provides no RGBA8/BGRA8 format supported by diagnostic capture");
     }
     return formats.front();
 }
@@ -50,7 +65,9 @@ VkPresentModeKHR ChoosePresentMode(VkPhysicalDevice device, VkSurfaceKHR surface
 
 }  // namespace
 
-Swapchain::Swapchain(DeviceContext& context, edt::Vec2<uint32_t> framebuffer_size) : context_(&context)
+Swapchain::Swapchain(DeviceContext& context, edt::Vec2<u32> framebuffer_size, VkImageUsageFlags additional_image_usage)
+    : context_(&context),
+      additional_image_usage_(additional_image_usage)
 {
     Create(framebuffer_size, VK_NULL_HANDLE);
 }
@@ -61,7 +78,7 @@ Swapchain::~Swapchain()
     if (swapchain_) Vulkan::DestroySwapchainKHRNE(context_->GetDevice(), swapchain_);
 }
 
-void Swapchain::Recreate(edt::Vec2<uint32_t> framebuffer_size)
+void Swapchain::Recreate(edt::Vec2<u32> framebuffer_size)
 {
     context_->WaitIdle();
     DestroyImageViews();
@@ -70,7 +87,7 @@ void Swapchain::Recreate(edt::Vec2<uint32_t> framebuffer_size)
     if (old_swapchain) Vulkan::DestroySwapchainKHRNE(context_->GetDevice(), old_swapchain);
 }
 
-void Swapchain::Create(edt::Vec2<uint32_t> framebuffer_size, VkSwapchainKHR old_swapchain)
+void Swapchain::Create(edt::Vec2<u32> framebuffer_size, VkSwapchainKHR old_swapchain)
 {
     VkPhysicalDevice physical_device = context_->GetPhysicalDevice();
     VkSurfaceKHR surface = context_->GetSurface();
@@ -78,25 +95,36 @@ void Swapchain::Create(edt::Vec2<uint32_t> framebuffer_size, VkSwapchainKHR old_
     const VkSurfaceCapabilitiesKHR capabilities =
         Vulkan::GetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface);
 
-    format_ = ChooseSurfaceFormat(physical_device, surface);
+    format_ =
+        ChooseSurfaceFormat(physical_device, surface, (additional_image_usage_ & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0);
 
-    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
+    if (capabilities.currentExtent.width != std::numeric_limits<u32>::max())
     {
         extent_ = capabilities.currentExtent;
     }
     else
     {
         extent_ = {
-            std::clamp(framebuffer_size.x(), capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
-            std::clamp(framebuffer_size.y(), capabilities.minImageExtent.height, capabilities.maxImageExtent.height),
+            .width =
+                std::clamp(framebuffer_size.x(), capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+            .height = std::clamp(
+                framebuffer_size.y(),
+                capabilities.minImageExtent.height,
+                capabilities.maxImageExtent.height),
         };
     }
 
-    uint32_t image_count = capabilities.minImageCount + 1;
+    u32 image_count = capabilities.minImageCount + 1;
     if (capabilities.maxImageCount != 0)
     {
         image_count = std::min(image_count, capabilities.maxImageCount);
     }
+
+    const VkImageUsageFlags image_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | additional_image_usage_;
+    ErrorHandling::Ensure(
+        (capabilities.supportedUsageFlags & image_usage) == image_usage,
+        "Surface does not support required swapchain image usage flags 0x{:x}",
+        image_usage);
 
     const VkSwapchainCreateInfoKHR create_info{
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -106,7 +134,7 @@ void Swapchain::Create(edt::Vec2<uint32_t> framebuffer_size, VkSwapchainKHR old_
         .imageColorSpace = format_.colorSpace,
         .imageExtent = extent_,
         .imageArrayLayers = 1,
-        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .imageUsage = image_usage,
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .preTransform = capabilities.currentTransform,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
@@ -120,11 +148,11 @@ void Swapchain::Create(edt::Vec2<uint32_t> framebuffer_size, VkSwapchainKHR old_
 
     image_views_.clear();
     image_views_.reserve(images_.size());
-    for (size_t index = 0; index != images_.size(); ++index)
+    for (auto& image : images_)
     {
         const VkImageViewCreateInfo view_info{
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-            .image = images_[index],
+            .image = image,
             .viewType = VK_IMAGE_VIEW_TYPE_2D,
             .format = format_.format,
             .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
@@ -141,7 +169,7 @@ void Swapchain::Create(edt::Vec2<uint32_t> framebuffer_size, VkSwapchainKHR old_
             .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
             .imageType = VK_IMAGE_TYPE_2D,
             .format = kDepthFormat,
-            .extent = {extent_.width, extent_.height, 1},
+            .extent = {.width = extent_.width, .height = extent_.height, .depth = 1},
             .mipLevels = 1,
             .arrayLayers = 1,
             .samples = VK_SAMPLE_COUNT_1_BIT,

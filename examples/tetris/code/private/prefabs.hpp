@@ -53,9 +53,13 @@ public:
         if (character >= 'A' && character <= 'Z')
         {
             if (block_character)
+            {
                 klvk::ErrorHandling::Ensure(*block_character == character, "Multiple block characters");
+            }
             else
+            {
                 block_character = character;
+            }
             klvk::ErrorHandling::Ensure(cell < 16, "Too many cells");
             const edt::Vec2<size_t> coordinate{cell % 4, 3 - cell / 4};
             block.SetCell(coordinate);
@@ -64,7 +68,9 @@ public:
             ++occupied;
         }
         else if (character != '.')
+        {
             continue;
+        }
         ++cell;
     }
     klvk::ErrorHandling::Ensure(occupied == 4, "Expected 4 cells to be occupied");

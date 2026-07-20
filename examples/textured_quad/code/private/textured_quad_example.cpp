@@ -3,6 +3,7 @@
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/texture/procedural_texture_generator.hpp"
 #include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
@@ -43,7 +44,7 @@ class TexturedQuadApp : public klvk::Application
         {
             constexpr auto size = edt::Vec2<size_t>{} + 128;
             const auto pixels = klvk::ProceduralTextureGenerator::CircleMask(size, 2);
-            texture_ = klvk::Texture::CreateR8(context, size.Cast<uint32_t>(), std::span{pixels});
+            texture_ = klvk::Texture::CreateR8(context, size.Cast<u32>(), std::span{pixels});
         }
 
         // Descriptor set that binds the texture to the fragment shader
@@ -113,14 +114,13 @@ private:
     klvk::VkObject<VkPipeline> pipeline_;
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     TexturedQuadApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

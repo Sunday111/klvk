@@ -4,6 +4,7 @@
 
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 
@@ -103,17 +104,14 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::CullMode(VkCullModeFlags mode,
     return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::VertexBinding(uint32_t binding, uint32_t stride, VkVertexInputRate rate)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::VertexBinding(u32 binding, u32 stride, VkVertexInputRate rate)
 {
     vertex_bindings_.push_back({.binding = binding, .stride = stride, .inputRate = rate});
     return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::VertexAttribute(
-    uint32_t location,
-    uint32_t binding,
-    VkFormat format,
-    uint32_t offset)
+GraphicsPipelineBuilder&
+GraphicsPipelineBuilder::VertexAttribute(u32 location, u32 binding, VkFormat format, u32 offset)
 {
     vertex_attributes_.push_back({.location = location, .binding = binding, .format = format, .offset = offset});
     return *this;
@@ -169,9 +167,9 @@ VkPipeline GraphicsPipelineBuilder::Build()
 
     const VkPipelineVertexInputStateCreateInfo vertex_input{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .vertexBindingDescriptionCount = static_cast<uint32_t>(vertex_bindings_.size()),
+        .vertexBindingDescriptionCount = static_cast<u32>(vertex_bindings_.size()),
         .pVertexBindingDescriptions = vertex_bindings_.data(),
-        .vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_attributes_.size()),
+        .vertexAttributeDescriptionCount = static_cast<u32>(vertex_attributes_.size()),
         .pVertexAttributeDescriptions = vertex_attributes_.data(),
     };
     const VkPipelineInputAssemblyStateCreateInfo input_assembly{
@@ -209,7 +207,7 @@ VkPipeline GraphicsPipelineBuilder::Build()
     const std::array dynamic_states{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
     const VkPipelineDynamicStateCreateInfo dynamic_state{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        .dynamicStateCount = static_cast<uint32_t>(dynamic_states.size()),
+        .dynamicStateCount = static_cast<u32>(dynamic_states.size()),
         .pDynamicStates = dynamic_states.data(),
     };
 
@@ -243,7 +241,7 @@ VkPipeline GraphicsPipelineBuilder::Build()
     const std::array pipeline_infos{VkGraphicsPipelineCreateInfo{
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
         .pNext = &rendering_info,
-        .stageCount = static_cast<uint32_t>(stages.size()),
+        .stageCount = static_cast<u32>(stages.size()),
         .pStages = stages.data(),
         .pVertexInputState = &vertex_input,
         .pInputAssemblyState = &input_assembly,

@@ -5,18 +5,25 @@
 #include <backends/imgui_impl_vulkan.h>
 #include <imgui.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <concepts>
+#include <limits>
 #include <span>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "diagnostics/diagnostic_runner.hpp"
 #include "klvk/error_handling.hpp"
+#include "klvk/events/application_events.hpp"
+#include "klvk/events/event_listener_method.hpp"
 #include "klvk/events/event_manager.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/platform/os/os.hpp"
 #include "klvk/reflection/register_types.hpp"
+#include "klvk/timing/timer_manager.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/swapchain.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
@@ -34,7 +41,7 @@ namespace klvk
 
 struct Application::State
 {
-    using Clock = std::chrono::high_resolution_clock;
+    using Clock = std::chrono::steady_clock;
     using TimePoint = Clock::time_point;
 
     struct FrameInFlight
@@ -59,9 +66,23 @@ struct Application::State
 
     edt::Vec4f clear_color_{};
     size_t frame_index_ = 0;
-    uint32_t image_index_ = 0;
+    u32 image_index_ = 0;
     bool frame_active_ = false;
     bool depth_buffer_enabled_ = false;
+    bool imgui_context_created_ = false;
+    bool imgui_glfw_initialized_ = false;
+    bool imgui_vulkan_initialized_ = false;
+    bool exit_requested_ = false;
+    u64 completed_frames_ = 0;
+    events::EventManager event_manager_;
+    std::optional<DiagnosticRunConfig> diagnostic_config_;
+    std::unique_ptr<DiagnosticRunner> diagnostic_runner_;
+
+    [[nodiscard]] std::optional<double> GetFixedStep() const
+    {
+        if (!diagnostic_config_.has_value()) return std::nullopt;
+        return diagnostic_config_->clock.fixed_step_seconds;
+    }
 
     void InitTime()
     {
@@ -71,6 +92,12 @@ struct Application::State
 
     void RegisterFrameStartTime()
     {
+        if (const auto step = GetFixedStep())
+        {
+            last_frame_duration_seconds_ = static_cast<float>(*step);
+            framerate_ = static_cast<float>(1.0 / *step);
+            return;
+        }
         const TimePoint previous_frame_start_time = frame_start_time_history_[current_frame_time_index_];
         current_frame_time_index_ = (current_frame_time_index_ + 1) % frame_start_time_history_.size();
         const TimePoint current_frame_start_time = Clock::now();
@@ -94,15 +121,27 @@ struct Application::State
             .count();
     }
 
-    float GetRelativeTimeSeconds() const { return State::DurationToSeconds(GetTime() - app_start_time_); }
-
-    float GetCurrentFrameStartTime() const
+    [[nodiscard]] float GetRelativeTimeSeconds() const
     {
+        if (const auto step = GetFixedStep()) return static_cast<float>(static_cast<double>(completed_frames_) * *step);
+        return State::DurationToSeconds(GetTime() - app_start_time_);
+    }
+
+    [[nodiscard]] double GetElapsedTimeSeconds() const
+    {
+        if (const auto step = GetFixedStep()) return static_cast<double>(completed_frames_) * *step;
+        return State::DurationToSeconds<double>(GetTime() - app_start_time_);
+    }
+
+    [[nodiscard]] float GetCurrentFrameStartTime() const
+    {
+        if (GetFixedStep().has_value()) return GetRelativeTimeSeconds();
         return State::DurationToSeconds(frame_start_time_history_[current_frame_time_index_] - app_start_time_);
     }
 
     void AlignWithFramerate()
     {
+        if (GetFixedStep().has_value()) return;
         if (target_framerate_.has_value())
         {
             const float frame_start = GetCurrentFrameStartTime();
@@ -199,9 +238,17 @@ struct Application::State
     std::array<TimePoint, kFrameTimeHistorySize> frame_start_time_history_{};
     float last_frame_duration_seconds_ = 0.f;
     float framerate_ = 0.0f;
-    uint8_t current_frame_time_index_ = kFrameTimeHistorySize - 1;
+    u8 current_frame_time_index_ = kFrameTimeHistorySize - 1;
     std::optional<float> target_framerate_;
-    events::EventManager event_manager_;
+    TimerManager timer_manager_;
+
+    State()
+    {
+        [[maybe_unused]] const events::IEventListener* quit_listener = event_manager_.AddEventListener(
+            events::EventListenerMethodCallbacks<&State::OnApplicationQuitRequested>::CreatePtr(this));
+    }
+
+    void OnApplicationQuitRequested(const events::OnApplicationQuitRequested&) { exit_requested_ = true; }
 };
 
 Application::Application()
@@ -214,10 +261,29 @@ Application::~Application()
     if (state_->device_context_)
     {
         state_->device_context_->WaitIdle();
+    }
+    state_->diagnostic_runner_.reset();
+    if (state_->imgui_vulkan_initialized_)
+    {
         ImGui_ImplVulkan_Shutdown();
+        state_->imgui_vulkan_initialized_ = false;
+    }
+    if (state_->imgui_glfw_initialized_)
+    {
         ImGui_ImplGlfw_Shutdown();
+        state_->imgui_glfw_initialized_ = false;
+    }
+    if (state_->imgui_context_created_)
+    {
         ImGui::DestroyContext();
-        Vulkan::DestroyDescriptorPoolNE(state_->device_context_->GetDevice(), state_->imgui_descriptor_pool_);
+        state_->imgui_context_created_ = false;
+    }
+    if (state_->device_context_)
+    {
+        if (state_->imgui_descriptor_pool_)
+        {
+            Vulkan::DestroyDescriptorPoolNE(state_->device_context_->GetDevice(), state_->imgui_descriptor_pool_);
+        }
         state_->DestroyFrames();
         state_->swapchain_.reset();
         state_->device_context_.reset();
@@ -231,33 +297,100 @@ void Application::Initialize()
     InitializeReflectionTypes();
 
     state_->glfw_.Initialize();
+    glfwDefaultWindowHints();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    const bool hidden_diagnostic = state_->diagnostic_config_.has_value() &&
+                                   state_->diagnostic_config_->presentation == DiagnosticPresentation::Hidden;
+    const bool realize_hidden_x11 = hidden_diagnostic && glfwGetPlatform() == GLFW_PLATFORM_X11;
+    if (hidden_diagnostic)
+    {
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        glfwWindowHint(GLFW_FOCUSED, GLFW_FALSE);
+        glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
+        glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+        if (realize_hidden_x11)
+        {
+            // Some Vulkan X11 drivers report a fixed fallback surface extent until
+            // the native window has been mapped at least once. Realize it outside
+            // the desktop before swapchain creation and hide it immediately after.
+            glfwWindowHint(GLFW_POSITION_X, -32000);
+            glfwWindowHint(GLFW_POSITION_Y, -32000);
+        }
+    }
     ErrorHandling::Ensure(glfwVulkanSupported() == GLFW_TRUE, "GLFW reports no Vulkan support");
 
     {
-        uint32_t window_width = 900;
-        uint32_t window_height = 900;
-        if (GLFWmonitor* monitor = glfwGetPrimaryMonitor())
+        u32 window_width = 900;
+        u32 window_height = 900;
+        if (state_->diagnostic_config_.has_value() && state_->diagnostic_config_->framebuffer_size.has_value())
+        {
+            window_width = state_->diagnostic_config_->framebuffer_size->x();
+            window_height = state_->diagnostic_config_->framebuffer_size->y();
+        }
+        else if (GLFWmonitor* monitor = glfwGetPrimaryMonitor())
         {
             float x_scale = 0.f, y_scale = 0.f;
             glfwGetMonitorContentScale(monitor, &x_scale, &y_scale);
-            window_width = static_cast<uint32_t>(static_cast<float>(window_width) * x_scale);
-            window_height = static_cast<uint32_t>(static_cast<float>(window_height) * y_scale);
+            window_width = static_cast<u32>(static_cast<float>(window_width) * x_scale);
+            window_height = static_cast<u32>(static_cast<float>(window_height) * y_scale);
         }
 
         state_->window_ = std::make_unique<Window>(*this, window_width, window_height);
     }
+    if (state_->diagnostic_config_.has_value() && state_->diagnostic_config_->framebuffer_size.has_value())
+    {
+        state_->window_->SetFixedFramebufferSize(*state_->diagnostic_config_->framebuffer_size);
+    }
+    if (realize_hidden_x11)
+    {
+        glfwShowWindow(state_->window_->GetGlfwWindow());
+        glfwPollEvents();
+        if (state_->diagnostic_config_->framebuffer_size.has_value())
+        {
+            state_->window_->SetFramebufferSize(*state_->diagnostic_config_->framebuffer_size);
+        }
+    }
 
     state_->device_context_ = std::make_unique<DeviceContext>(state_->window_->GetGlfwWindow());
     state_->device_context_->InitializeShaderCache(GetShaderDir());
-    state_->swapchain_ = std::make_unique<Swapchain>(*state_->device_context_, state_->window_->GetFramebufferSize());
+    const VkImageUsageFlags diagnostic_usage =
+        state_->diagnostic_config_.has_value() && !state_->diagnostic_config_->captures.empty()
+            ? VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+            : 0;
+    state_->swapchain_ =
+        std::make_unique<Swapchain>(*state_->device_context_, state_->window_->GetFramebufferSize(), diagnostic_usage);
+    if (state_->diagnostic_config_.has_value() && state_->diagnostic_config_->framebuffer_size.has_value())
+    {
+        const auto requested = *state_->diagnostic_config_->framebuffer_size;
+        const VkExtent2D actual = state_->swapchain_->GetExtent();
+        ErrorHandling::Ensure(
+            actual.width == requested.x() && actual.height == requested.y(),
+            "Vulkan surface extent is {}x{}, but diagnostic framebuffer_size requested {}x{}",
+            actual.width,
+            actual.height,
+            requested.x(),
+            requested.y());
+    }
+    if (realize_hidden_x11) glfwHideWindow(state_->window_->GetGlfwWindow());
     state_->CreateFrames();
 
     ImGui::CreateContext();
-    state_->imgui_ini_filename_ = (state_->executable_dir_ / "imgui.ini").string();
-    ImGui::GetIO().IniFilename = state_->imgui_ini_filename_.c_str();
+    state_->imgui_context_created_ = true;
+    if (state_->diagnostic_config_.has_value())
+    {
+        // Diagnostic output must not depend on UI state persisted by a previous run.
+        ImGui::GetIO().IniFilename = nullptr;
+    }
+    else
+    {
+        state_->imgui_ini_filename_ = (state_->executable_dir_ / "imgui.ini").string();
+        ImGui::GetIO().IniFilename = state_->imgui_ini_filename_.c_str();
+    }
     ImGui::StyleColorsDark();
-    ImGui_ImplGlfw_InitForVulkan(state_->window_->GetGlfwWindow(), true);
+    ErrorHandling::Ensure(
+        ImGui_ImplGlfw_InitForVulkan(state_->window_->GetGlfwWindow(), true),
+        "Failed to initialize imgui GLFW backend");
+    state_->imgui_glfw_initialized_ = true;
 
     {
         VkDevice device = state_->device_context_->GetDevice();
@@ -268,7 +401,7 @@ void Application::Initialize()
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
             .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
             .maxSets = 16,
-            .poolSizeCount = static_cast<uint32_t>(pool_sizes.size()),
+            .poolSizeCount = static_cast<u32>(pool_sizes.size()),
             .pPoolSizes = pool_sizes.data(),
         };
         state_->imgui_descriptor_pool_ = Vulkan::CreateDescriptorPool(device, pool_info);
@@ -282,7 +415,7 @@ void Application::Initialize()
         init_info.Queue = state_->device_context_->GetGraphicsQueue();
         init_info.DescriptorPool = state_->imgui_descriptor_pool_;
         init_info.MinImageCount = 2;
-        init_info.ImageCount = static_cast<uint32_t>(state_->swapchain_->GetImageCount());
+        init_info.ImageCount = static_cast<u32>(state_->swapchain_->GetImageCount());
         init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
         init_info.UseDynamicRendering = true;
         init_info.PipelineRenderingCreateInfo = {
@@ -291,6 +424,7 @@ void Application::Initialize()
             .pColorAttachmentFormats = color_formats.data(),
         };
         ErrorHandling::Ensure(ImGui_ImplVulkan_Init(&init_info), "Failed to initialize imgui vulkan backend");
+        state_->imgui_vulkan_initialized_ = true;
     }
 
     if (GLFWmonitor* monitor = glfwGetPrimaryMonitor())
@@ -311,7 +445,32 @@ void Application::Initialize()
 
 void Application::Run()
 {
+    RunImpl();
+}
+
+void Application::RunImpl()
+{
     Initialize();
+    if (state_->diagnostic_config_.has_value())
+    {
+        if (state_->diagnostic_config_->framebuffer_size.has_value())
+        {
+            state_->window_->SetFramebufferSize(*state_->diagnostic_config_->framebuffer_size);
+            const auto framebuffer_size = state_->window_->GetFramebufferSize();
+            const VkExtent2D swapchain_extent = state_->swapchain_->GetExtent();
+            if (swapchain_extent.width != framebuffer_size.x() || swapchain_extent.height != framebuffer_size.y())
+            {
+                state_->RecreateSwapchain();
+            }
+        }
+        state_->InitTime();
+        state_->completed_frames_ = 0;
+        state_->diagnostic_runner_ = std::make_unique<DiagnosticRunner>(
+            *state_->diagnostic_config_,
+            state_->executable_dir_,
+            kFramesInFlight,
+            state_->event_manager_);
+    }
     MainLoop();
 
     // Make the device idle before returning, while the application object - and
@@ -319,7 +478,29 @@ void Application::Run()
     // lets applications keep pipelines, layouts and descriptor sets as VkObject /
     // DescriptorSets members and rely on their destructors instead of writing an
     // explicit teardown that waits and destroys each handle by hand.
-    if (state_->device_context_) state_->device_context_->WaitIdle();
+    if (state_->device_context_)
+    {
+        state_->device_context_->WaitIdle();
+        if (state_->diagnostic_runner_)
+        {
+            state_->diagnostic_runner_->ProcessAllCompleted();
+            state_->diagnostic_runner_->EnsureComplete();
+        }
+    }
+}
+
+void Application::RunWithArguments(int argc, char** argv)
+{
+    ErrorHandling::Ensure(argc >= 0, "Invalid negative argument count");
+    std::vector<std::string_view> arguments;
+    arguments.reserve(static_cast<size_t>(argc > 0 ? argc - 1 : 0));
+    for (int index = 1; index < argc; ++index)
+    {
+        ErrorHandling::Ensure(argv[index] != nullptr, "Null command-line argument at index {}", index);
+        arguments.emplace_back(argv[index]);
+    }
+    state_->diagnostic_config_ = LoadDiagnosticRunConfigFromArguments(arguments);
+    Run();
 }
 
 void Application::PreTick()
@@ -328,6 +509,10 @@ void Application::PreTick()
     // VK_ERROR_OUT_OF_DATE_KHR alone: on Wayland the compositor silently
     // stretches the presented image instead of invalidating the swapchain.
     {
+        if (state_->diagnostic_config_.has_value() && state_->diagnostic_config_->framebuffer_size.has_value())
+        {
+            state_->window_->SetFramebufferSize(*state_->diagnostic_config_->framebuffer_size);
+        }
         const auto framebuffer_size = state_->window_->GetFramebufferSize();
         const VkExtent2D extent = state_->swapchain_->GetExtent();
         if (framebuffer_size.x() != extent.width || framebuffer_size.y() != extent.height)
@@ -340,9 +525,9 @@ void Application::PreTick()
     VkDevice device = state_->device_context_->GetDevice();
 
     const std::array fences{frame.in_flight};
-    const WaitStatus wait_status =
-        Vulkan::WaitForFences(device, fences, true, std::numeric_limits<uint64_t>::max());
+    const WaitStatus wait_status = Vulkan::WaitForFences(device, fences, true, std::numeric_limits<u64>::max());
     ErrorHandling::Ensure(wait_status == WaitStatus::Complete, "Timed out waiting for the frame fence");
+    if (state_->diagnostic_runner_) state_->diagnostic_runner_->ProcessCompletedFrame(state_->frame_index_);
 
     // Acquire the next swapchain image, recreating the swapchain when it is out of date.
     for (;;)
@@ -350,7 +535,7 @@ void Application::PreTick()
         const AcquireNextImageOutcome outcome = Vulkan::AcquireNextImageKHR(
             device,
             state_->swapchain_->GetHandle(),
-            std::numeric_limits<uint64_t>::max(),
+            std::numeric_limits<u64>::max(),
             frame.image_available);
 
         if (outcome.status == AcquireNextImageStatus::Acquired || outcome.status == AcquireNextImageStatus::Suboptimal)
@@ -452,7 +637,7 @@ void Application::PreTick()
     };
     const VkRenderingInfo rendering_info{
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .renderArea = {.offset = {0, 0}, .extent = extent},
+        .renderArea = {.offset = {.x = 0, .y = 0}, .extent = extent},
         .layerCount = 1,
         .colorAttachmentCount = color_attachments.size(),
         .pColorAttachments = color_attachments.data(),
@@ -470,11 +655,12 @@ void Application::PreTick()
         .maxDepth = 1.f,
     }};
     Vulkan::CmdSetViewport(frame.command_buffer, 0, viewports);
-    const std::array scissors{VkRect2D{.offset = {0, 0}, .extent = extent}};
+    const std::array scissors{VkRect2D{.offset = {.x = 0, .y = 0}, .extent = extent}};
     Vulkan::CmdSetScissor(frame.command_buffer, 0, scissors);
 
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
+    if (const auto step = state_->GetFixedStep()) ImGui::GetIO().DeltaTime = static_cast<float>(*step);
     ImGui::NewFrame();
 }
 
@@ -485,12 +671,31 @@ void Application::BeforeSwapchainRender([[maybe_unused]] VkCommandBuffer command
 void Application::PostTick()
 {
     auto& frame = state_->CurrentFrame();
+    if (state_->diagnostic_runner_)
+    {
+        state_->diagnostic_runner_->Advance(state_->completed_frames_ + 1, state_->GetElapsedTimeSeconds());
+    }
+    const bool capture_without_ui = state_->diagnostic_runner_ && state_->diagnostic_runner_->HasQueuedCaptures(false);
 
     // ImGui's pipeline is color-only. End an application's depth-enabled pass and
     // resume rendering the same color image without a depth attachment for the UI.
-    if (state_->depth_buffer_enabled_)
+    // A capture that excludes UI uses the same split point.
+    if (state_->depth_buffer_enabled_ || capture_without_ui)
     {
         Vulkan::CmdEndRendering(frame.command_buffer);
+        if (capture_without_ui)
+        {
+            const bool recorded = state_->diagnostic_runner_->RecordQueuedCaptures(
+                *state_->device_context_,
+                frame.command_buffer,
+                state_->frame_index_,
+                false,
+                state_->swapchain_->GetImage(state_->image_index_),
+                state_->swapchain_->GetFormat(),
+                state_->swapchain_->GetExtent(),
+                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            ErrorHandling::Ensure(recorded, "A due pre-UI diagnostic capture was not recorded");
+        }
         const std::array color_attachments{VkRenderingAttachmentInfo{
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .imageView = state_->swapchain_->GetImageView(state_->image_index_),
@@ -500,7 +705,7 @@ void Application::PostTick()
         }};
         const VkRenderingInfo rendering_info{
             .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-            .renderArea = {.offset = {0, 0}, .extent = state_->swapchain_->GetExtent()},
+            .renderArea = {.offset = {.x = 0, .y = 0}, .extent = state_->swapchain_->GetExtent()},
             .layerCount = 1,
             .colorAttachmentCount = color_attachments.size(),
             .pColorAttachments = color_attachments.data(),
@@ -513,7 +718,18 @@ void Application::PostTick()
 
     Vulkan::CmdEndRendering(frame.command_buffer);
 
-    // color attachment -> present
+    const bool captured_with_ui = state_->diagnostic_runner_ && state_->diagnostic_runner_->RecordQueuedCaptures(
+                                                                    *state_->device_context_,
+                                                                    frame.command_buffer,
+                                                                    state_->frame_index_,
+                                                                    true,
+                                                                    state_->swapchain_->GetImage(state_->image_index_),
+                                                                    state_->swapchain_->GetFormat(),
+                                                                    state_->swapchain_->GetExtent(),
+                                                                    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+    // color attachment -> present when capture did not already perform that transition.
+    if (!captured_with_ui)
     {
         const std::array barriers{VkImageMemoryBarrier2{
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -553,7 +769,7 @@ void Application::PostTick()
         const std::array signal_infos{VkSemaphoreSubmitInfo{
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
             .semaphore = render_finished,
-            .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
         }};
         const std::array submit_infos{VkSubmitInfo2{
             .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
@@ -587,6 +803,7 @@ void Application::PostTick()
         }
     }
 
+    ++state_->completed_frames_;
     state_->frame_index_ = (state_->frame_index_ + 1) % kFramesInFlight;
     glfwPollEvents();
 }
@@ -598,6 +815,9 @@ void Application::MainLoop()
         state_->RegisterFrameStartTime();
 
         PreTick();
+        [[maybe_unused]] const u64 timer_callback_count = state_->timer_manager_.Advance(
+            TimerDuration{state_->GetElapsedTimeSeconds()},
+            state_->completed_frames_ + 1);
         Tick();
         PostTick();
         state_->AlignWithFramerate();
@@ -611,7 +831,7 @@ void Application::InitializeReflectionTypes()
 
 bool Application::WantsToClose() const
 {
-    return state_->window_->ShouldClose();
+    return state_->exit_requested_ || state_->window_->ShouldClose();
 }
 
 Window& Application::GetWindow()
@@ -637,6 +857,11 @@ std::filesystem::path Application::GetContentDir() const
 std::filesystem::path Application::GetShaderDir() const
 {
     return GetContentDir() / "shaders";
+}
+
+const nlohmann::json* Application::GetDiagnosticApplicationConfig() const noexcept
+{
+    return state_->diagnostic_config_.has_value() ? &state_->diagnostic_config_->application : nullptr;
 }
 
 float Application::GetTimeSeconds() const
@@ -703,6 +928,11 @@ size_t Application::GetFrameInFlightIndex() const
 events::EventManager& Application::GetEventManager()
 {
     return state_->event_manager_;
+}
+
+TimerManager& Application::GetTimerManager()
+{
+    return state_->timer_manager_;
 }
 
 }  // namespace klvk

@@ -5,6 +5,7 @@
 #include <span>
 
 #include "klvk/error_handling.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 
 // Vulkan create-info structs are designed for partial designated initialization;
@@ -17,13 +18,13 @@ namespace klvk
 {
 
 DescriptorSets::Builder&
-DescriptorSets::Builder::Binding(uint32_t binding, VkDescriptorType type, VkShaderStageFlags stages, uint32_t count)
+DescriptorSets::Builder::Binding(u32 binding, VkDescriptorType type, VkShaderStageFlags stages, u32 count)
 {
     bindings_.push_back({.binding = binding, .descriptorType = type, .descriptorCount = count, .stageFlags = stages});
     return *this;
 }
 
-DescriptorSets DescriptorSets::Builder::Build(uint32_t set_count)
+DescriptorSets DescriptorSets::Builder::Build(u32 set_count)
 {
     ErrorHandling::Ensure(!bindings_.empty(), "DescriptorSets::Builder: no bindings were added");
     ErrorHandling::Ensure(set_count != 0, "DescriptorSets::Builder: set_count must be non-zero");
@@ -37,7 +38,7 @@ DescriptorSets DescriptorSets::Builder::Build(uint32_t set_count)
             device,
             {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .bindingCount = static_cast<uint32_t>(bindings_.size()),
+                .bindingCount = static_cast<u32>(bindings_.size()),
                 .pBindings = bindings_.data(),
             })};
 
@@ -45,10 +46,9 @@ DescriptorSets DescriptorSets::Builder::Build(uint32_t set_count)
     std::vector<VkDescriptorPoolSize> pool_sizes;
     for (const VkDescriptorSetLayoutBinding& b : bindings_)
     {
-        const uint32_t needed = b.descriptorCount * set_count;
-        auto it = std::find_if(
-            pool_sizes.begin(),
-            pool_sizes.end(),
+        const u32 needed = b.descriptorCount * set_count;
+        auto it = std::ranges::find_if(
+            pool_sizes,
             [&](const VkDescriptorPoolSize& size) { return size.type == b.descriptorType; });
         if (it == pool_sizes.end())
         {
@@ -67,7 +67,7 @@ DescriptorSets DescriptorSets::Builder::Build(uint32_t set_count)
             {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
                 .maxSets = set_count,
-                .poolSizeCount = static_cast<uint32_t>(pool_sizes.size()),
+                .poolSizeCount = static_cast<u32>(pool_sizes.size()),
                 .pPoolSizes = pool_sizes.data(),
             })};
 
@@ -98,19 +98,17 @@ DescriptorSets::DescriptorSets(
 {
 }
 
-VkDescriptorType DescriptorSets::TypeOfBinding(uint32_t binding) const
+VkDescriptorType DescriptorSets::TypeOfBinding(u32 binding) const
 {
-    const auto it = std::find_if(
-        bindings_.begin(),
-        bindings_.end(),
-        [&](const VkDescriptorSetLayoutBinding& b) { return b.binding == binding; });
+    const auto it =
+        std::ranges::find_if(bindings_, [&](const VkDescriptorSetLayoutBinding& b) { return b.binding == binding; });
     ErrorHandling::Ensure(it != bindings_.end(), "DescriptorSets: unknown binding {}", binding);
     return it->descriptorType;
 }
 
 void DescriptorSets::WriteBuffer(
     size_t set_index,
-    uint32_t binding,
+    u32 binding,
     VkBuffer buffer,
     VkDeviceSize range,
     VkDeviceSize offset)
@@ -129,7 +127,7 @@ void DescriptorSets::WriteBuffer(
 
 void DescriptorSets::WriteImage(
     size_t set_index,
-    uint32_t binding,
+    u32 binding,
     VkImageView view,
     VkSampler sampler,
     VkImageLayout layout)

@@ -1,6 +1,7 @@
 #include "simple_gpu_renderer.hpp"
 
 #include "../fractal_settings.hpp"
+#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 
 // Vulkan create-info structs are designed for partial designated initialization;
@@ -18,15 +19,12 @@ SimpleGpuRenderer::SimpleGpuRenderer(klvk::Application& app, size_t max_iteratio
     klvk::DeviceContext& context = app.GetDeviceContext();
     VkDevice device = context.GetDevice();
 
-    fractal_shader_.SetDefineValue(fractal_shader_.GetDefine("MAX_ITERATIONS"), static_cast<int32_t>(max_iterations));
+    fractal_shader_.SetDefineValue(fractal_shader_.GetDefine("MAX_ITERATIONS"), static_cast<i32>(max_iterations));
     def_inside_out_space_ = fractal_shader_.GetDefine("INSIDE_OUT_SPACE");
     def_color_mode_ = fractal_shader_.GetDefine("COLOR_MODE");
 
-    color_table_ = klvk::GpuBuffer(
-        context,
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        (max_iterations + 1) * sizeof(edt::Vec4f),
-        true);
+    color_table_ =
+        klvk::GpuBuffer(context, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, (max_iterations + 1) * sizeof(edt::Vec4f), true);
 
     const VkDescriptorSetLayoutBinding binding{
         .binding = 0,
@@ -121,7 +119,8 @@ void SimpleGpuRenderer::ApplySettings(const FractalSettings& settings)
     std::vector<edt::Vec4f> colors(max_iterations + 1);
     settings.ComputeColors(
         colors.size(),
-        [&](size_t index, const edt::Vec3f& color) { colors[index] = edt::Vec4f{color.x(), color.y(), color.z(), 1.f}; });
+        [&](size_t index, const edt::Vec3f& color)
+        { colors[index] = edt::Vec4f{color.x(), color.y(), color.z(), 1.f}; });
     color_table_.Write(std::as_bytes(std::span{colors}));
 }
 
@@ -138,14 +137,8 @@ void SimpleGpuRenderer::Render(VkCommandBuffer command_buffer, const FractalSett
         0,
         std::span{&descriptor_set_, 1});
 
-    const FractalPushConstants push_constants =
-        MakeFractalPushConstants(settings, render_transforms_.screen_to_world);
-    klvk::Vulkan::CmdPushConstants(
-        command_buffer,
-        pipeline_layout_,
-        VK_SHADER_STAGE_FRAGMENT_BIT,
-        0,
-        push_constants);
+    const FractalPushConstants push_constants = MakeFractalPushConstants(settings, render_transforms_.screen_to_world);
+    klvk::Vulkan::CmdPushConstants(command_buffer, pipeline_layout_, VK_SHADER_STAGE_FRAGMENT_BIT, 0, push_constants);
 
     klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
 }

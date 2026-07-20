@@ -3,12 +3,14 @@
 #include <EverydayTools/Math/FloatRange.hpp>
 #include <EverydayTools/Math/Math.hpp>
 
+#include "klvk/integral_aliases.hpp"
+
 namespace klvk
 {
 struct ProceduralTextureGenerator::Helper
 {
     template <typename Callback>
-    static std::vector<uint8_t> GenerateImage(
+    static std::vector<u8> GenerateImage(
         const edt::Vec2<size_t>& size,
         const edt::FloatRange2Df& coord_range,
         size_t upscale_factor,
@@ -18,7 +20,7 @@ struct ProceduralTextureGenerator::Helper
         const auto transform = edt::Math::TranslationMatrix(coord_range.Min())
                                    .MatMul(edt::Math::ScaleMatrix(coord_range.Extent() / sizef));
 
-        std::vector<uint8_t> pixels;
+        std::vector<u8> pixels;
         pixels.reserve(size.x() * size.y());
 
         const auto samples_per_pixel = static_cast<float>(edt::Math::Sqr(upscale_factor));
@@ -35,14 +37,14 @@ struct ProceduralTextureGenerator::Helper
                 acc_color += callback(sample_position);
             }
 
-            pixels.push_back(static_cast<uint8_t>(acc_color / samples_per_pixel));
+            pixels.push_back(static_cast<u8>(acc_color / samples_per_pixel));
         }
 
         return pixels;
     }
 };
 
-std::vector<uint8_t> ProceduralTextureGenerator::CircleMask(const edt::Vec2<size_t>& size, size_t upscale_factor)
+std::vector<u8> ProceduralTextureGenerator::CircleMask(const edt::Vec2<size_t>& size, size_t upscale_factor)
 {
     return Helper::GenerateImage(
         size,
@@ -50,12 +52,12 @@ std::vector<uint8_t> ProceduralTextureGenerator::CircleMask(const edt::Vec2<size
         upscale_factor,
         [&](const Vec2f& sample_position)
         {
-            const uint8_t opacity = (sample_position.SquaredLength() < 1) ? 255 : 0;
+            const u8 opacity = (sample_position.SquaredLength() < 1) ? 255 : 0;
             return static_cast<float>(opacity);
         });
 }
 
-std::vector<uint8_t> ProceduralTextureGenerator::TriangleMask(const edt::Vec2<size_t>& size, size_t upscale_factor)
+std::vector<u8> ProceduralTextureGenerator::TriangleMask(const edt::Vec2<size_t>& size, size_t upscale_factor)
 {
     return Helper::GenerateImage(
         size,
@@ -63,7 +65,7 @@ std::vector<uint8_t> ProceduralTextureGenerator::TriangleMask(const edt::Vec2<si
         upscale_factor,
         [&](const Vec2f& sample_position)
         {
-            const uint8_t opacity = sample_position.x() > sample_position.y() ? 255 : 0;
+            const u8 opacity = sample_position.x() > sample_position.y() ? 255 : 0;
             return static_cast<float>(opacity);
         });
 }

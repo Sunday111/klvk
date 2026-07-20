@@ -1,9 +1,16 @@
 #pragma once
 
+// libc++ does not expose C allocation functions transitively. fmt needs them
+// while parsing its headers, so this ordering is intentional.
+// clang-format off
+#include <cstdlib>
 #include <fmt/color.h>
 #include <fmt/core.h>
+// clang-format on
 
 #include <cpptrace/cpptrace.hpp>
+#include <exception>
+#include <utility>
 
 namespace klvk
 {
@@ -27,7 +34,7 @@ public:
     }
 
     template <typename... Args>
-    static void ThrowWithMessage(fmt::format_string<Args...> format, Args&&... args)
+    [[noreturn]] static void ThrowWithMessage(fmt::format_string<Args...> format, Args&&... args)
     {
         throw RuntimeErrorWithMessage(format, std::forward<Args>(args)...);
     }

@@ -19,6 +19,7 @@
 #include "klvk/events/event_manager.hpp"
 #include "klvk/events/mouse_events.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/rendering/curve_renderer_2d.hpp"
 #include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
@@ -46,11 +47,17 @@ using namespace edt::lazy_matrix_aliases;  // NOLINT
     if (maximum <= 0.f) return {NAN, 0.f, maximum};
     output[1] = delta / maximum;
     if (input[0] >= maximum)
+    {
         output[0] = (input[1] - input[2]) / delta;
+    }
     else if (input[1] >= maximum)
+    {
         output[0] = 2.f + (input[2] - input[0]) / delta;
+    }
     else
+    {
         output[0] = 4.f + (input[0] - input[1]) / delta;
+    }
     output[0] *= 60.f;
     if (output[0] < 0.f) output[0] += 360.f;
     return output;
@@ -61,7 +68,7 @@ using namespace edt::lazy_matrix_aliases;  // NOLINT
     if (input[1] <= 0.f) return Vec3f{} + input[2];
     float hue = input[0] >= 360.f ? 0.f : input[0];
     hue /= 60.f;
-    const auto sector = static_cast<int64_t>(hue);
+    const auto sector = static_cast<u8>(hue);
     const float fraction = hue - static_cast<float>(sector);
     const float p = input[2] * (1.f - input[1]);
     const float q = input[2] * (1.f - input[1] * fraction);
@@ -120,12 +127,14 @@ public:
             size_t left = 0;
             size_t right = colors_.size() - 1;
             for (size_t j = 1; j != colors_.size(); ++j)
+            {
                 if (positions_[j] > position)
                 {
                     left = j - 1;
                     right = j;
                     break;
                 }
+            }
             const float t = (position - positions_[left]) / (positions_[right] - positions_[left]);
             result[i] = HsvToRgb(LerpHsv(RgbToHsv(colors_[left]), RgbToHsv(colors_[right]), t));
         }
@@ -139,7 +148,7 @@ private:
 
 class CurveFractalApp : public klvk::Application
 {
-    static constexpr Vec2<uint32_t> kFramebufferResolution{3840, 2160};
+    static constexpr Vec2<u32> kFramebufferResolution{3840, 2160};
     static constexpr size_t kMaxCurves = 10'000;
     static constexpr size_t kMaxCurvesPerFrame = 100;
     static constexpr VkFormat kOffscreenFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
@@ -179,13 +188,17 @@ class CurveFractalApp : public klvk::Application
         CreateOffscreenTarget();
         renderers_.reserve(kMaxCurvesPerFrame);
         for (size_t i = 0; i != kMaxCurvesPerFrame; ++i)
+        {
             renderers_.emplace_back(std::make_unique<klvk::CurveRenderer2d>(*this, kOffscreenFormat));
+        }
         draw_batch_.resize(kMaxCurvesPerFrame);
 
         // Seed the transform the producers tessellate against before they start.
         const auto initial_viewport = klvk::Viewport::FromWindowSize(GetWindow().GetSize());
         transforms_.Update(camera_, initial_viewport, klvk::AspectRatioPolicy::ShrinkToFit);
-        shared_transform_ = {transforms_.world_to_view, initial_viewport.size.Cast<float>()};
+        shared_transform_ = {
+            .world_to_view = transforms_.world_to_view,
+            .viewport_size = initial_viewport.size.Cast<float>()};
 
         constexpr Vec2f eye{};
         constexpr float sample_extent = 3.f;
@@ -193,15 +206,17 @@ class CurveFractalApp : public klvk::Application
             edt::FloatRange2Df::FromMinMax(eye - sample_extent, eye + sample_extent);
         const Vec2f thread_tile = world_range.Extent() / 2.f;
         for (size_t x = 0; x != 4; ++x)
+        {
             for (size_t y = 0; y != 4; ++y)
             {
                 const Vec2f tile_min = Vec2<size_t>{x, y}.Cast<float>() * thread_tile + world_range.Min();
                 const auto range = edt::FloatRange2Df::FromMinMax(tile_min, tile_min + thread_tile);
-                producers_.emplace_back([this, range](std::stop_token stop) { ProducerThread(stop, range); });
+                producers_.emplace_back([this, range](const std::stop_token& stop) { ProducerThread(stop, range); });
             }
+        }
     }
 
-    void ProducerThread(std::stop_token stop, const edt::FloatRange2Df world_range)
+    void ProducerThread(const std::stop_token& stop, const edt::FloatRange2Df world_range)
     {
         constexpr size_t max_iterations = 2000;
         const int color_seed = std::bit_cast<int>(std::random_device()());
@@ -306,7 +321,7 @@ class CurveFractalApp : public klvk::Application
             .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
             .imageType = VK_IMAGE_TYPE_2D,
             .format = kOffscreenFormat,
-            .extent = {kFramebufferResolution.x(), kFramebufferResolution.y(), 1},
+            .extent = {.width = kFramebufferResolution.x(), .height = kFramebufferResolution.y(), .depth = 1},
             .mipLevels = 1,
             .arrayLayers = 1,
             .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -377,7 +392,7 @@ class CurveFractalApp : public klvk::Application
             .clearValue = {.color = {.float32 = {0.f, 0.f, 0.f, 0.f}}}};
         const VkRenderingInfo rendering_info{
             .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-            .renderArea = {.extent = {kFramebufferResolution.x(), kFramebufferResolution.y()}},
+            .renderArea = {.extent = {.width = kFramebufferResolution.x(), .height = kFramebufferResolution.y()}},
             .layerCount = 1,
             .colorAttachmentCount = 1,
             .pColorAttachments = &attachment};
@@ -388,7 +403,7 @@ class CurveFractalApp : public klvk::Application
             .height = -static_cast<float>(kFramebufferResolution.y()),
             .minDepth = 0.f,
             .maxDepth = 1.f};
-        const VkRect2D scissor{.extent = {kFramebufferResolution.x(), kFramebufferResolution.y()}};
+        const VkRect2D scissor{.extent = {.width = kFramebufferResolution.x(), .height = kFramebufferResolution.y()}};
         klvk::Vulkan::CmdSetViewport(command_buffer, 0, std::span{&offscreen_viewport, 1});
         klvk::Vulkan::CmdSetScissor(command_buffer, 0, std::span{&scissor, 1});
 
@@ -398,7 +413,9 @@ class CurveFractalApp : public klvk::Application
         // against, then just upload and draw the vertices they already produced.
         {
             std::scoped_lock transform_lock(transform_mutex_);
-            shared_transform_ = {transforms_.world_to_view, viewport.size.Cast<float>()};
+            shared_transform_ = {
+                .world_to_view = transforms_.world_to_view,
+                .viewport_size = viewport.size.Cast<float>()};
         }
         const size_t curve_count = DrainProducedCurves();
         for (size_t i = 0; i != curve_count; ++i) renderers_[i]->DrawVertices(draw_batch_[i]);
@@ -494,15 +511,14 @@ private:
     klvk::VkObject<VkPipeline> pipeline_;
 };
 
-void Main()
+void Main(int argc, char** argv)
 {
     CurveFractalApp app;
-    app.Run();
+    app.RunWithArguments(argc, argv);
 }
 }  // namespace
 
-int main()
+int main(int argc, char** argv)
 {
-    klvk::ErrorHandling::InvokeAndCatchAll(Main);
-    return 0;
+    return klvk::ErrorHandling::InvokeAndCatchAll(Main, argc, argv);
 }

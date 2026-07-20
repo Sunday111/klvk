@@ -30,7 +30,7 @@ public:
     void Tick() override;
 
     void OnMouseScroll(const klvk::events::OnMouseScroll& event);
-    std::vector<edt::Vec4u8> CaptureScreenshot() const;
+    [[nodiscard]] std::vector<edt::Vec4u8> CaptureScreenshot() const;
 
     std::unique_ptr<FractalRenderer> renderer_;
     std::unique_ptr<InterpolationWidget> interpolation_widget_;

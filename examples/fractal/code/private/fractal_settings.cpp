@@ -2,6 +2,7 @@
 
 #include <bit>
 #include <klvk/error_handling.hpp>
+#include <klvk/integral_aliases.hpp>
 #include <klvk/template/on_scope_leave.hpp>
 #include <klvk/ui/simple_type_widget.hpp>
 #include <optional>
@@ -106,7 +107,7 @@ void FractalSettings::DistributePositionsUniformly()
     float hh = in[0];
     if (hh >= 360.f) hh = 0.f;
     hh /= 60.f;
-    auto i = static_cast<int64_t>(hh);
+    const auto i = static_cast<u8>(hh);
     float ff = hh - static_cast<float>(i);
     float p = in[2] * (1 - in[1]);
     float q = in[2] * (1 - (in[1] * ff));

@@ -1,8 +1,10 @@
+#include <fmt/format.h>
+
 #include <atomic>
 #include <fstream>
 #include <future>
-#include <iostream>
 
+#include "klvk/integral_aliases.hpp"
 #include "klvk/shader/shader_cache_manager.hpp"
 
 namespace
@@ -25,7 +27,9 @@ std::vector<std::filesystem::path> CacheFiles(const std::filesystem::path& direc
 {
     std::vector<std::filesystem::path> result;
     for (const auto& entry : std::filesystem::directory_iterator(directory))
+    {
         if (entry.is_regular_file() && entry.path().extension() == ".cache") result.push_back(entry.path());
+    }
     return result;
 }
 
@@ -40,15 +44,19 @@ void Run()
     const std::filesystem::path shader = sources / "test.comp";
     Write(shader, "#version 450\nlayout(local_size_x=1) in; void main() {}\n");
 
-    std::shared_ptr<const std::vector<uint32_t>> expected;
+    std::shared_ptr<const std::vector<u32>> expected;
     {
         klvk::ShaderCacheManager manager(sources, cache, {.flush_interval = std::chrono::milliseconds(20)});
-        std::vector<std::future<std::shared_ptr<const std::vector<uint32_t>>>> futures;
+        std::vector<std::future<std::shared_ptr<const std::vector<u32>>>> futures;
         for (size_t i = 0; i != 16; ++i)
+        {
             futures.push_back(std::async(std::launch::async, [&] { return manager.GetOrCompile(shader); }));
+        }
         expected = futures.front().get();
         for (size_t i = 1; i != futures.size(); ++i)
+        {
             Ensure(futures[i].get() == expected, "concurrent requests were not coalesced");
+        }
 
         Write(shader, "#version 450\nthis is not GLSL\n");
         std::atomic<size_t> failures = 0;
@@ -101,12 +109,12 @@ int main()
     try
     {
         Run();
-        std::cout << "shader cache tests passed\n";
+        fmt::println("shader cache tests passed");
         return 0;
     }
     catch (const std::exception& exception)
     {
-        std::cerr << exception.what() << '\n';
+        fmt::println(stderr, "{}", exception.what());
         return 1;
     }
 }
