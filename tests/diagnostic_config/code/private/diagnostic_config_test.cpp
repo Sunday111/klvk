@@ -85,7 +85,7 @@ void TestExactNanosecondTimes()
         seconds.captures.front().time_ns == config.captures.front().time_ns,
         "the seconds and nanosecond spellings disagree");
 
-    constexpr std::array<std::string_view, 6> invalid_documents{
+    constexpr std::array<std::string_view, 12> invalid_documents{
         // Both spellings on one trigger.
         R"({"version":1,"framebuffer_size":[64,48],"captures":[{"time_seconds":0.25,"time_ns":250000000,"path":"a.ppm"}],"exit":{"after_last_capture":true}})",
         R"({"version":1,"exit":{"time_seconds":1,"time_ns":1000000000}})",
@@ -94,7 +94,15 @@ void TestExactNanosecondTimes()
         R"({"version":1,"clock":{"mode":"fixed"},"exit":{"frame":1}})",
         // A nanosecond trigger must be a non-negative integer.
         R"({"version":1,"exit":{"time_ns":-1}})",
-        R"({"version":1,"exit":{"time_ns":0.5}})"};
+        R"({"version":1,"exit":{"time_ns":0.5}})",
+        // Checkpoints need a framebuffer, a frame-based exit, and a positive period.
+        R"({"version":1,"framebuffer_size":[64,48],"checkpoints":{"every_frames":10},"exit":{"time_ns":1}})",
+        R"({"version":1,"checkpoints":{"every_frames":10},"exit":{"frame":100}})",
+        R"({"version":1,"framebuffer_size":[64,48],"checkpoints":{"every_frames":0},"exit":{"frame":100}})",
+        // A hash entry must sit on a multiple of the period and inside the run.
+        R"({"version":1,"framebuffer_size":[64,48],"checkpoints":{"every_frames":10,"hashes":[{"frame":15,"hash":1}]},"exit":{"frame":100}})",
+        R"({"version":1,"framebuffer_size":[64,48],"checkpoints":{"every_frames":10,"hashes":[{"frame":110,"hash":1}]},"exit":{"frame":100}})",
+        R"({"version":1,"framebuffer_size":[64,48],"checkpoints":{"every_frames":10,"hashes":[{"frame":10,"hash":1},{"frame":10,"hash":2}]},"exit":{"frame":100}})"};
     for (size_t index = 0; index != invalid_documents.size(); ++index)
     {
         const std::filesystem::path invalid = root / ("invalid_ns_" + std::to_string(index) + ".json");
@@ -138,6 +146,10 @@ void TestConfigSerializationRoundTrip()
         .compression_level = 7,
         .include_ui = false,
         .log_ffmpeg = false};
+    original.checkpoints = klvk::DiagnosticCheckpointConfig{
+        .every_frames = 6,
+        .include_ui = false,
+        .expected = {{.frame = 6, .hash = 11'400'714'819'323'198'485ULL}, {.frame = 12, .hash = 1}}};
     original.exit.frame = 42;
     original.application = nlohmann::json{{"seed", 7}};
 
@@ -163,6 +175,18 @@ void TestConfigSerializationRoundTrip()
     Ensure(parsed.captures[0].frame == original.captures[0].frame, "a capture frame did not survive");
     Ensure(parsed.captures[0].path == original.captures[0].path, "a capture path did not survive");
     Ensure(parsed.captures[0].include_ui == original.captures[0].include_ui, "a capture include_ui did not survive");
+
+    Ensure(parsed.checkpoints.has_value(), "checkpoints did not survive the round trip");
+    Ensure(
+        parsed.checkpoints->every_frames == original.checkpoints->every_frames,
+        "checkpoints.every_frames did not survive");
+    Ensure(
+        parsed.checkpoints->include_ui == original.checkpoints->include_ui,
+        "checkpoints.include_ui did not survive");
+    // A 64-bit hash must survive JSON exactly; a double round trip would lose it.
+    Ensure(
+        parsed.checkpoints->expected == original.checkpoints->expected,
+        "a 64-bit checkpoint hash did not survive the round trip exactly");
 
     Ensure(parsed.video.has_value(), "video did not survive the round trip");
     Ensure(parsed.video->path == original.video->path, "video path did not survive");
@@ -230,6 +254,10 @@ void TestCommandLineParsing()
     EnsureThrows(
         [&] { (void)parse({"--klvk-presentation", "visible", "--klvk-presentation", "hidden"}); },
         "a repeated presentation was accepted");
+
+    const auto bless = parse({"--klvk-diagnostics", "a.json", "--klvk-write-checkpoints", "b.json"});
+    Ensure(bless.write_checkpoints_path == std::filesystem::path("b.json"), "checkpoint output was not parsed");
+    Ensure(!none.write_checkpoints_path.has_value(), "a checkpoint output appeared without the option");
 
     EnsureThrows([&] { (void)parse({"--klvk-unknown", "x"}); }, "an unknown klvk option was accepted");
     EnsureThrows([&] { (void)parse({"--klvk-record-input"}); }, "a missing option value was accepted");

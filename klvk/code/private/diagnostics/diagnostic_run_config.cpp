@@ -362,6 +362,43 @@ DiagnosticInputConfig ParseInput(const nlohmann::json& value, size_t index)
     return result;
 }
 
+DiagnosticCheckpointConfig ParseCheckpoints(const nlohmann::json& value)
+{
+    EnsureKnownKeys(value, "checkpoints", {"every_frames", "include_ui", "hashes"});
+    DiagnosticCheckpointConfig result;
+    ErrorHandling::Ensure(value.contains("every_frames"), "checkpoints.every_frames is required");
+    result.every_frames = ReadNonNegativeInteger(value.at("every_frames"), "checkpoints.every_frames");
+    ErrorHandling::Ensure(result.every_frames > 0, "checkpoints.every_frames must be positive");
+    if (value.contains("include_ui"))
+    {
+        ErrorHandling::Ensure(value.at("include_ui").is_boolean(), "checkpoints.include_ui must be a boolean");
+        result.include_ui = value.at("include_ui").get<bool>();
+    }
+    if (value.contains("hashes"))
+    {
+        const auto& hashes = value.at("hashes");
+        ErrorHandling::Ensure(hashes.is_array(), "checkpoints.hashes must be an array");
+        std::set<u64> frames;
+        for (size_t index = 0; index != hashes.size(); ++index)
+        {
+            const std::string name = "checkpoints.hashes[" + std::to_string(index) + "]";
+            EnsureKnownKeys(hashes[index], name, {"frame", "hash"});
+            DiagnosticCheckpoint checkpoint;
+            checkpoint.frame = ReadNonNegativeInteger(hashes[index].at("frame"), name + ".frame");
+            ErrorHandling::Ensure(checkpoint.frame > 0, "{}.frame is one-based and must be positive", name);
+            ErrorHandling::Ensure(
+                checkpoint.frame % result.every_frames == 0,
+                "{}.frame must be a multiple of checkpoints.every_frames",
+                name);
+            ErrorHandling::Ensure(frames.insert(checkpoint.frame).second, "{}.frame is duplicated", name);
+            checkpoint.hash = ReadNonNegativeInteger(hashes[index].at("hash"), name + ".hash");
+            result.expected.push_back(checkpoint);
+        }
+        std::ranges::sort(result.expected, {}, &DiagnosticCheckpoint::frame);
+    }
+    return result;
+}
+
 std::optional<edt::Vec2<u32>> ParseFramebufferSize(const nlohmann::json& root)
 {
     if (!root.contains("framebuffer_size")) return std::nullopt;
@@ -456,7 +493,16 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
     EnsureKnownKeys(
         root,
         "root",
-        {"version", "presentation", "framebuffer_size", "clock", "input", "captures", "video", "exit", "application"});
+        {"version",
+         "presentation",
+         "framebuffer_size",
+         "clock",
+         "input",
+         "captures",
+         "video",
+         "checkpoints",
+         "exit",
+         "application"});
     ErrorHandling::Ensure(root.contains("version"), "Diagnostic configuration is missing 'version'");
     const u64 version = ReadNonNegativeInteger(root.at("version"), "version");
     ErrorHandling::Ensure(
@@ -554,6 +600,23 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
     ErrorHandling::Ensure(
         !result.exit.after_last_capture || !result.captures.empty(),
         "exit.after_last_capture requires at least one capture");
+    if (root.contains("checkpoints"))
+    {
+        result.checkpoints = ParseCheckpoints(root.at("checkpoints"));
+        ErrorHandling::Ensure(
+            result.framebuffer_size.has_value(),
+            "Diagnostic checkpoints require an explicit framebuffer_size");
+        // Checkpoint frames are enumerated up front, which needs a known last
+        // frame. A recording always exits on a frame, so this costs nothing there.
+        ErrorHandling::Ensure(result.exit.frame.has_value(), "Diagnostic checkpoints require a frame-based exit");
+        for (const DiagnosticCheckpoint& checkpoint : result.checkpoints->expected)
+        {
+            ErrorHandling::Ensure(
+                checkpoint.frame <= *result.exit.frame,
+                "A checkpoint frame must not exceed the exit frame");
+        }
+    }
+
     ValidateExitDomain(result);
 
     if (root.contains("application"))
@@ -640,6 +703,7 @@ DiagnosticCommandLine ParseDiagnosticCommandLine(std::span<const std::string_vie
     constexpr std::string_view kConfigOption = "--klvk-diagnostics";
     constexpr std::string_view kRecordOption = "--klvk-record-input";
     constexpr std::string_view kPresentationOption = "--klvk-presentation";
+    constexpr std::string_view kWriteCheckpointsOption = "--klvk-write-checkpoints";
 
     DiagnosticCommandLine result;
     for (size_t index = 0; index != arguments.size(); ++index)
@@ -652,6 +716,11 @@ DiagnosticCommandLine ParseDiagnosticCommandLine(std::span<const std::string_vie
         if (const auto value = MatchOption(arguments, index, kRecordOption))
         {
             AssignOnce(result.input_record_path, *value, kRecordOption);
+            continue;
+        }
+        if (const auto value = MatchOption(arguments, index, kWriteCheckpointsOption))
+        {
+            AssignOnce(result.write_checkpoints_path, *value, kWriteCheckpointsOption);
             continue;
         }
         if (const auto value = MatchOption(arguments, index, kPresentationOption))
@@ -789,6 +858,20 @@ nlohmann::json DiagnosticRunConfigToJson(const DiagnosticRunConfig& config)
             {"compression_level", config.video->compression_level},
             {"include_ui", config.video->include_ui},
             {"log_ffmpeg", config.video->log_ffmpeg}};
+    }
+
+    if (config.checkpoints.has_value())
+    {
+        nlohmann::json hashes = nlohmann::json::array();
+        for (const DiagnosticCheckpoint& checkpoint : config.checkpoints->expected)
+        {
+            hashes.push_back({{"frame", checkpoint.frame}, {"hash", checkpoint.hash}});
+        }
+        nlohmann::json checkpoints = {
+            {"every_frames", config.checkpoints->every_frames},
+            {"include_ui", config.checkpoints->include_ui}};
+        if (!config.checkpoints->expected.empty()) checkpoints["hashes"] = std::move(hashes);
+        result["checkpoints"] = std::move(checkpoints);
     }
 
     nlohmann::json exit = nlohmann::json::object();

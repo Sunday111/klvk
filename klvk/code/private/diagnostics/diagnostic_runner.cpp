@@ -55,6 +55,19 @@ size_t CheckedPixelCount(VkExtent2D extent)
     return static_cast<size_t>(pixel_count);
 }
 
+u64 HashPixels(std::span<const std::byte> pixels) noexcept
+{
+    constexpr u64 kOffsetBasis = 14'695'981'039'346'656'037ULL;
+    constexpr u64 kPrime = 1'099'511'628'211ULL;
+    u64 hash = kOffsetBasis;
+    for (const std::byte value : pixels)
+    {
+        hash ^= static_cast<u64>(std::to_integer<unsigned char>(value));
+        hash *= kPrime;
+    }
+    return hash;
+}
+
 }  // namespace
 
 DiagnosticRunner::DiagnosticRunner(
@@ -105,6 +118,18 @@ DiagnosticRunner::DiagnosticRunner(
             "Multiple diagnostic captures resolve to output path '{}'",
             capture.path.string());
         captures_.push_back({.config = std::move(capture)});
+    }
+    if (config.checkpoints.has_value())
+    {
+        ErrorHandling::Ensure(config.exit.frame.has_value(), "Diagnostic checkpoints were not validated");
+        expected_checkpoints_ = config.checkpoints->expected;
+        const u64 every = config.checkpoints->every_frames;
+        for (u64 frame = every; frame <= *config.exit.frame; frame += every)
+        {
+            captures_.push_back(
+                {.config = {.frame = frame, .include_ui = config.checkpoints->include_ui}, .checkpoint_frame = frame});
+            if (frame > std::numeric_limits<u64>::max() - every) break;
+        }
     }
     for (size_t capture_index = 0; capture_index != captures_.size(); ++capture_index)
     {
@@ -285,6 +310,7 @@ bool DiagnosticRunner::RecordReadback(
 
     std::vector<std::filesystem::path> paths;
     paths.reserve(queue.size());
+    std::optional<u64> checkpoint_frame;
     for (size_t capture_index : queue)
     {
         ErrorHandling::Ensure(capture_index < captures_.size(), "Invalid queued diagnostic capture index");
@@ -292,6 +318,13 @@ bool DiagnosticRunner::RecordReadback(
         ErrorHandling::Ensure(
             capture.queued && !capture.recorded && capture.config.include_ui == include_ui,
             "Diagnostic capture queue is corrupt");
+        if (capture.checkpoint_frame.has_value())
+        {
+            // Checkpoint frames are distinct multiples, so at most one shares a readback.
+            ErrorHandling::Ensure(!checkpoint_frame.has_value(), "Two diagnostic checkpoints share one frame");
+            checkpoint_frame = capture.checkpoint_frame;
+            continue;
+        }
         paths.push_back(capture.config.path);
     }
 
@@ -331,7 +364,8 @@ bool DiagnosticRunner::RecordReadback(
         .format = format,
         .extent = extent,
         .paths = std::move(paths),
-        .video_frame = record_video ? std::optional<u64>{video_frame_count_++} : std::nullopt};
+        .video_frame = record_video ? std::optional<u64>{video_frame_count_++} : std::nullopt,
+        .checkpoint_frame = checkpoint_frame};
 
     VkImageMemoryBarrier2 barrier{
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -386,6 +420,7 @@ void DiagnosticRunner::ProcessReadback(PendingCapture& capture)
     const size_t pixel_count = CheckedPixelCount(capture.extent);
     std::vector<std::byte> source(pixel_count * 4);
     capture.buffer.Read(source);
+    if (capture.checkpoint_frame.has_value()) RecordCheckpoint(*capture.checkpoint_frame, source);
     if (!capture.paths.empty())
     {
         std::vector<char> rgb(pixel_count * 3);
@@ -471,6 +506,19 @@ void DiagnosticRunner::ProcessAllCompleted()
     if (video_encoder_) video_encoder_->Finish();
 }
 
+void DiagnosticRunner::RecordCheckpoint(u64 frame, std::span<const std::byte> pixels)
+{
+    const DiagnosticCheckpoint checkpoint{.frame = frame, .hash = HashPixels(pixels)};
+    checkpoints_.push_back(checkpoint);
+
+    const auto expected = std::ranges::find(expected_checkpoints_, frame, &DiagnosticCheckpoint::frame);
+    if (expected == std::ranges::end(expected_checkpoints_)) return;
+    if (expected->hash == checkpoint.hash) return;
+    // Report the earliest disagreement: later ones are usually consequences of it.
+    if (first_divergence_.has_value() && first_divergence_->frame <= frame) return;
+    first_divergence_ = checkpoint;
+}
+
 void DiagnosticRunner::EnsureComplete() const
 {
     ErrorHandling::Ensure(
@@ -485,6 +533,17 @@ void DiagnosticRunner::EnsureComplete() const
         "Diagnostic run ended before {} requested capture{} could be recorded",
         missing,
         missing == 1 ? "" : "s");
+
+    if (first_divergence_.has_value())
+    {
+        const auto expected =
+            std::ranges::find(expected_checkpoints_, first_divergence_->frame, &DiagnosticCheckpoint::frame);
+        ErrorHandling::ThrowWithMessage(
+            "Diagnostic replay diverged at frame {}: expected checkpoint hash {}, got {}",
+            first_divergence_->frame,
+            expected == std::ranges::end(expected_checkpoints_) ? 0 : expected->hash,
+            first_divergence_->hash);
+    }
 }
 
 }  // namespace klvk

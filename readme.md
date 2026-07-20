@@ -126,6 +126,22 @@ this entry point.
   a bounded three-frame queue; rendering waits when that queue is full, and shutdown drains and joins the encoder.
   Informational FFmpeg and encoder output is enabled by default through spdlog's `ffmpeg` logger; set `log_ffmpeg` to
   `false` in the `video` object to silence it.
+- `checkpoints` hashes the rendered framebuffer every `every_frames` frames, answering the question a replay actually
+  needs answered: not "is this bit-exact" but "at which frame did it stop matching". Bless a run with
+  `--klvk-write-checkpoints <file>`, which writes the configuration back with a `hashes` array filled in; any later run
+  of that file compares against it and fails with the first diverging frame, its expected hash, and the hash it got.
+  Checkpoints require an explicit `framebuffer_size` and a frame-based `exit`, since the checkpoint frames are
+  enumerated up front. `include_ui` defaults to `false`. Blessing happens before the comparison, so re-blessing a
+  diverged run works.
+
+  ```sh
+  yae run klvk_geometry_shader_example -- --klvk-diagnostics run.json --klvk-write-checkpoints blessed.json
+  yae run klvk_geometry_shader_example -- --klvk-diagnostics blessed.json   # non-zero exit if it diverged
+  ```
+
+  A hash covers the framebuffer, not application state, so it detects divergence only once it becomes visible. Note
+  that a static scene hashes identically at every checkpoint, which proves nothing — check that the blessed hashes are
+  actually distinct before trusting a pass.
 - `exit` contains exactly one of `frame`, `time_seconds`, `time_ns`, or `after_last_capture`. The last form waits for
   every requested capture to be submitted; klvk waits for GPU completion and finishes writing capture and video files
   before `Run` returns.
