@@ -74,6 +74,11 @@ void Run()
     Ensure(config.exit.after_last_capture, "exit condition was not parsed");
     Ensure(config.application.at("seed") == 7, "application configuration was not preserved");
 
+    const std::filesystem::path offscreen_path = root / "offscreen.json";
+    Write(offscreen_path, R"({"version":1,"presentation":"offscreen","framebuffer_size":[64,48],"exit":{"frame":1}})");
+    const klvk::DiagnosticRunConfig offscreen = klvk::LoadDiagnosticRunConfig(offscreen_path);
+    Ensure(offscreen.presentation == klvk::DiagnosticPresentation::Offscreen, "offscreen presentation was not parsed");
+
     const std::array arguments{
         std::string_view{"--application-option"},
         std::string_view{"value"},
@@ -92,6 +97,7 @@ void Run()
         R"({"version":1,"framebuffer_size":[1,1],"captures":[{"frame":1,"path":"a.ppm"},{"frame":2,"path":"a.ppm"}],"exit":{"after_last_capture":true}})",
         R"({"version":1,"unknown":true,"exit":{"frame":1}})",
         R"({"version":1,"presentation":"offscreen","exit":{"frame":1}})",
+        R"({"version":1,"presentation":"invalid","exit":{"frame":1}})",
         R"({"version":1,"version":1,"exit":{"frame":1}})",
         R"({"version":18446744073709551615,"exit":{"frame":1}})",
         R"({"version":1,"clock":{"mode":"fixed","step_seconds":1e-300},"exit":{"frame":1}})",

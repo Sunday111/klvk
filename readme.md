@@ -54,7 +54,7 @@ use this entry point.
 ```json
 {
   "version": 1,
-  "presentation": "hidden",
+  "presentation": "offscreen",
   "framebuffer_size": [800, 600],
   "clock": {"mode": "fixed", "step_seconds": 0.016666666666666666},
   "captures": [
@@ -67,10 +67,11 @@ use this entry point.
 }
 ```
 
-- `presentation` is `visible` or `hidden`. Hidden presentation still uses a GLFW window, Vulkan surface, and swapchain,
-  so it requires a display server. It is not the future display-independent `offscreen` backend. On X11, klvk briefly
-  realizes the undecorated window outside the desktop before hiding it because some Vulkan drivers otherwise report a
-  fallback surface extent.
+- `presentation` is `visible`, `hidden`, or `offscreen`. Offscreen presentation uses ordinary Vulkan color and depth
+  images, does not initialize GLFW, and requires neither a native window nor a display server. It provides a logical
+  window with the configured framebuffer size so existing applications keep the same viewport API. Hidden presentation
+  retains the GLFW window, Vulkan surface, and swapchain path. On X11, klvk briefly realizes the undecorated hidden
+  window outside the desktop before hiding it because some Vulkan drivers otherwise report a fallback surface extent.
 - `framebuffer_size` is required when captures are present and is enforced exactly, including after an example changes
   its window size during initialization.
 - `captures` is an array, so a run may contain any number of frame and time points. Each entry contains exactly one of

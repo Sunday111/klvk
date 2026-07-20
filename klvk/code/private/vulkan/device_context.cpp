@@ -1,6 +1,5 @@
 #include "klvk/vulkan/device_context.hpp"
 
-#include <GLFW/glfw3.h>
 #include <fmt/core.h>
 #include <vk_mem_alloc.h>
 
@@ -10,6 +9,7 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/shader/shader_cache_manager.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/window.hpp"
 
 // Vulkan create-info structs are designed for partial designated initialization;
 // unlisted fields must be zero.
@@ -75,13 +75,14 @@ void InitializeVolkOnce()
 
 }  // namespace
 
-DeviceContext::DeviceContext(GLFWwindow* window) : DeviceContext(window, Settings{}) {}
+DeviceContext::DeviceContext(Window* presentation_window) : DeviceContext(presentation_window, Settings{}) {}
 
-DeviceContext::DeviceContext(GLFWwindow* window, const Settings& settings)
+DeviceContext::DeviceContext(Window* presentation_window, const Settings& settings)
 {
     InitializeVolkOnce();
-    CreateInstance(settings);
-    CheckVkResult(glfwCreateWindowSurface(instance_, window, nullptr, &surface_), "glfwCreateWindowSurface");
+    presentation_enabled_ = presentation_window != nullptr;
+    CreateInstance(settings, presentation_window);
+    if (presentation_window) surface_ = presentation_window->CreateVulkanSurface(instance_);
     PickPhysicalDevice();
     CreateDevice();
     CreateAllocator();
@@ -128,7 +129,7 @@ VkShaderModule DeviceContext::CreateShaderModuleFromSource(const std::filesystem
         source_path.filename().string());
 }
 
-void DeviceContext::CreateInstance(const Settings& settings)
+void DeviceContext::CreateInstance(const Settings& settings, const Window* presentation_window)
 {
     const VkApplicationInfo app_info{
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -137,10 +138,11 @@ void DeviceContext::CreateInstance(const Settings& settings)
         .apiVersion = VK_API_VERSION_1_3,
     };
 
-    u32 glfw_extension_count = 0;
-    const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
-    ErrorHandling::Ensure(glfw_extensions != nullptr, "GLFW cannot provide Vulkan instance extensions");
-    std::vector<const char*> extensions(glfw_extensions, glfw_extensions + glfw_extension_count);  // NOLINT
+    std::vector<const char*> extensions;
+    if (presentation_window)
+    {
+        extensions = presentation_window->GetRequiredVulkanInstanceExtensions();
+    }
 
     std::vector<const char*> layers;
     const bool validation = settings.enable_validation && HasLayer("VK_LAYER_KHRONOS_validation");
@@ -186,7 +188,7 @@ void DeviceContext::PickPhysicalDevice()
     {
         const VkPhysicalDeviceProperties properties = Vulkan::GetPhysicalDeviceProperties(device);
         if (properties.apiVersion < VK_API_VERSION_1_3) continue;
-        if (!HasDeviceExtension(device, VK_KHR_SWAPCHAIN_EXTENSION_NAME)) continue;
+        if (presentation_enabled_ && !HasDeviceExtension(device, VK_KHR_SWAPCHAIN_EXTENSION_NAME)) continue;
 
         VkPhysicalDeviceVulkan13Features features13{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
         VkPhysicalDeviceFeatures2 features2{
@@ -203,7 +205,7 @@ void DeviceContext::PickPhysicalDevice()
         for (u32 family = 0; family != static_cast<u32>(families.size()); ++family)
         {
             if (!(families[family].queueFlags & VK_QUEUE_GRAPHICS_BIT)) continue;
-            if (Vulkan::GetPhysicalDeviceSurfaceSupportKHR(device, family, surface_))
+            if (!presentation_enabled_ || Vulkan::GetPhysicalDeviceSurfaceSupportKHR(device, family, surface_))
             {
                 graphics_family = family;
                 break;
@@ -223,9 +225,18 @@ void DeviceContext::PickPhysicalDevice()
         }
     }
 
-    ErrorHandling::Ensure(
-        physical_device_ != VK_NULL_HANDLE,
-        "No Vulkan device with 1.3 dynamic rendering and a graphics+present queue found");
+    if (presentation_enabled_)
+    {
+        ErrorHandling::Ensure(
+            physical_device_ != VK_NULL_HANDLE,
+            "No Vulkan device with 1.3 dynamic rendering and a graphics+present queue found");
+    }
+    else
+    {
+        ErrorHandling::Ensure(
+            physical_device_ != VK_NULL_HANDLE,
+            "No Vulkan device with 1.3 dynamic rendering and a graphics queue found");
+    }
 
     const VkPhysicalDeviceProperties properties = Vulkan::GetPhysicalDeviceProperties(physical_device_);
     fmt::print("klvk: using device {}\n", properties.deviceName);
@@ -259,7 +270,8 @@ void DeviceContext::CreateDevice()
         .features = {.geometryShader = supported_features.geometryShader},
     };
 
-    std::vector<const char*> extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    std::vector<const char*> extensions;
+    if (presentation_enabled_) extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     // Promoted to core in 1.3 but the imgui backend resolves the KHR-suffixed entry points,
     // which are only guaranteed to exist when the extension is enabled explicitly.
     if (HasDeviceExtension(physical_device_, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME))

@@ -7,14 +7,13 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
-struct GLFWwindow;
-
 VK_DEFINE_HANDLE(VmaAllocator)
 
 namespace klvk
 {
 
 class ShaderCacheManager;
+class Window;
 
 #ifdef NDEBUG
 inline constexpr bool kDebugBuild = false;
@@ -33,8 +32,8 @@ public:
         bool enable_validation = kDebugBuild;
     };
 
-    explicit DeviceContext(GLFWwindow* window);
-    DeviceContext(GLFWwindow* window, const Settings& settings);
+    explicit DeviceContext(Window* presentation_window);
+    DeviceContext(Window* presentation_window, const Settings& settings);
     DeviceContext(const DeviceContext&) = delete;
     DeviceContext(DeviceContext&&) = delete;
     ~DeviceContext();
@@ -74,7 +73,7 @@ private:
     [[nodiscard]] VkCommandBuffer BeginOneTimeCommands() const;
     void EndOneTimeCommands(VkCommandBuffer command_buffer) const;
 
-    void CreateInstance(const Settings& settings);
+    void CreateInstance(const Settings& settings, const Window* presentation_window);
     void CreateDebugMessenger();
     void PickPhysicalDevice();
     void CreateDevice();
@@ -91,6 +90,7 @@ private:
     VkCommandPool one_time_pool_ = VK_NULL_HANDLE;
     bool geometry_shader_enabled_ = false;
     bool external_memory_fd_enabled_ = false;
+    bool presentation_enabled_ = false;
     std::unique_ptr<ShaderCacheManager> shader_cache_;
 };
 
