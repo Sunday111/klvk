@@ -3,7 +3,6 @@
 #include <fmt/core.h>
 
 #include <algorithm>
-#include <cmath>
 #include <limits>
 #include <random>
 #include <stdexcept>
@@ -22,6 +21,11 @@ using klvk::TimerMissedTickPolicy;
 
 TimerDuration Seconds(double value)
 {
+    return klvk::TimerDurationFromSeconds(value);
+}
+
+TimerDuration Nanoseconds(u64 value)
+{
     return TimerDuration{value};
 }
 
@@ -30,9 +34,10 @@ void Ensure(bool condition, std::string_view message)
     if (!condition) throw std::runtime_error(std::string(message));
 }
 
-void EnsureNear(TimerDuration actual, TimerDuration expected, std::string_view message)
+// Nanoseconds are exact, so a reported deadline must match to the nanosecond.
+void EnsureSameTime(TimerDuration actual, TimerDuration expected, std::string_view message)
 {
-    if (std::abs(actual.count() - expected.count()) > 1e-12) throw std::runtime_error(std::string(message));
+    if (actual != expected) throw std::runtime_error(std::string(message));
 }
 
 template <typename Function>
@@ -183,8 +188,8 @@ void TestRepeatingTimers()
     Ensure(
         coalesced.size() == 1 && coalesced[0].occurrence == 2 && coalesced[0].missed_occurrences == 2,
         "coalesced timer reported incorrect occurrences");
-    EnsureNear(coalesced[0].scheduled_time, Seconds(0.3), "coalesced timer reported incorrect logical deadline");
-    EnsureNear(*timers.GetNextTimeDeadline(), Seconds(0.4), "coalesced timer drifted from its fixed rate");
+    EnsureSameTime(coalesced[0].scheduled_time, Seconds(0.3), "coalesced timer reported incorrect logical deadline");
+    EnsureSameTime(*timers.GetNextTimeDeadline(), Seconds(0.4), "coalesced timer drifted from its fixed rate");
     Ensure(
         timers.Advance(Seconds(0.4), 0) == 1 && coalesced.back().occurrence == 3,
         "coalesced timer did not continue at the fixed rate");
@@ -441,6 +446,49 @@ void TestRelativeSchedulingAndValidation()
     Ensure(budget.Advance(Seconds(0), 0, 1) == 1 && budget_calls == 1, "budgeted timer did not resume");
 }
 
+// Replaying a recorded run depends on a deadline surviving scheduling unchanged
+// and on a repeating timer never drifting, neither of which a floating-point
+// representation can promise.
+void TestNanosecondExactness()
+{
+    TimerManager timers;
+    std::vector<TimerDuration> fired;
+    constexpr u64 kOddDeadline = 16'666'667;
+    [[maybe_unused]] const TimerHandle exact = timers.ScheduleAt(
+        Nanoseconds(kOddDeadline),
+        [&](const TimerEvent& event) { fired.push_back(event.scheduled_time); });
+    Ensure(timers.Advance(Nanoseconds(kOddDeadline - 1), 0) == 0, "timer fired one nanosecond early");
+    Ensure(timers.Advance(Nanoseconds(kOddDeadline), 0) == 1, "timer did not fire on its exact nanosecond");
+    Ensure(fired.size() == 1, "exact timer fired the wrong number of times");
+    EnsureSameTime(fired[0], Nanoseconds(kOddDeadline), "reported deadline was not the scheduled nanosecond");
+
+    // A 1/60 s interval is not representable in binary floating point; after many
+    // occurrences an accumulated double would visibly drift off the fixed rate.
+    TimerManager repeating;
+    constexpr u64 kFrameNs = 16'666'667;
+    constexpr u64 kOccurrences = 100'000;
+    u64 ticks = 0;
+    [[maybe_unused]] const TimerHandle rate = repeating.ScheduleEvery(
+        Nanoseconds(kFrameNs),
+        [&](const TimerEvent&) { ++ticks; },
+        TimerMissedTickPolicy::InvokeAll);
+    Ensure(
+        repeating.Advance(Nanoseconds(kFrameNs * kOccurrences), 0, kOccurrences + 1) == kOccurrences &&
+            ticks == kOccurrences,
+        "repeating timer lost or gained an occurrence over many intervals");
+    EnsureSameTime(
+        *repeating.GetNextTimeDeadline(),
+        Nanoseconds(kFrameNs * (kOccurrences + 1)),
+        "repeating timer drifted from its fixed rate");
+
+    // Seconds entering the timing domain round once, at the boundary, and stay put.
+    EnsureSameTime(Seconds(0.25), Nanoseconds(250'000'000), "quarter second did not convert exactly");
+    EnsureThrows([] { [[maybe_unused]] const auto negative = Seconds(-1.0); }, "a negative duration was accepted");
+    EnsureThrows(
+        [] { [[maybe_unused]] const auto truncated = klvk::TimerDurationFromSeconds(1e-12); },
+        "a duration rounding down to zero nanoseconds was accepted");
+}
+
 void Run()
 {
     TestOneShotTimersAndOrdering();
@@ -449,6 +497,7 @@ void Run()
     TestRepeatingTimers();
     TestHeapModel();
     TestRelativeSchedulingAndValidation();
+    TestNanosecondExactness();
 }
 
 }  // namespace

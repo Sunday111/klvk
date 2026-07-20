@@ -241,7 +241,7 @@ class TetrisApp : public klvk::Application
         texture_ = klvk::Texture::CreateR8(GetDeviceContext(), {1, 1}, white);
         renderer_ = std::make_unique<klvk::InstancedSpriteRenderer2d>(*this, *texture_);
         state_ = SpawnBlockState{};
-        const klvk::TimerDuration interval{static_cast<double>(kGameStepSeconds)};
+        const klvk::TimerDuration interval = klvk::TimerDurationFromSeconds(static_cast<double>(kGameStepSeconds));
         game_step_timer_ = GetTimerManager().ScheduleEveryAt(
             interval,
             interval,

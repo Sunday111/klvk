@@ -242,7 +242,7 @@ public:
         std::filesystem::path path,
         u32 width,
         u32 height,
-        double frame_duration_seconds,
+        u64 frame_duration_ns,
         DiagnosticVideoEncoding encoding,
         DiagnosticVideoEncodingDevice encoding_device,
         u8 compression_level,
@@ -295,7 +295,26 @@ public:
         codec_context_->height = static_cast<int>(height);
         codec_context_->pix_fmt = AV_PIX_FMT_YUV420P;
         codec_context_->bit_rate = 0;
-        codec_context_->time_base = av_d2q(frame_duration_seconds, 1'000'000);
+        // The frame duration is already an exact rational number of seconds:
+        // frame_duration_ns / 1e9. Handing FFmpeg that fraction keeps the stream
+        // timebase identical to the clock the frames were rendered on, instead of
+        // approximating a double. Reducing it keeps the common exact rates
+        // (0.02 s becomes 1/50) on a small, conventional timescale; a rate such as
+        // 1/60 s does not reduce and legitimately keeps the nanosecond timescale.
+        ErrorHandling::Ensure(
+            frame_duration_ns != 0 && frame_duration_ns <= static_cast<u64>(std::numeric_limits<int>::max()),
+            "Diagnostic video frame duration is outside FFmpeg's representable timebase range");
+        int timebase_numerator = 0;
+        int timebase_denominator = 0;
+        ErrorHandling::Ensure(
+            av_reduce(
+                &timebase_numerator,
+                &timebase_denominator,
+                static_cast<i64>(frame_duration_ns),
+                1'000'000'000,
+                std::numeric_limits<int>::max()) != 0,
+            "Diagnostic video frame duration could not be represented exactly as a timebase");
+        codec_context_->time_base = av_make_q(timebase_numerator, timebase_denominator);
         codec_context_->framerate = av_inv_q(codec_context_->time_base);
         codec_context_->gop_size = 12;
         codec_context_->max_b_frames = 0;
@@ -558,7 +577,7 @@ DiagnosticVideoEncoder::DiagnosticVideoEncoder(
     std::filesystem::path path,
     u32 width,
     u32 height,
-    double frame_duration_seconds,
+    u64 frame_duration_ns,
     DiagnosticVideoEncoding encoding,
     DiagnosticVideoEncodingDevice encoding_device,
     u8 compression_level,
@@ -569,7 +588,7 @@ DiagnosticVideoEncoder::DiagnosticVideoEncoder(
         std::move(path),
         width,
         height,
-        frame_duration_seconds,
+        frame_duration_ns,
         encoding,
         encoding_device,
         compression_level,

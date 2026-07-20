@@ -17,8 +17,6 @@ namespace
 {
 
 constexpr u32 kInvalidIndex = ~u32{};
-constexpr double kNanosecondsPerSecond = 1'000'000'000.0;
-constexpr double kExclusiveNanosecondLimit = 18'446'744'073'709'551'616.0;
 
 using TimerNanoseconds = u64;
 
@@ -35,27 +33,13 @@ u64 NextManagerId()
 
 TimerNanoseconds ToNanoseconds(TimerDuration value, const char* name, bool allow_zero)
 {
-    ErrorHandling::Ensure(
-        std::isfinite(value.count()) && (allow_zero ? value.count() >= 0.0 : value.count() > 0.0),
-        "{} must be a finite {} duration",
-        name,
-        allow_zero ? "non-negative" : "positive");
-    const double nanoseconds = std::round(value.count() * kNanosecondsPerSecond);
-    ErrorHandling::Ensure(
-        std::isfinite(nanoseconds) && nanoseconds < kExclusiveNanosecondLimit,
-        "{} exceeds the timer's nanosecond range",
-        name);
-    const auto result = static_cast<TimerNanoseconds>(nanoseconds);
-    ErrorHandling::Ensure(
-        value.count() == 0.0 || result != 0,
-        "{} must be zero or round to at least one nanosecond",
-        name);
-    return result;
+    ErrorHandling::Ensure(allow_zero || value.count() > 0, "{} must be a positive duration", name);
+    return value.count();
 }
 
 TimerDuration ToDuration(TimerNanoseconds value)
 {
-    return TimerDuration{static_cast<double>(value) / kNanosecondsPerSecond};
+    return TimerDuration{value};
 }
 
 TimerNanoseconds AddNanoseconds(TimerNanoseconds left, TimerNanoseconds right, const char* operation)
@@ -94,6 +78,31 @@ void ValidateMissedTickPolicy(TimerMissedTickPolicy policy)
 }
 
 }  // namespace
+
+TimerDuration TimerDurationFromSeconds(double seconds)
+{
+    constexpr double kNanosecondsPerSecond = 1'000'000'000.0;
+    constexpr double kExclusiveNanosecondLimit = 18'446'744'073'709'551'616.0;
+
+    ErrorHandling::Ensure(
+        std::isfinite(seconds) && seconds >= 0.0,
+        "Timer duration must be a finite non-negative number of seconds");
+    const double nanoseconds = std::round(seconds * kNanosecondsPerSecond);
+    ErrorHandling::Ensure(
+        nanoseconds < kExclusiveNanosecondLimit,
+        "Timer duration exceeds the representable nanosecond range");
+    const auto result = static_cast<u64>(nanoseconds);
+    ErrorHandling::Ensure(
+        seconds == 0.0 || result != 0,
+        "Timer duration must be zero or round to at least one nanosecond");
+    return TimerDuration{result};
+}
+
+float TimerDurationToSeconds(TimerDuration value) noexcept
+{
+    constexpr float kNanosecondsPerSecond = 1'000'000'000.f;
+    return static_cast<float>(value.count()) / kNanosecondsPerSecond;
+}
 
 struct TimerManager::State
 {

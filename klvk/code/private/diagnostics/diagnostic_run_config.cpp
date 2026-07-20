@@ -11,6 +11,7 @@
 #include "klvk/error_handling.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/signed_integral_aliases.hpp"
+#include "klvk/timing/timer_manager.hpp"
 #include "platform/input_mapping.hpp"
 
 namespace klvk
@@ -79,22 +80,32 @@ std::optional<u64> ReadOptionalFrame(const nlohmann::json& object, std::string_v
     return frame;
 }
 
-std::optional<double> ReadOptionalTime(const nlohmann::json& object, std::string_view prefix)
+// 'time_ns' is exact and is what a recorded run emits. 'time_seconds' stays for
+// hand-authored configurations and is rounded to nanoseconds once, here.
+std::optional<u64> ReadOptionalTime(const nlohmann::json& object, std::string_view prefix)
 {
-    if (!object.contains("time_seconds")) return std::nullopt;
-    return ReadNonNegativeNumber(object.at("time_seconds"), std::string(prefix) + ".time_seconds");
+    const bool has_seconds = object.contains("time_seconds");
+    const bool has_nanoseconds = object.contains("time_ns");
+    ErrorHandling::Ensure(
+        !(has_seconds && has_nanoseconds),
+        "Diagnostic configuration field '{}' must contain at most one of 'time_seconds' and 'time_ns'",
+        prefix);
+    if (has_nanoseconds) return ReadNonNegativeInteger(object.at("time_ns"), std::string(prefix) + ".time_ns");
+    if (!has_seconds) return std::nullopt;
+    const double seconds = ReadNonNegativeNumber(object.at("time_seconds"), std::string(prefix) + ".time_seconds");
+    return TimerDurationFromSeconds(seconds).count();
 }
 
 DiagnosticCaptureConfig ParseCapture(const nlohmann::json& value, size_t index)
 {
     const std::string name = "captures[" + std::to_string(index) + "]";
-    EnsureKnownKeys(value, name, {"frame", "time_seconds", "path", "include_ui"});
+    EnsureKnownKeys(value, name, {"frame", "time_seconds", "time_ns", "path", "include_ui"});
     DiagnosticCaptureConfig result;
     result.frame = ReadOptionalFrame(value, name);
-    result.time_seconds = ReadOptionalTime(value, name);
+    result.time_ns = ReadOptionalTime(value, name);
     ErrorHandling::Ensure(
-        result.frame.has_value() != result.time_seconds.has_value(),
-        "Diagnostic configuration field '{}' must contain exactly one of 'frame' and 'time_seconds'",
+        result.frame.has_value() != result.time_ns.has_value(),
+        "Diagnostic configuration field '{}' must contain exactly one trigger: 'frame', 'time_seconds', or 'time_ns'",
         name);
     ErrorHandling::Ensure(value.contains("path") && value.at("path").is_string(), "{}.path must be a string", name);
     result.path = value.at("path").get<std::string>();
@@ -244,16 +255,16 @@ DiagnosticInputConfig ParseInput(const nlohmann::json& value, size_t index)
 
     DiagnosticInputConfig result;
     result.frame = ReadOptionalFrame(value, name);
-    result.time_seconds = ReadOptionalTime(value, name);
+    result.time_ns = ReadOptionalTime(value, name);
     ErrorHandling::Ensure(
-        result.frame.has_value() != result.time_seconds.has_value(),
-        "Diagnostic configuration field '{}' must contain exactly one of 'frame' and 'time_seconds'",
+        result.frame.has_value() != result.time_ns.has_value(),
+        "Diagnostic configuration field '{}' must contain exactly one trigger: 'frame', 'time_seconds', or 'time_ns'",
         name);
 
     const std::string type = value.at("type").get<std::string>();
     if (type == "mouse_move")
     {
-        EnsureKnownKeys(value, name, {"frame", "time_seconds", "type", "position"});
+        EnsureKnownKeys(value, name, {"frame", "time_seconds", "time_ns", "type", "position"});
         ErrorHandling::Ensure(value.contains("position"), "{}.position is required", name);
         result.event = DiagnosticMouseMoveInput{
             .position = ParseFloatVector(value.at("position"), name + ".position"),
@@ -261,7 +272,7 @@ DiagnosticInputConfig ParseInput(const nlohmann::json& value, size_t index)
     }
     else if (type == "mouse_button")
     {
-        EnsureKnownKeys(value, name, {"frame", "time_seconds", "type", "button", "action"});
+        EnsureKnownKeys(value, name, {"frame", "time_seconds", "time_ns", "type", "button", "action"});
         ErrorHandling::Ensure(value.contains("button"), "{}.button is required", name);
         ErrorHandling::Ensure(value.contains("action"), "{}.action is required", name);
         result.event = DiagnosticMouseButtonInput{
@@ -271,7 +282,7 @@ DiagnosticInputConfig ParseInput(const nlohmann::json& value, size_t index)
     }
     else if (type == "mouse_scroll")
     {
-        EnsureKnownKeys(value, name, {"frame", "time_seconds", "type", "offset"});
+        EnsureKnownKeys(value, name, {"frame", "time_seconds", "time_ns", "type", "offset"});
         ErrorHandling::Ensure(value.contains("offset"), "{}.offset is required", name);
         result.event = DiagnosticMouseScrollInput{
             .offset = ParseFloatVector(value.at("offset"), name + ".offset"),
@@ -279,7 +290,7 @@ DiagnosticInputConfig ParseInput(const nlohmann::json& value, size_t index)
     }
     else if (type == "key")
     {
-        EnsureKnownKeys(value, name, {"frame", "time_seconds", "type", "key", "action"});
+        EnsureKnownKeys(value, name, {"frame", "time_seconds", "time_ns", "type", "key", "action"});
         ErrorHandling::Ensure(value.contains("key"), "{}.key is required", name);
         ErrorHandling::Ensure(value.contains("action"), "{}.action is required", name);
         result.event = DiagnosticKeyInput{
@@ -359,17 +370,36 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
     if (root.contains("clock"))
     {
         const auto& clock = root.at("clock");
-        EnsureKnownKeys(clock, "clock", {"mode", "step_seconds"});
+        EnsureKnownKeys(clock, "clock", {"mode", "step_seconds", "step_ns"});
         ErrorHandling::Ensure(clock.contains("mode") && clock.at("mode").is_string(), "clock.mode must be a string");
         const std::string mode = clock.at("mode").get<std::string>();
         ErrorHandling::Ensure(mode == "fixed", "Unknown diagnostic clock mode '{}' (expected 'fixed')", mode);
-        ErrorHandling::Ensure(clock.contains("step_seconds"), "Fixed diagnostic clock requires clock.step_seconds");
-        const double step = ReadNonNegativeNumber(clock.at("step_seconds"), "clock.step_seconds", false);
-        const auto runtime_step = static_cast<float>(step);
+        const bool has_seconds = clock.contains("step_seconds");
+        const bool has_nanoseconds = clock.contains("step_ns");
+        ErrorHandling::Ensure(
+            !(has_seconds && has_nanoseconds),
+            "Fixed diagnostic clock must contain at most one of 'clock.step_seconds' and 'clock.step_ns'");
+        ErrorHandling::Ensure(
+            has_seconds || has_nanoseconds,
+            "Fixed diagnostic clock requires clock.step_seconds or clock.step_ns");
+        u64 step_ns = 0;
+        if (has_nanoseconds)
+        {
+            step_ns = ReadNonNegativeInteger(clock.at("step_ns"), "clock.step_ns");
+            ErrorHandling::Ensure(step_ns > 0, "clock.step_ns must be positive");
+        }
+        else
+        {
+            const double step = ReadNonNegativeNumber(clock.at("step_seconds"), "clock.step_seconds", false);
+            step_ns = TimerDurationFromSeconds(step).count();
+        }
+        // Frame duration and framerate still reach ImGui and the application as
+        // floats, so the step has to survive that conversion.
+        const auto runtime_step = static_cast<float>(static_cast<double>(step_ns) / 1'000'000'000.0);
         ErrorHandling::Ensure(
             std::isfinite(runtime_step) && runtime_step > 0.f && std::isfinite(1.f / runtime_step),
-            "clock.step_seconds must have a finite positive float duration and reciprocal");
-        result.clock.fixed_step_seconds = step;
+            "The fixed diagnostic clock step must have a finite positive float duration and reciprocal");
+        result.clock.fixed_step_ns = step_ns;
     }
 
     if (root.contains("input"))
@@ -412,7 +442,7 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
             result.framebuffer_size.has_value(),
             "Diagnostic video capture requires an explicit framebuffer_size");
         ErrorHandling::Ensure(
-            result.clock.fixed_step_seconds.has_value(),
+            result.clock.fixed_step_ns.has_value(),
             "Diagnostic video capture requires a fixed clock");
         const auto size = *result.framebuffer_size;
         ErrorHandling::Ensure(
@@ -432,16 +462,16 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
 
     ErrorHandling::Ensure(root.contains("exit"), "Diagnostic configuration requires an 'exit' condition");
     const auto& exit = root.at("exit");
-    EnsureKnownKeys(exit, "exit", {"frame", "time_seconds", "after_last_capture"});
+    EnsureKnownKeys(exit, "exit", {"frame", "time_seconds", "time_ns", "after_last_capture"});
     result.exit.frame = ReadOptionalFrame(exit, "exit");
-    result.exit.time_seconds = ReadOptionalTime(exit, "exit");
+    result.exit.time_ns = ReadOptionalTime(exit, "exit");
     if (exit.contains("after_last_capture"))
     {
         ErrorHandling::Ensure(exit.at("after_last_capture").is_boolean(), "exit.after_last_capture must be a boolean");
         result.exit.after_last_capture = exit.at("after_last_capture").get<bool>();
     }
     const size_t exit_conditions = static_cast<size_t>(result.exit.frame.has_value()) +
-                                   static_cast<size_t>(result.exit.time_seconds.has_value()) +
+                                   static_cast<size_t>(result.exit.time_ns.has_value()) +
                                    static_cast<size_t>(result.exit.after_last_capture);
     ErrorHandling::Ensure(exit_conditions == 1, "exit must specify exactly one exit condition");
     ErrorHandling::Ensure(
@@ -462,18 +492,18 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
                 "A frame-based exit must not precede or use a different trigger domain from a capture");
         }
     }
-    if (result.exit.time_seconds.has_value())
+    if (result.exit.time_ns.has_value())
     {
         for (const auto& input : result.input)
         {
             ErrorHandling::Ensure(
-                input.time_seconds.has_value() && *input.time_seconds <= *result.exit.time_seconds,
+                input.time_ns.has_value() && *input.time_ns <= *result.exit.time_ns,
                 "A time-based exit must not precede or use a different trigger domain from diagnostic input");
         }
         for (const auto& capture : result.captures)
         {
             ErrorHandling::Ensure(
-                capture.time_seconds.has_value() && *capture.time_seconds <= *result.exit.time_seconds,
+                capture.time_ns.has_value() && *capture.time_ns <= *result.exit.time_ns,
                 "A time-based exit must not precede or use a different trigger domain from a capture");
         }
     }

@@ -11,10 +11,21 @@
 namespace klvk
 {
 
-// Public time values are expressed as double-precision seconds. TimerManager
-// rounds them once at its boundary and stores all scheduling state as u64
-// nanoseconds.
-using TimerDuration = std::chrono::duration<double>;
+// Time is exact u64 nanoseconds end to end: public deadlines, scheduling state,
+// and reported event times share one integer representation, so a deadline
+// round-trips bit for bit. Callers holding seconds convert once, explicitly, at
+// this boundary.
+using TimerDuration = std::chrono::duration<u64, std::nano>;
+
+// Converts seconds into the exact representation, rounding once. Use where a
+// hand-authored or measured value in seconds enters the timing domain; a value
+// that is negative, non-finite, out of range, or rounds a non-zero duration
+// down to zero is rejected.
+[[nodiscard]] TimerDuration TimerDurationFromSeconds(double seconds);
+
+// Convenience for display and for application code that works in seconds.
+// Lossy by construction: never round-trip a deadline through this.
+[[nodiscard]] float TimerDurationToSeconds(TimerDuration value) noexcept;
 
 enum class TimerDomain : u8
 {

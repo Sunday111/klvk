@@ -70,7 +70,7 @@ DiagnosticRunner::DiagnosticRunner(
     if (config.video.has_value())
     {
         ErrorHandling::Ensure(
-            config.framebuffer_size.has_value() && config.clock.fixed_step_seconds.has_value(),
+            config.framebuffer_size.has_value() && config.clock.fixed_step_ns.has_value(),
             "Diagnostic video configuration was not validated");
         std::filesystem::path path = config.video->path;
         if (path.is_relative()) path = executable_directory / path;
@@ -80,7 +80,7 @@ DiagnosticRunner::DiagnosticRunner(
             path,
             size.x(),
             size.y(),
-            *config.clock.fixed_step_seconds,
+            *config.clock.fixed_step_ns,
             config.video->encoding,
             config.video->encoding_device,
             config.video->compression_level,
@@ -138,9 +138,8 @@ void DiagnosticRunner::ScheduleInput(const DiagnosticInputConfig& input)
     }
     else
     {
-        ErrorHandling::Ensure(input.time_seconds.has_value(), "Diagnostic input has no trigger");
-        [[maybe_unused]] const TimerHandle timer =
-            input_timers_.ScheduleAt(TimerDuration{*input.time_seconds}, callback);
+        ErrorHandling::Ensure(input.time_ns.has_value(), "Diagnostic input has no trigger");
+        [[maybe_unused]] const TimerHandle timer = input_timers_.ScheduleAt(TimerDuration{*input.time_ns}, callback);
     }
 }
 
@@ -219,8 +218,8 @@ void DiagnosticRunner::ScheduleCapture(size_t capture_index, bool quit_after_las
     }
     else
     {
-        ErrorHandling::Ensure(capture.time_seconds.has_value(), "Diagnostic capture has no trigger");
-        [[maybe_unused]] const TimerHandle timer = timers_.ScheduleAt(TimerDuration{*capture.time_seconds}, callback);
+        ErrorHandling::Ensure(capture.time_ns.has_value(), "Diagnostic capture has no trigger");
+        [[maybe_unused]] const TimerHandle timer = timers_.ScheduleAt(TimerDuration{*capture.time_ns}, callback);
     }
 }
 
@@ -234,9 +233,9 @@ void DiagnosticRunner::ScheduleQuit(const DiagnosticExitConfig& exit)
     {
         [[maybe_unused]] const TimerHandle timer = timers_.ScheduleAtFrame(*exit.frame, callback);
     }
-    else if (exit.time_seconds.has_value())
+    else if (exit.time_ns.has_value())
     {
-        [[maybe_unused]] const TimerHandle timer = timers_.ScheduleAt(TimerDuration{*exit.time_seconds}, callback);
+        [[maybe_unused]] const TimerHandle timer = timers_.ScheduleAt(TimerDuration{*exit.time_ns}, callback);
     }
 }
 
@@ -251,16 +250,14 @@ void DiagnosticRunner::OnCaptureDue(const events::DiagnosticCaptureDue& event)
     ++triggered_capture_count_;
 }
 
-void DiagnosticRunner::Advance(u64 frame, double time_seconds)
+void DiagnosticRunner::Advance(u64 frame, TimerDuration elapsed)
 {
-    [[maybe_unused]] const u64 callback_count =
-        timers_.Advance(TimerDuration{time_seconds}, frame, std::numeric_limits<u64>::max());
+    [[maybe_unused]] const u64 callback_count = timers_.Advance(elapsed, frame, std::numeric_limits<u64>::max());
 }
 
-void DiagnosticRunner::AdvanceInput(u64 frame, double time_seconds)
+void DiagnosticRunner::AdvanceInput(u64 frame, TimerDuration elapsed)
 {
-    [[maybe_unused]] const u64 callback_count =
-        input_timers_.Advance(TimerDuration{time_seconds}, frame, std::numeric_limits<u64>::max());
+    [[maybe_unused]] const u64 callback_count = input_timers_.Advance(elapsed, frame, std::numeric_limits<u64>::max());
 }
 
 bool DiagnosticRunner::NeedsReadback(bool include_ui) const noexcept

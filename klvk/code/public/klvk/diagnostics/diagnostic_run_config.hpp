@@ -22,15 +22,18 @@ enum class DiagnosticPresentation : u8
     Offscreen,
 };
 
+// Trigger points are exact nanoseconds. A configuration may spell them in
+// seconds for a human author; the parser rounds once and everything downstream
+// works in integers, so a replayed run reproduces its recording exactly.
 struct DiagnosticClockConfig
 {
-    std::optional<double> fixed_step_seconds;
+    std::optional<u64> fixed_step_ns;
 };
 
 struct DiagnosticCaptureConfig
 {
     std::optional<u64> frame;
-    std::optional<double> time_seconds;
+    std::optional<u64> time_ns;
     std::filesystem::path path;
     bool include_ui = true;
 };
@@ -88,14 +91,14 @@ using DiagnosticInputEvent =
 struct DiagnosticInputConfig
 {
     std::optional<u64> frame;
-    std::optional<double> time_seconds;
+    std::optional<u64> time_ns;
     DiagnosticInputEvent event;
 };
 
 struct DiagnosticExitConfig
 {
     std::optional<u64> frame;
-    std::optional<double> time_seconds;
+    std::optional<u64> time_ns;
     bool after_last_capture = false;
 };
 

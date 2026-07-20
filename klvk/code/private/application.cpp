@@ -44,6 +44,8 @@ struct Application::State
     using Clock = std::chrono::steady_clock;
     using TimePoint = Clock::time_point;
 
+    static constexpr double kNanosecondsPerSecond = 1'000'000'000.0;
+
     struct FrameInFlight
     {
         VkCommandPool command_pool = VK_NULL_HANDLE;
@@ -80,10 +82,36 @@ struct Application::State
     std::optional<DiagnosticRunConfig> diagnostic_config_;
     std::unique_ptr<DiagnosticRunner> diagnostic_runner_;
 
-    [[nodiscard]] std::optional<double> GetFixedStep() const
+    // The fixed step is exact nanoseconds, so logical time is an integer product
+    // rather than an accumulated float and a replayed run lands on precisely the
+    // deadlines its recording did.
+    [[nodiscard]] std::optional<u64> GetFixedStepNanoseconds() const
     {
         if (!diagnostic_config_.has_value()) return std::nullopt;
-        return diagnostic_config_->clock.fixed_step_seconds;
+        return diagnostic_config_->clock.fixed_step_ns;
+    }
+
+    [[nodiscard]] std::optional<double> GetFixedStep() const
+    {
+        const auto step_ns = GetFixedStepNanoseconds();
+        if (!step_ns.has_value()) return std::nullopt;
+        return static_cast<double>(*step_ns) / kNanosecondsPerSecond;
+    }
+
+    // Exact logical time for the diagnostic path. Under a fixed clock this is an
+    // integer product; otherwise it is the monotonic clock truncated to
+    // nanoseconds, which is already its native resolution.
+    [[nodiscard]] TimerDuration GetElapsedTime() const
+    {
+        if (const auto step_ns = GetFixedStepNanoseconds())
+        {
+            ErrorHandling::Ensure(
+                completed_frames_ == 0 || *step_ns <= std::numeric_limits<u64>::max() / completed_frames_,
+                "Diagnostic logical time overflowed the nanosecond range");
+            return TimerDuration{*step_ns * completed_frames_};
+        }
+        const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(GetTime() - app_start_time_).count();
+        return TimerDuration{elapsed > 0 ? static_cast<u64>(elapsed) : 0};
     }
 
     void InitTime()
@@ -127,12 +155,6 @@ struct Application::State
     {
         if (const auto step = GetFixedStep()) return static_cast<float>(static_cast<double>(completed_frames_) * *step);
         return State::DurationToSeconds(GetTime() - app_start_time_);
-    }
-
-    [[nodiscard]] double GetElapsedTimeSeconds() const
-    {
-        if (const auto step = GetFixedStep()) return static_cast<double>(completed_frames_) * *step;
-        return State::DurationToSeconds<double>(GetTime() - app_start_time_);
     }
 
     [[nodiscard]] float GetCurrentFrameStartTime() const
@@ -697,7 +719,7 @@ void Application::PreTick()
     }
     if (state_->diagnostic_runner_)
     {
-        state_->diagnostic_runner_->AdvanceInput(state_->completed_frames_ + 1, state_->GetElapsedTimeSeconds());
+        state_->diagnostic_runner_->AdvanceInput(state_->completed_frames_ + 1, state_->GetElapsedTime());
     }
     if (const auto step = state_->GetFixedStep()) ImGui::GetIO().DeltaTime = static_cast<float>(*step);
     ImGui::NewFrame();
@@ -712,7 +734,7 @@ void Application::PostTick()
     auto& frame = state_->CurrentFrame();
     if (state_->diagnostic_runner_)
     {
-        state_->diagnostic_runner_->Advance(state_->completed_frames_ + 1, state_->GetElapsedTimeSeconds());
+        state_->diagnostic_runner_->Advance(state_->completed_frames_ + 1, state_->GetElapsedTime());
     }
     const bool capture_without_ui = state_->diagnostic_runner_ && state_->diagnostic_runner_->NeedsReadback(false);
 
@@ -865,9 +887,8 @@ void Application::MainLoop()
         state_->RegisterFrameStartTime();
 
         PreTick();
-        [[maybe_unused]] const u64 timer_callback_count = state_->timer_manager_.Advance(
-            TimerDuration{state_->GetElapsedTimeSeconds()},
-            state_->completed_frames_ + 1);
+        [[maybe_unused]] const u64 timer_callback_count =
+            state_->timer_manager_.Advance(state_->GetElapsedTime(), state_->completed_frames_ + 1);
         Tick();
         PostTick();
         state_->AlignWithFramerate();
