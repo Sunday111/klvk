@@ -1,6 +1,7 @@
 #include "klvk/diagnostics/diagnostic_run_config.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <fstream>
 #include <limits>
@@ -71,12 +72,91 @@ float ReadFiniteFloat(const nlohmann::json& value, std::string_view name)
     return result;
 }
 
+// One table per enum drives both parsing and serialization, so a value can
+// never be readable but unwritable (or spelled differently in each direction).
+constexpr double kNanosecondsPerSecond = 1'000'000'000.0;
+
+template <typename Enum>
+struct EnumName
+{
+    std::string_view name;
+    Enum value;
+};
+
+template <typename Enum, size_t kCount>
+[[nodiscard]] std::optional<Enum> FindEnumByName(
+    const std::array<EnumName<Enum>, kCount>& table,
+    std::string_view name) noexcept
+{
+    const auto found = std::ranges::find(table, name, &EnumName<Enum>::name);
+    if (found == std::ranges::end(table)) return std::nullopt;
+    return found->value;
+}
+
+template <typename Enum, size_t kCount>
+[[nodiscard]] std::string_view FindNameByEnum(const std::array<EnumName<Enum>, kCount>& table, Enum value)
+{
+    const auto found = std::ranges::find(table, value, &EnumName<Enum>::value);
+    ErrorHandling::Ensure(found != std::ranges::end(table), "Diagnostic enumeration value has no configuration name");
+    return found->name;
+}
+
+// The text after each table is the expectation quoted in parse errors; keeping
+// it beside the table stops the two drifting apart.
+constexpr auto kPresentationNames = std::to_array<EnumName<DiagnosticPresentation>>({
+    {.name = "visible", .value = DiagnosticPresentation::Visible},
+    {.name = "hidden", .value = DiagnosticPresentation::Hidden},
+    {.name = "offscreen", .value = DiagnosticPresentation::Offscreen},
+});
+constexpr std::string_view kPresentationExpectation = "'visible', 'hidden', or 'offscreen'";
+
+constexpr auto kEncodingNames = std::to_array<EnumName<DiagnosticVideoEncoding>>({
+    {.name = "av1", .value = DiagnosticVideoEncoding::Av1},
+    {.name = "h264", .value = DiagnosticVideoEncoding::H264},
+    {.name = "mpeg4", .value = DiagnosticVideoEncoding::Mpeg4},
+});
+constexpr std::string_view kEncodingExpectation = "'av1', 'h264', or 'mpeg4'";
+
+constexpr auto kEncodingDeviceNames = std::to_array<EnumName<DiagnosticVideoEncodingDevice>>({
+    {.name = "cpu", .value = DiagnosticVideoEncodingDevice::Cpu},
+    {.name = "gpu", .value = DiagnosticVideoEncodingDevice::Gpu},
+});
+constexpr std::string_view kEncodingDeviceExpectation = "'cpu' or 'gpu'";
+
+constexpr auto kActionNames = std::to_array<EnumName<InputAction>>({
+    {.name = "press", .value = InputAction::Press},
+    {.name = "release", .value = InputAction::Release},
+});
+constexpr std::string_view kActionExpectation = "'press' or 'release'";
+
+constexpr auto kMouseButtonNames = std::to_array<EnumName<MouseButton>>({
+    {.name = "left", .value = MouseButton::Left},
+    {.name = "right", .value = MouseButton::Right},
+    {.name = "middle", .value = MouseButton::Middle},
+    {.name = "button4", .value = MouseButton::Button4},
+    {.name = "button5", .value = MouseButton::Button5},
+});
+constexpr std::string_view kMouseButtonExpectation = "'left', 'right', 'middle', 'button4', or 'button5'";
+
 std::optional<DiagnosticPresentation> PresentationFromName(std::string_view name) noexcept
 {
-    if (name == "visible") return DiagnosticPresentation::Visible;
-    if (name == "hidden") return DiagnosticPresentation::Hidden;
-    if (name == "offscreen") return DiagnosticPresentation::Offscreen;
-    return std::nullopt;
+    return FindEnumByName(kPresentationNames, name);
+}
+
+// Reads a string field and maps it through a name table, reporting the field
+// and the accepted spellings on failure.
+template <typename Enum, size_t kCount>
+Enum ReadEnum(
+    const nlohmann::json& value,
+    std::string_view name,
+    const std::array<EnumName<Enum>, kCount>& table,
+    std::string_view expectation)
+{
+    ErrorHandling::Ensure(value.is_string(), "Diagnostic configuration field '{}' must be a string", name);
+    const std::string text = value.get<std::string>();
+    const std::optional<Enum> parsed = FindEnumByName(table, text);
+    ErrorHandling::Ensure(parsed.has_value(), "Unknown value '{}' in '{}' (expected {})", text, name, expectation);
+    return *parsed;
 }
 
 std::optional<u64> ReadOptionalFrame(const nlohmann::json& object, std::string_view prefix)
@@ -104,17 +184,32 @@ std::optional<u64> ReadOptionalTime(const nlohmann::json& object, std::string_vi
     return TimerDurationFromSeconds(seconds).count();
 }
 
+// Every scheduled entry carries exactly one trigger, spelled as a frame or as a
+// time. Parsing it in one place keeps captures, input, and exit in agreement.
+struct Trigger
+{
+    std::optional<u64> frame;
+    std::optional<u64> time_ns;
+};
+
+Trigger ReadTrigger(const nlohmann::json& value, std::string_view name)
+{
+    Trigger result{.frame = ReadOptionalFrame(value, name), .time_ns = ReadOptionalTime(value, name)};
+    ErrorHandling::Ensure(
+        result.frame.has_value() != result.time_ns.has_value(),
+        "Diagnostic configuration field '{}' must contain exactly one trigger: 'frame', 'time_seconds', or 'time_ns'",
+        name);
+    return result;
+}
+
 DiagnosticCaptureConfig ParseCapture(const nlohmann::json& value, size_t index)
 {
     const std::string name = "captures[" + std::to_string(index) + "]";
     EnsureKnownKeys(value, name, {"frame", "time_seconds", "time_ns", "path", "include_ui"});
     DiagnosticCaptureConfig result;
-    result.frame = ReadOptionalFrame(value, name);
-    result.time_ns = ReadOptionalTime(value, name);
-    ErrorHandling::Ensure(
-        result.frame.has_value() != result.time_ns.has_value(),
-        "Diagnostic configuration field '{}' must contain exactly one trigger: 'frame', 'time_seconds', or 'time_ns'",
-        name);
+    const Trigger trigger = ReadTrigger(value, name);
+    result.frame = trigger.frame;
+    result.time_ns = trigger.time_ns;
     ErrorHandling::Ensure(value.contains("path") && value.at("path").is_string(), "{}.path must be a string", name);
     result.path = value.at("path").get<std::string>();
     ErrorHandling::Ensure(!result.path.empty(), "{}.path cannot be empty", name);
@@ -141,45 +236,15 @@ DiagnosticVideoConfig ParseVideo(const nlohmann::json& value)
     ErrorHandling::Ensure(result.path.extension() == ".mp4", "video.path must use the .mp4 extension");
     if (value.contains("encoding"))
     {
-        ErrorHandling::Ensure(value.at("encoding").is_string(), "video.encoding must be a string");
-        const std::string encoding = value.at("encoding").get<std::string>();
-        if (encoding == "av1")
-        {
-            result.encoding = DiagnosticVideoEncoding::Av1;
-        }
-        else if (encoding == "h264")
-        {
-            result.encoding = DiagnosticVideoEncoding::H264;
-        }
-        else if (encoding == "mpeg4")
-        {
-            result.encoding = DiagnosticVideoEncoding::Mpeg4;
-        }
-        else
-        {
-            ErrorHandling::ThrowWithMessage(
-                "Unknown diagnostic video encoding '{}' (expected 'av1', 'h264', or 'mpeg4')",
-                encoding);
-        }
+        result.encoding = ReadEnum(value.at("encoding"), "video.encoding", kEncodingNames, kEncodingExpectation);
     }
     if (value.contains("encoding_device"))
     {
-        ErrorHandling::Ensure(value.at("encoding_device").is_string(), "video.encoding_device must be a string");
-        const std::string device = value.at("encoding_device").get<std::string>();
-        if (device == "cpu")
-        {
-            result.encoding_device = DiagnosticVideoEncodingDevice::Cpu;
-        }
-        else if (device == "gpu")
-        {
-            result.encoding_device = DiagnosticVideoEncodingDevice::Gpu;
-        }
-        else
-        {
-            ErrorHandling::ThrowWithMessage(
-                "Unknown diagnostic video encoding device '{}' (expected 'cpu' or 'gpu')",
-                device);
-        }
+        result.encoding_device = ReadEnum(
+            value.at("encoding_device"),
+            "video.encoding_device",
+            kEncodingDeviceNames,
+            kEncodingDeviceExpectation);
     }
     ErrorHandling::Ensure(
         result.encoding_device != DiagnosticVideoEncodingDevice::Gpu ||
@@ -210,29 +275,12 @@ DiagnosticVideoConfig ParseVideo(const nlohmann::json& value)
 
 InputAction ParseInputAction(const nlohmann::json& value, std::string_view name)
 {
-    ErrorHandling::Ensure(value.is_string(), "Diagnostic configuration field '{}' must be a string", name);
-    const std::string action = value.get<std::string>();
-    if (action == "press") return InputAction::Press;
-    if (action == "release") return InputAction::Release;
-    ErrorHandling::ThrowWithMessage(
-        "Unknown diagnostic input action '{}' in '{}' (expected 'press' or 'release')",
-        action,
-        name);
+    return ReadEnum(value, name, kActionNames, kActionExpectation);
 }
 
 MouseButton ParseMouseButton(const nlohmann::json& value, std::string_view name)
 {
-    ErrorHandling::Ensure(value.is_string(), "Diagnostic configuration field '{}' must be a string", name);
-    const std::string button = value.get<std::string>();
-    if (button == "left") return MouseButton::Left;
-    if (button == "right") return MouseButton::Right;
-    if (button == "middle") return MouseButton::Middle;
-    if (button == "button4") return MouseButton::Button4;
-    if (button == "button5") return MouseButton::Button5;
-    ErrorHandling::ThrowWithMessage(
-        "Unknown diagnostic mouse button '{}' in '{}' (expected 'left', 'right', 'middle', 'button4', or 'button5')",
-        button,
-        name);
+    return ReadEnum(value, name, kMouseButtonNames, kMouseButtonExpectation);
 }
 
 Key ParseKey(const nlohmann::json& value, std::string_view name)
@@ -262,12 +310,9 @@ DiagnosticInputConfig ParseInput(const nlohmann::json& value, size_t index)
     ErrorHandling::Ensure(value.contains("type") && value.at("type").is_string(), "{}.type must be a string", name);
 
     DiagnosticInputConfig result;
-    result.frame = ReadOptionalFrame(value, name);
-    result.time_ns = ReadOptionalTime(value, name);
-    ErrorHandling::Ensure(
-        result.frame.has_value() != result.time_ns.has_value(),
-        "Diagnostic configuration field '{}' must contain exactly one trigger: 'frame', 'time_seconds', or 'time_ns'",
-        name);
+    const Trigger trigger = ReadTrigger(value, name);
+    result.frame = trigger.frame;
+    result.time_ns = trigger.time_ns;
 
     const std::string type = value.at("type").get<std::string>();
     if (type == "mouse_move")
@@ -317,6 +362,95 @@ DiagnosticInputConfig ParseInput(const nlohmann::json& value, size_t index)
     return result;
 }
 
+std::optional<edt::Vec2<u32>> ParseFramebufferSize(const nlohmann::json& root)
+{
+    if (!root.contains("framebuffer_size")) return std::nullopt;
+    const auto& size = root.at("framebuffer_size");
+    ErrorHandling::Ensure(
+        size.is_array() && size.size() == 2,
+        "framebuffer_size must be an array containing width and height");
+    const u64 width = ReadNonNegativeInteger(size[0], "framebuffer_size[0]");
+    const u64 height = ReadNonNegativeInteger(size[1], "framebuffer_size[1]");
+    ErrorHandling::Ensure(width > 0 && height > 0, "framebuffer_size dimensions must be positive");
+    ErrorHandling::Ensure(
+        width <= static_cast<u64>(std::numeric_limits<int>::max()) &&
+            height <= static_cast<u64>(std::numeric_limits<int>::max()),
+        "framebuffer_size dimensions exceed the runtime integer size limit");
+    return edt::Vec2<u32>{static_cast<u32>(width), static_cast<u32>(height)};
+}
+
+std::optional<u64> ParseClock(const nlohmann::json& root)
+{
+    if (!root.contains("clock")) return std::nullopt;
+    const auto& clock = root.at("clock");
+    EnsureKnownKeys(clock, "clock", {"mode", "step_seconds", "step_ns"});
+    ErrorHandling::Ensure(clock.contains("mode") && clock.at("mode").is_string(), "clock.mode must be a string");
+    const std::string mode = clock.at("mode").get<std::string>();
+    ErrorHandling::Ensure(mode == "fixed", "Unknown diagnostic clock mode '{}' (expected 'fixed')", mode);
+
+    const bool has_seconds = clock.contains("step_seconds");
+    const bool has_nanoseconds = clock.contains("step_ns");
+    ErrorHandling::Ensure(
+        !(has_seconds && has_nanoseconds),
+        "Fixed diagnostic clock must contain at most one of 'clock.step_seconds' and 'clock.step_ns'");
+    ErrorHandling::Ensure(
+        has_seconds || has_nanoseconds,
+        "Fixed diagnostic clock requires clock.step_seconds or clock.step_ns");
+
+    u64 step_ns = 0;
+    if (has_nanoseconds)
+    {
+        step_ns = ReadNonNegativeInteger(clock.at("step_ns"), "clock.step_ns");
+        ErrorHandling::Ensure(step_ns > 0, "clock.step_ns must be positive");
+    }
+    else
+    {
+        const double step = ReadNonNegativeNumber(clock.at("step_seconds"), "clock.step_seconds", false);
+        step_ns = TimerDurationFromSeconds(step).count();
+    }
+
+    // Frame duration and framerate still reach ImGui and the application as
+    // floats, so the step has to survive that conversion.
+    const auto runtime_step = static_cast<float>(static_cast<double>(step_ns) / kNanosecondsPerSecond);
+    ErrorHandling::Ensure(
+        std::isfinite(runtime_step) && runtime_step > 0.f && std::isfinite(1.f / runtime_step),
+        "The fixed diagnostic clock step must have a finite positive float duration and reciprocal");
+    return step_ns;
+}
+
+// An exit fixes the run's trigger domain: everything scheduled must be in that
+// same domain and must not outlive it. Both domains obey the identical rule, so
+// they share one implementation parameterized on which member to read.
+void ValidateExitDomain(const DiagnosticRunConfig& config)
+{
+    const auto validate = [&](std::optional<u64> DiagnosticInputConfig::* input_trigger,
+                              std::optional<u64> DiagnosticCaptureConfig::* capture_trigger,
+                              std::optional<u64> exit_trigger,
+                              std::string_view domain)
+    {
+        if (!exit_trigger.has_value()) return;
+        for (const DiagnosticInputConfig& input : config.input)
+        {
+            const std::optional<u64>& trigger = input.*input_trigger;
+            ErrorHandling::Ensure(
+                trigger.has_value() && *trigger <= *exit_trigger,
+                "A {}-based exit must not precede or use a different trigger domain from diagnostic input",
+                domain);
+        }
+        for (const DiagnosticCaptureConfig& capture : config.captures)
+        {
+            const std::optional<u64>& trigger = capture.*capture_trigger;
+            ErrorHandling::Ensure(
+                trigger.has_value() && *trigger <= *exit_trigger,
+                "A {}-based exit must not precede or use a different trigger domain from a capture",
+                domain);
+        }
+    };
+
+    validate(&DiagnosticInputConfig::frame, &DiagnosticCaptureConfig::frame, config.exit.frame, "frame");
+    validate(&DiagnosticInputConfig::time_ns, &DiagnosticCaptureConfig::time_ns, config.exit.time_ns, "time");
+}
+
 DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
 {
     EnsureKnownKeys(
@@ -334,69 +468,16 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
     DiagnosticRunConfig result;
     if (root.contains("presentation"))
     {
-        ErrorHandling::Ensure(root.at("presentation").is_string(), "presentation must be a string");
-        const std::string presentation = root.at("presentation").get<std::string>();
-        const auto parsed = PresentationFromName(presentation);
-        ErrorHandling::Ensure(
-            parsed.has_value(),
-            "Unknown diagnostic presentation '{}' (expected 'visible', 'hidden', or 'offscreen')",
-            presentation);
-        result.presentation = *parsed;
+        result.presentation =
+            ReadEnum(root.at("presentation"), "presentation", kPresentationNames, kPresentationExpectation);
     }
 
-    if (root.contains("framebuffer_size"))
-    {
-        const auto& size = root.at("framebuffer_size");
-        ErrorHandling::Ensure(
-            size.is_array() && size.size() == 2,
-            "framebuffer_size must be an array containing width and height");
-        const u64 width = ReadNonNegativeInteger(size[0], "framebuffer_size[0]");
-        const u64 height = ReadNonNegativeInteger(size[1], "framebuffer_size[1]");
-        ErrorHandling::Ensure(width > 0 && height > 0, "framebuffer_size dimensions must be positive");
-        ErrorHandling::Ensure(
-            width <= static_cast<u64>(std::numeric_limits<int>::max()) &&
-                height <= static_cast<u64>(std::numeric_limits<int>::max()),
-            "framebuffer_size dimensions exceed the runtime integer size limit");
-        result.framebuffer_size = edt::Vec2<u32>{static_cast<u32>(width), static_cast<u32>(height)};
-    }
+    result.framebuffer_size = ParseFramebufferSize(root);
     ErrorHandling::Ensure(
         result.presentation != DiagnosticPresentation::Offscreen || result.framebuffer_size.has_value(),
         "Offscreen diagnostic presentation requires an explicit framebuffer_size");
 
-    if (root.contains("clock"))
-    {
-        const auto& clock = root.at("clock");
-        EnsureKnownKeys(clock, "clock", {"mode", "step_seconds", "step_ns"});
-        ErrorHandling::Ensure(clock.contains("mode") && clock.at("mode").is_string(), "clock.mode must be a string");
-        const std::string mode = clock.at("mode").get<std::string>();
-        ErrorHandling::Ensure(mode == "fixed", "Unknown diagnostic clock mode '{}' (expected 'fixed')", mode);
-        const bool has_seconds = clock.contains("step_seconds");
-        const bool has_nanoseconds = clock.contains("step_ns");
-        ErrorHandling::Ensure(
-            !(has_seconds && has_nanoseconds),
-            "Fixed diagnostic clock must contain at most one of 'clock.step_seconds' and 'clock.step_ns'");
-        ErrorHandling::Ensure(
-            has_seconds || has_nanoseconds,
-            "Fixed diagnostic clock requires clock.step_seconds or clock.step_ns");
-        u64 step_ns = 0;
-        if (has_nanoseconds)
-        {
-            step_ns = ReadNonNegativeInteger(clock.at("step_ns"), "clock.step_ns");
-            ErrorHandling::Ensure(step_ns > 0, "clock.step_ns must be positive");
-        }
-        else
-        {
-            const double step = ReadNonNegativeNumber(clock.at("step_seconds"), "clock.step_seconds", false);
-            step_ns = TimerDurationFromSeconds(step).count();
-        }
-        // Frame duration and framerate still reach ImGui and the application as
-        // floats, so the step has to survive that conversion.
-        const auto runtime_step = static_cast<float>(static_cast<double>(step_ns) / 1'000'000'000.0);
-        ErrorHandling::Ensure(
-            std::isfinite(runtime_step) && runtime_step > 0.f && std::isfinite(1.f / runtime_step),
-            "The fixed diagnostic clock step must have a finite positive float duration and reciprocal");
-        result.clock.fixed_step_ns = step_ns;
-    }
+    result.clock.fixed_step_ns = ParseClock(root);
 
     if (root.contains("input"))
     {
@@ -473,36 +554,7 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
     ErrorHandling::Ensure(
         !result.exit.after_last_capture || !result.captures.empty(),
         "exit.after_last_capture requires at least one capture");
-    if (result.exit.frame.has_value())
-    {
-        for (const auto& input : result.input)
-        {
-            ErrorHandling::Ensure(
-                input.frame.has_value() && *input.frame <= *result.exit.frame,
-                "A frame-based exit must not precede or use a different trigger domain from diagnostic input");
-        }
-        for (const auto& capture : result.captures)
-        {
-            ErrorHandling::Ensure(
-                capture.frame.has_value() && *capture.frame <= *result.exit.frame,
-                "A frame-based exit must not precede or use a different trigger domain from a capture");
-        }
-    }
-    if (result.exit.time_ns.has_value())
-    {
-        for (const auto& input : result.input)
-        {
-            ErrorHandling::Ensure(
-                input.time_ns.has_value() && *input.time_ns <= *result.exit.time_ns,
-                "A time-based exit must not precede or use a different trigger domain from diagnostic input");
-        }
-        for (const auto& capture : result.captures)
-        {
-            ErrorHandling::Ensure(
-                capture.time_ns.has_value() && *capture.time_ns <= *result.exit.time_ns,
-                "A time-based exit must not precede or use a different trigger domain from a capture");
-        }
-    }
+    ValidateExitDomain(result);
 
     if (root.contains("application"))
     {
@@ -635,78 +687,6 @@ std::optional<DiagnosticRunConfig> LoadDiagnosticRunConfigFromArguments(std::spa
 namespace
 {
 
-std::string_view PresentationToString(DiagnosticPresentation presentation)
-{
-    switch (presentation)
-    {
-    case DiagnosticPresentation::Visible:
-        return "visible";
-    case DiagnosticPresentation::Hidden:
-        return "hidden";
-    case DiagnosticPresentation::Offscreen:
-        return "offscreen";
-    }
-    ErrorHandling::ThrowWithMessage("Unknown diagnostic presentation");
-}
-
-std::string_view EncodingToString(DiagnosticVideoEncoding encoding)
-{
-    switch (encoding)
-    {
-    case DiagnosticVideoEncoding::Av1:
-        return "av1";
-    case DiagnosticVideoEncoding::H264:
-        return "h264";
-    case DiagnosticVideoEncoding::Mpeg4:
-        return "mpeg4";
-    }
-    ErrorHandling::ThrowWithMessage("Unknown diagnostic video encoding");
-}
-
-std::string_view EncodingDeviceToString(DiagnosticVideoEncodingDevice device)
-{
-    switch (device)
-    {
-    case DiagnosticVideoEncodingDevice::Cpu:
-        return "cpu";
-    case DiagnosticVideoEncodingDevice::Gpu:
-        return "gpu";
-    }
-    ErrorHandling::ThrowWithMessage("Unknown diagnostic video encoding device");
-}
-
-std::string_view ActionToString(InputAction action)
-{
-    switch (action)
-    {
-    case InputAction::Press:
-        return "press";
-    case InputAction::Release:
-        return "release";
-    }
-    ErrorHandling::ThrowWithMessage("Unknown diagnostic input action");
-}
-
-std::string_view MouseButtonToString(MouseButton button)
-{
-    switch (button)
-    {
-    case MouseButton::Left:
-        return "left";
-    case MouseButton::Right:
-        return "right";
-    case MouseButton::Middle:
-        return "middle";
-    case MouseButton::Button4:
-        return "button4";
-    case MouseButton::Button5:
-        return "button5";
-    case MouseButton::Count:
-        break;
-    }
-    ErrorHandling::ThrowWithMessage("Unknown diagnostic mouse button");
-}
-
 // Writes the one trigger the entry carries. Recorded entries use frames, which
 // pin an event to the rendered frame it happened on regardless of the clock the
 // replay runs at; hand-authored entries may use time instead.
@@ -736,8 +716,8 @@ nlohmann::json InputEventToJson(const DiagnosticInputEvent& event)
             else if constexpr (std::is_same_v<Event, DiagnosticMouseButtonInput>)
             {
                 result["type"] = "mouse_button";
-                result["button"] = MouseButtonToString(value.button);
-                result["action"] = ActionToString(value.action);
+                result["button"] = FindNameByEnum(kMouseButtonNames, value.button);
+                result["action"] = FindNameByEnum(kActionNames, value.action);
             }
             else if constexpr (std::is_same_v<Event, DiagnosticMouseScrollInput>)
             {
@@ -751,7 +731,7 @@ nlohmann::json InputEventToJson(const DiagnosticInputEvent& event)
                 ErrorHandling::Ensure(name.has_value(), "Recorded key has no diagnostic configuration name");
                 result["type"] = "key";
                 result["key"] = *name;
-                result["action"] = ActionToString(value.action);
+                result["action"] = FindNameByEnum(kActionNames, value.action);
             }
         },
         event);
@@ -764,7 +744,7 @@ nlohmann::json DiagnosticRunConfigToJson(const DiagnosticRunConfig& config)
 {
     nlohmann::json result = nlohmann::json::object();
     result["version"] = DiagnosticRunConfig::kVersion;
-    result["presentation"] = PresentationToString(config.presentation);
+    result["presentation"] = FindNameByEnum(kPresentationNames, config.presentation);
     if (config.framebuffer_size.has_value())
     {
         result["framebuffer_size"] = {config.framebuffer_size->x(), config.framebuffer_size->y()};
@@ -804,8 +784,8 @@ nlohmann::json DiagnosticRunConfigToJson(const DiagnosticRunConfig& config)
     {
         result["video"] = {
             {"path", config.video->path.generic_string()},
-            {"encoding", EncodingToString(config.video->encoding)},
-            {"encoding_device", EncodingDeviceToString(config.video->encoding_device)},
+            {"encoding", FindNameByEnum(kEncodingNames, config.video->encoding)},
+            {"encoding_device", FindNameByEnum(kEncodingDeviceNames, config.video->encoding_device)},
             {"compression_level", config.video->compression_level},
             {"include_ui", config.video->include_ui},
             {"log_ffmpeg", config.video->log_ffmpeg}};

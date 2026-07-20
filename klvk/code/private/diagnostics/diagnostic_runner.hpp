@@ -75,6 +75,7 @@ private:
     void ScheduleCapture(size_t capture_index, bool quit_after_last_capture);
     void ScheduleInput(const DiagnosticInputConfig& input);
     void ApplyInput(const DiagnosticInputEvent& input);
+    void ApplyModifier(Key key);
     void ScheduleQuit(const DiagnosticExitConfig& exit);
     void ProcessReadback(PendingCapture& capture);
 

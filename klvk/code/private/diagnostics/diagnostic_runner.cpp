@@ -143,6 +143,30 @@ void DiagnosticRunner::ScheduleInput(const DiagnosticInputConfig& input)
     }
 }
 
+// ImGui tracks the combined state of each modifier pair separately from the
+// individual keys, so a replayed modifier has to update both.
+void DiagnosticRunner::ApplyModifier(Key key)
+{
+    struct Modifier
+    {
+        Key left;
+        Key right;
+        ImGuiKey flag;
+    };
+    static constexpr auto kModifiers = std::to_array<Modifier>({
+        {.left = Key::LeftCtrl, .right = Key::RightCtrl, .flag = ImGuiMod_Ctrl},
+        {.left = Key::LeftShift, .right = Key::RightShift, .flag = ImGuiMod_Shift},
+        {.left = Key::LeftAlt, .right = Key::RightAlt, .flag = ImGuiMod_Alt},
+        {.left = Key::LeftSuper, .right = Key::RightSuper, .flag = ImGuiMod_Super},
+    });
+
+    const auto found = std::ranges::find_if(
+        kModifiers,
+        [key](const Modifier& modifier) { return modifier.left == key || modifier.right == key; });
+    if (found == std::ranges::end(kModifiers)) return;
+    ImGui::GetIO().AddKeyEvent(found->flag, window_.IsKeyPressed(found->left) || window_.IsKeyPressed(found->right));
+}
+
 void DiagnosticRunner::ApplyInput(const DiagnosticInputEvent& input)
 {
     ImGuiIO& io = ImGui::GetIO();
@@ -171,30 +195,7 @@ void DiagnosticRunner::ApplyInput(const DiagnosticInputEvent& input)
                 const bool pressed = event.action == InputAction::Press;
                 window_.OnKey(event.key, event.action);
                 io.AddKeyEvent(static_cast<ImGuiKey>(KeyToImGui(event.key)), pressed);
-                if (event.key == Key::LeftCtrl || event.key == Key::RightCtrl)
-                {
-                    io.AddKeyEvent(
-                        ImGuiMod_Ctrl,
-                        window_.IsKeyPressed(Key::LeftCtrl) || window_.IsKeyPressed(Key::RightCtrl));
-                }
-                else if (event.key == Key::LeftShift || event.key == Key::RightShift)
-                {
-                    io.AddKeyEvent(
-                        ImGuiMod_Shift,
-                        window_.IsKeyPressed(Key::LeftShift) || window_.IsKeyPressed(Key::RightShift));
-                }
-                else if (event.key == Key::LeftAlt || event.key == Key::RightAlt)
-                {
-                    io.AddKeyEvent(
-                        ImGuiMod_Alt,
-                        window_.IsKeyPressed(Key::LeftAlt) || window_.IsKeyPressed(Key::RightAlt));
-                }
-                else if (event.key == Key::LeftSuper || event.key == Key::RightSuper)
-                {
-                    io.AddKeyEvent(
-                        ImGuiMod_Super,
-                        window_.IsKeyPressed(Key::LeftSuper) || window_.IsKeyPressed(Key::RightSuper));
-                }
+                ApplyModifier(event.key);
             }
         },
         input);
