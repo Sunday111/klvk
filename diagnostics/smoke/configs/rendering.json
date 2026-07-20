@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "presentation": "offscreen",
+  "framebuffer_size": [320, 240],
+  "clock": {
+    "mode": "fixed",
+    "step_seconds": 0.016666666666666666
+  },
+  "captures": [
+    {
+      "frame": 1,
+      "path": "early.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 30,
+      "path": "settled.ppm",
+      "include_ui": false
+    }
+  ],
+  "exit": {
+    "after_last_capture": true
+  },
+  "application": {
+    "seed": 7
+  }
+}

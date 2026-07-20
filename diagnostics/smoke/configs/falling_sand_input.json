@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "presentation": "offscreen",
+  "framebuffer_size": [320, 240],
+  "clock": {
+    "mode": "fixed",
+    "step_seconds": 0.016666666666666666
+  },
+  "input": [
+    {
+      "frame": 1,
+      "type": "mouse_move",
+      "position": [160, 120]
+    },
+    {
+      "frame": 1,
+      "type": "mouse_button",
+      "button": "left",
+      "action": "press"
+    },
+    {
+      "frame": 2,
+      "type": "mouse_button",
+      "button": "left",
+      "action": "release"
+    },
+    {
+      "frame": 5,
+      "type": "mouse_scroll",
+      "offset": [0, 1]
+    },
+    {
+      "frame": 6,
+      "type": "key",
+      "key": "w",
+      "action": "press"
+    },
+    {
+      "frame": 12,
+      "type": "key",
+      "key": "w",
+      "action": "release"
+    }
+  ],
+  "captures": [
+    {
+      "frame": 1,
+      "path": "initial.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 3,
+      "path": "painted.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 15,
+      "path": "moved.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 30,
+      "path": "settled.ppm",
+      "include_ui": false
+    }
+  ],
+  "exit": {
+    "after_last_capture": true
+  }
+}
