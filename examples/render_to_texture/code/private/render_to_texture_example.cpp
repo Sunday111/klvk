@@ -225,7 +225,7 @@ class RenderToTextureApp : public klvk::Application
         for (size_t column = 0; column != 3; ++column)
         {
             const edt::Vec3f value = transform.GetColumn(column);
-            push_constants.transform_columns[column] = {value.x(), value.y(), value.z(), 0.f};
+            push_constants.transform_columns[column] = {value, 0.f};
         }
         klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, color_pipeline_);
         klvk::Vulkan::CmdPushConstants(

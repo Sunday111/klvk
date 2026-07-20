@@ -111,8 +111,7 @@ void InterpolationWidget::Render(
     std::vector<edt::Vec4f> colors(num_colors_);
     settings.ComputeColors(
         colors.size(),
-        [&](size_t index, const edt::Vec3f& color)
-        { colors[index] = edt::Vec4f{color.x(), color.y(), color.z(), 1.f}; });
+        [&](size_t index, const edt::Vec3f& color) { colors[index] = edt::Vec4f{color, 1.f}; });
     color_buffers_[frame_index].Write(std::as_bytes(std::span{colors}));
 
     CmdSetGlStyleViewport(command_buffer, viewport, app_->GetWindow().GetSize());

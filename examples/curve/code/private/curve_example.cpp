@@ -92,7 +92,7 @@ class CurveApp : public klvk::Application
         ImGui::SliderFloat("Extreme thickness", &extreme_.thickness, 10.f, 180.f);
         const Vec2f viewport = GetWindow().GetFramebufferSize().Cast<float>();
         const float minimum_extent = viewport.Min();
-        const Mat3f view = edt::Math::ScaleMatrix(Vec2f{minimum_extent / viewport.x(), minimum_extent / viewport.y()});
+        const Mat3f view = edt::Math::ScaleMatrix(minimum_extent / viewport);
         spiral_.Draw(viewport, view);
         secondary_.Draw(viewport, view);
         extreme_.Draw(viewport, view);

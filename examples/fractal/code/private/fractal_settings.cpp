@@ -46,11 +46,8 @@ void FractalSettings::DistributePositionsUniformly()
 {
     edt::Vec3f out;
 
-    float min = in[0] < in[1] ? in[0] : in[1];
-    min = min < in[2] ? min : in[2];
-
-    float max = in[0] > in[1] ? in[0] : in[1];
-    max = max > in[2] ? max : in[2];
+    const float min = in.Min();
+    const float max = in.Max();
 
     out[2] = max;  // v
     float delta = max - min;
@@ -99,10 +96,7 @@ void FractalSettings::DistributePositionsUniformly()
 
     if (in[1] <= 0.f)
     {  // < is bogus, just shuts up warnings
-        out[0] = in[2];
-        out[1] = in[2];
-        out[2] = in[2];
-        return out;
+        return out + in[2];
     }
     float hh = in[0];
     if (hh >= 360.f) hh = 0.f;
@@ -158,9 +152,9 @@ void FractalSettings::DistributePositionsUniformly()
     if (delta > 0.5f) delta -= 1;
     float h = std::fmod(x + t * delta, 1.f);
     if (h < 0) h += 1;
-    h *= 360.f;
-
-    return edt::Vec3f{h, std::lerp(a[1], b[1], t), std::lerp(a[2], b[2], t)};
+    edt::Vec3f result = edt::Math::Lerp(a, b, t);
+    result[0] = h * 360.f;
+    return result;
 }
 
 edt::Vec3f FractalSettings::LerpColors(edt::Vec3f from, edt::Vec3f to, float t) const

@@ -79,7 +79,7 @@ Join CalculateJoin(Vec2f previous, Vec2f current, Vec2f next, Vec2f viewport_siz
         const float max_length = half_width * miter_limit;
         if (miter.SquaredLength() > max_length * max_length) miter = miter.Normalized() * max_length;
     }
-    const float turn = incoming.x() * outgoing.y() - incoming.y() * outgoing.x();
+    const float turn = incoming.Cross(outgoing);
     return {
         .incoming_normal = ToClipVector(n1, viewport_size),
         .outgoing_normal = ToClipVector(n2, viewport_size),

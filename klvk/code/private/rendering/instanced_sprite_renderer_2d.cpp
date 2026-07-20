@@ -114,7 +114,7 @@ void InstancedSpriteRenderer2d::Render(const Mat3f& world_to_view)
     for (size_t column = 0; column != 3; ++column)
     {
         const Vec3f matrix_column = world_to_view.GetColumn(column);
-        push_constants.columns[column] = Vec4f{matrix_column.x(), matrix_column.y(), matrix_column.z(), 0.f};
+        push_constants.columns[column] = Vec4f{matrix_column, 0.f};
     }
     Vulkan::CmdPushConstantsNE(command_buffer, pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, push_constants);
 

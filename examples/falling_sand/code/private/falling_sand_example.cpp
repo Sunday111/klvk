@@ -210,10 +210,14 @@ class FallingSandApp : public klvk::Application
     {
         const Vec2f half = size * 0.5f;
         const float width = half_width * 2.f;
-        AddLine(renderer, center + Vec2f{-half.x(), -half.y()}, center + Vec2f{half.x(), -half.y()}, width, color);
-        AddLine(renderer, center + Vec2f{half.x(), -half.y()}, center + Vec2f{half.x(), half.y()}, width, color);
-        AddLine(renderer, center + Vec2f{half.x(), half.y()}, center + Vec2f{-half.x(), half.y()}, width, color);
-        AddLine(renderer, center + Vec2f{-half.x(), half.y()}, center + Vec2f{-half.x(), -half.y()}, width, color);
+        const Vec2f bottom_left = center - half;
+        const Vec2f bottom_right = center + half * Vec2f{1.f, -1.f};
+        const Vec2f top_right = center + half;
+        const Vec2f top_left = center + half * Vec2f{-1.f, 1.f};
+        AddLine(renderer, bottom_left, bottom_right, width, color);
+        AddLine(renderer, bottom_right, top_right, width, color);
+        AddLine(renderer, top_right, top_left, width, color);
+        AddLine(renderer, top_left, bottom_left, width, color);
     }
 
     void Tick() override
@@ -307,7 +311,7 @@ class FallingSandApp : public klvk::Application
     [[nodiscard]] Vec2f GetMousePositionInWorldCoordinates() const
     {
         const Vec2f screen_size = GetWindow().GetSize2f();
-        Vec2f position{ImGui::GetMousePos().x, ImGui::GetMousePos().y};
+        Vec2f position = GetWindow().GetCursorPos();
         position.y() = screen_size.y() - position.y();
         return edt::Math::TransformPos(transforms_.screen_to_world, position);
     }

@@ -21,18 +21,9 @@ public:
         const auto right = forward.Cross(up);
         const auto actual_up = right.Cross(forward);
         auto result = Mat4f::Identity();
-        result.At<0, 0>() = right.x();
-        result.At<1, 0>() = right.y();
-        result.At<2, 0>() = right.z();
-        result.At<0, 1>() = actual_up.x();
-        result.At<1, 1>() = actual_up.y();
-        result.At<2, 1>() = actual_up.z();
-        result.At<0, 2>() = -forward.x();
-        result.At<1, 2>() = -forward.y();
-        result.At<2, 2>() = -forward.z();
-        result.At<3, 0>() = -right.Dot(eye);
-        result.At<3, 1>() = -actual_up.Dot(eye);
-        result.At<3, 2>() = forward.Dot(eye);
+        result.SetColumn(0, Vec4f{right, -right.Dot(eye)});
+        result.SetColumn(1, Vec4f{actual_up, -actual_up.Dot(eye)});
+        result.SetColumn(2, Vec4f{-forward, forward.Dot(eye)});
         return result;
     }
 

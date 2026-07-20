@@ -119,8 +119,7 @@ void SimpleGpuRenderer::ApplySettings(const FractalSettings& settings)
     std::vector<edt::Vec4f> colors(max_iterations + 1);
     settings.ComputeColors(
         colors.size(),
-        [&](size_t index, const edt::Vec3f& color)
-        { colors[index] = edt::Vec4f{color.x(), color.y(), color.z(), 1.f}; });
+        [&](size_t index, const edt::Vec3f& color) { colors[index] = edt::Vec4f{color, 1.f}; });
     color_table_.Write(std::as_bytes(std::span{colors}));
 }
 

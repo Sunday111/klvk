@@ -165,7 +165,7 @@ class SimpleLitCubeApp : public klvk::Application
         const edt::Mat4f projection = camera_.GetProjectionMatrix(GetWindow().GetAspect()).Transposed();
         const edt::Mat4f view_projection = projection.MatMul(view);
         SceneUniforms uniforms{
-            .view_position = edt::Vec4f{camera_.GetEye().x(), camera_.GetEye().y(), camera_.GetEye().z(), 1.f},
+            .view_position = edt::Vec4f{camera_.GetEye(), 1.f},
             .light_position = {9.f, 9.f, 3.f, 1.f},
             .light_color = {1.f, 1.f, 1.f, 1.f},
             .object_color = {1.f, 0.f, 0.f, 1.f},

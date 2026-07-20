@@ -38,8 +38,8 @@ using namespace edt::lazy_matrix_aliases;  // NOLINT
 
 [[nodiscard]] constexpr Vec3f RgbToHsv(Vec3f input)
 {
-    const float minimum = std::min({input[0], input[1], input[2]});
-    const float maximum = std::max({input[0], input[1], input[2]});
+    const float minimum = input.Min();
+    const float maximum = input.Max();
     const float delta = maximum - minimum;
     Vec3f output{};
     output[2] = maximum;
@@ -98,7 +98,9 @@ using namespace edt::lazy_matrix_aliases;  // NOLINT
     if (delta > 0.5f) delta -= 1.f;
     float hue = std::fmod(x + t * delta, 1.f);
     if (hue < 0.f) hue += 1.f;
-    return {hue * 360.f, std::lerp(a[1], b[1], t), std::lerp(a[2], b[2], t)};
+    Vec3f result = edt::Math::Lerp(a, b, t);
+    result[0] = hue * 360.f;
+    return result;
 }
 
 class Palette

@@ -152,8 +152,7 @@ void Window::Create()
     double cursor_x{};
     double cursor_y{};
     glfwGetCursorPos(window_, &cursor_x, &cursor_y);
-    cursor_.x() = static_cast<float>(cursor_x);
-    cursor_.y() = static_cast<float>(cursor_y);
+    cursor_ = {static_cast<float>(cursor_x), static_cast<float>(cursor_y)};
 }
 
 void Window::Destroy()

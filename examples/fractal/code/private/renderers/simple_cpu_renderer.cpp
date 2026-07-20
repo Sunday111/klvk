@@ -200,12 +200,7 @@ void SimpleCpuRenderer::PrepareFrame(VkCommandBuffer command_buffer, const Fract
             }
 
             const edt::Vec3f color = pallette[i];
-            pixel = edt::Vec4u8{
-                static_cast<u8>(std::clamp(color.x(), 0.f, 1.f) * 255.f),
-                static_cast<u8>(std::clamp(color.y(), 0.f, 1.f) * 255.f),
-                static_cast<u8>(std::clamp(color.z(), 0.f, 1.f) * 255.f),
-                255,
-            };
+            pixel = edt::Vec4u8{(edt::Math::Clamp(color, 0.f, 1.f) * 255.f).Cast<u8>(), 255};
         }
     }
 

@@ -74,8 +74,7 @@ class QuadApp : public klvk::Application
         for (size_t column = 0; column != 3; ++column)
         {
             const edt::Vec3f matrix_column = m.GetColumn(column);
-            push_constants.transform_columns[column] =
-                edt::Vec4f{matrix_column.x(), matrix_column.y(), matrix_column.z(), 0.f};
+            push_constants.transform_columns[column] = edt::Vec4f{matrix_column, 0.f};
         }
 
         VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
