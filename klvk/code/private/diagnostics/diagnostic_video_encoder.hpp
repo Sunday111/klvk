@@ -20,7 +20,7 @@ public:
         std::filesystem::path path,
         u32 width,
         u32 height,
-        double frame_duration_seconds,
+        u64 frame_duration_ns,
         DiagnosticVideoEncoding encoding,
         DiagnosticVideoEncodingDevice encoding_device,
         u8 compression_level,

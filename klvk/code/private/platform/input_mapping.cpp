@@ -152,6 +152,13 @@ std::optional<Key> KeyFromName(std::string_view name) noexcept
     return found->key;
 }
 
+std::optional<std::string_view> KeyToName(Key key) noexcept
+{
+    const KeyMapping* found = FindKey(key);
+    if (found == nullptr) return std::nullopt;
+    return found->name;
+}
+
 std::optional<Key> KeyFromGlfw(int glfw_key) noexcept
 {
     const auto found = std::ranges::find(kKeyMappings, glfw_key, &KeyMapping::glfw_key);

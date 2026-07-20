@@ -10,10 +10,12 @@
 #include <limits>
 #include <span>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
 #include "diagnostics/diagnostic_runner.hpp"
+#include "diagnostics/input_recorder.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/events/application_events.hpp"
 #include "klvk/events/event_listener_method.hpp"
@@ -21,6 +23,7 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/platform/os/os.hpp"
 #include "klvk/reflection/register_types.hpp"
+#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/timing/timer_manager.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/offscreen_render_target.hpp"
@@ -43,6 +46,8 @@ struct Application::State
 {
     using Clock = std::chrono::steady_clock;
     using TimePoint = Clock::time_point;
+
+    static constexpr double kNanosecondsPerSecond = 1'000'000'000.0;
 
     struct FrameInFlight
     {
@@ -79,11 +84,39 @@ struct Application::State
     events::EventManager event_manager_;
     std::optional<DiagnosticRunConfig> diagnostic_config_;
     std::unique_ptr<DiagnosticRunner> diagnostic_runner_;
+    std::optional<std::filesystem::path> input_record_path_;
+    std::unique_ptr<DiagnosticInputRecorder> input_recorder_;
+
+    // The fixed step is exact nanoseconds, so logical time is an integer product
+    // rather than an accumulated float and a replayed run lands on precisely the
+    // deadlines its recording did.
+    [[nodiscard]] std::optional<u64> GetFixedStepNanoseconds() const
+    {
+        if (!diagnostic_config_.has_value()) return std::nullopt;
+        return diagnostic_config_->clock.fixed_step_ns;
+    }
 
     [[nodiscard]] std::optional<double> GetFixedStep() const
     {
-        if (!diagnostic_config_.has_value()) return std::nullopt;
-        return diagnostic_config_->clock.fixed_step_seconds;
+        const auto step_ns = GetFixedStepNanoseconds();
+        if (!step_ns.has_value()) return std::nullopt;
+        return static_cast<double>(*step_ns) / kNanosecondsPerSecond;
+    }
+
+    // Exact logical time for the diagnostic path. Under a fixed clock this is an
+    // integer product; otherwise it is the monotonic clock truncated to
+    // nanoseconds, which is already its native resolution.
+    [[nodiscard]] TimerDuration GetElapsedTime() const
+    {
+        if (const auto step_ns = GetFixedStepNanoseconds())
+        {
+            ErrorHandling::Ensure(
+                completed_frames_ == 0 || *step_ns <= std::numeric_limits<u64>::max() / completed_frames_,
+                "Diagnostic logical time overflowed the nanosecond range");
+            return TimerDuration{*step_ns * completed_frames_};
+        }
+        const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(GetTime() - app_start_time_).count();
+        return TimerDuration{elapsed > 0 ? static_cast<u64>(elapsed) : 0};
     }
 
     void InitTime()
@@ -129,20 +162,36 @@ struct Application::State
         return State::DurationToSeconds(GetTime() - app_start_time_);
     }
 
-    [[nodiscard]] double GetElapsedTimeSeconds() const
-    {
-        if (const auto step = GetFixedStep()) return static_cast<double>(completed_frames_) * *step;
-        return State::DurationToSeconds<double>(GetTime() - app_start_time_);
-    }
-
     [[nodiscard]] float GetCurrentFrameStartTime() const
     {
         if (GetFixedStep().has_value()) return GetRelativeTimeSeconds();
         return State::DurationToSeconds(frame_start_time_history_[current_frame_time_index_] - app_start_time_);
     }
 
+    // A fixed clock normally means "render as fast as possible", which is what
+    // an offscreen or hidden run wants. A visible one exists to be watched, so
+    // hold each frame until the wall clock catches up with logical time.
+    [[nodiscard]] bool ShouldPaceToRealTime() const
+    {
+        return diagnostic_config_.has_value() && diagnostic_config_->presentation == DiagnosticPresentation::Visible &&
+               GetFixedStepNanoseconds().has_value();
+    }
+
+    void PaceToRealTime() const
+    {
+        const u64 step_ns = *GetFixedStepNanoseconds();
+        if (completed_frames_ != 0 && step_ns > std::numeric_limits<u64>::max() / completed_frames_) return;
+        const auto elapsed = std::chrono::nanoseconds{static_cast<i64>(step_ns * completed_frames_)};
+        std::this_thread::sleep_until(app_start_time_ + elapsed);
+    }
+
     void AlignWithFramerate()
     {
+        if (ShouldPaceToRealTime())
+        {
+            PaceToRealTime();
+            return;
+        }
         if (GetFixedStep().has_value()) return;
         if (target_framerate_.has_value())
         {
@@ -465,6 +514,13 @@ void Application::Run()
 void Application::RunImpl()
 {
     Initialize();
+    // Recording is independent of replaying: the point is to capture an ordinary
+    // interactive session, which has no diagnostic configuration at all.
+    if (state_->input_record_path_.has_value())
+    {
+        state_->input_recorder_ =
+            std::make_unique<DiagnosticInputRecorder>(*state_->input_record_path_, state_->event_manager_);
+    }
     if (state_->diagnostic_config_.has_value())
     {
         if (state_->diagnostic_config_->framebuffer_size.has_value())
@@ -477,6 +533,13 @@ void Application::RunImpl()
             {
                 state_->RecreateSwapchain();
             }
+        }
+        // A replay that carries its own input must not also receive the real
+        // thing: with a visible window, moving the cursor across it would alter
+        // the run being reproduced.
+        if (!state_->diagnostic_config_->input.empty())
+        {
+            state_->window_->SetPlatformInputEnabled(false);
         }
         state_->InitTime();
         state_->completed_frames_ = 0;
@@ -503,6 +566,16 @@ void Application::RunImpl()
             state_->diagnostic_runner_->EnsureComplete();
         }
     }
+    if (state_->input_recorder_)
+    {
+        constexpr u64 kDefaultRecordedStepNs = 16'666'667;
+        const u64 step_ns = state_->GetFixedStepNanoseconds().value_or(kDefaultRecordedStepNs);
+        state_->input_recorder_->Write(
+            state_->window_->GetFramebufferSize(),
+            step_ns,
+            state_->diagnostic_config_.has_value() ? state_->diagnostic_config_->application : nlohmann::json::object(),
+            state_->executable_dir_);
+    }
 }
 
 void Application::RunWithArguments(int argc, char** argv)
@@ -515,7 +588,19 @@ void Application::RunWithArguments(int argc, char** argv)
         ErrorHandling::Ensure(argv[index] != nullptr, "Null command-line argument at index {}", index);
         arguments.emplace_back(argv[index]);
     }
-    state_->diagnostic_config_ = LoadDiagnosticRunConfigFromArguments(arguments);
+    const DiagnosticCommandLine command_line = ParseDiagnosticCommandLine(arguments);
+    if (command_line.config_path.has_value())
+    {
+        state_->diagnostic_config_ = LoadDiagnosticRunConfig(*command_line.config_path);
+    }
+    if (command_line.presentation.has_value())
+    {
+        ErrorHandling::Ensure(
+            state_->diagnostic_config_.has_value(),
+            "--klvk-presentation overrides a diagnostic configuration and requires --klvk-diagnostics");
+        state_->diagnostic_config_->presentation = *command_line.presentation;
+    }
+    state_->input_record_path_ = command_line.input_record_path;
     Run();
 }
 
@@ -697,7 +782,7 @@ void Application::PreTick()
     }
     if (state_->diagnostic_runner_)
     {
-        state_->diagnostic_runner_->AdvanceInput(state_->completed_frames_ + 1, state_->GetElapsedTimeSeconds());
+        state_->diagnostic_runner_->AdvanceInput(state_->completed_frames_ + 1, state_->GetElapsedTime());
     }
     if (const auto step = state_->GetFixedStep()) ImGui::GetIO().DeltaTime = static_cast<float>(*step);
     ImGui::NewFrame();
@@ -712,7 +797,7 @@ void Application::PostTick()
     auto& frame = state_->CurrentFrame();
     if (state_->diagnostic_runner_)
     {
-        state_->diagnostic_runner_->Advance(state_->completed_frames_ + 1, state_->GetElapsedTimeSeconds());
+        state_->diagnostic_runner_->Advance(state_->completed_frames_ + 1, state_->GetElapsedTime());
     }
     const bool capture_without_ui = state_->diagnostic_runner_ && state_->diagnostic_runner_->NeedsReadback(false);
 
@@ -855,6 +940,9 @@ void Application::PostTick()
 
     ++state_->completed_frames_;
     state_->frame_index_ = (state_->frame_index_ + 1) % kFramesInFlight;
+    // Events arrive during PollEvents and are first observable by the tick that
+    // follows, so they belong to the next frame.
+    if (state_->input_recorder_) state_->input_recorder_->BeginFrame(state_->completed_frames_ + 1);
     if (!state_->offscreen_) state_->glfw_.PollEvents();
 }
 
@@ -865,9 +953,8 @@ void Application::MainLoop()
         state_->RegisterFrameStartTime();
 
         PreTick();
-        [[maybe_unused]] const u64 timer_callback_count = state_->timer_manager_.Advance(
-            TimerDuration{state_->GetElapsedTimeSeconds()},
-            state_->completed_frames_ + 1);
+        [[maybe_unused]] const u64 timer_callback_count =
+            state_->timer_manager_.Advance(state_->GetElapsedTime(), state_->completed_frames_ + 1);
         Tick();
         PostTick();
         state_->AlignWithFramerate();

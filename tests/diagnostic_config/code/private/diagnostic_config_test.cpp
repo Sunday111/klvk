@@ -42,8 +42,208 @@ void EnsureThrows(Function&& function, std::string_view message)
     throw std::runtime_error(std::string(message));
 }
 
+// A recorded run emits exact nanoseconds. Seconds remain available for
+// hand-authored configurations, but the two spellings may not be mixed on one
+// trigger and both must land on the same integer.
+void TestExactNanosecondTimes()
+{
+    const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
+    const std::filesystem::path root =
+        std::filesystem::temp_directory_path() / ("klvk_diagnostic_ns_test_" + std::to_string(nonce));
+    std::filesystem::create_directories(root);
+
+    const std::filesystem::path path = root / "nanoseconds.json";
+    Write(
+        path,
+        R"({
+            "version": 1,
+            "presentation": "offscreen",
+            "framebuffer_size": [64, 48],
+            "clock": {"mode": "fixed", "step_ns": 16666667},
+            "input": [{"time_ns": 1, "type": "key", "key": "w", "action": "press"}],
+            "captures": [{"time_ns": 250000000, "path": "captures/exact.ppm"}],
+            "exit": {"time_ns": 1000000000}
+        })");
+    const klvk::DiagnosticRunConfig config = klvk::LoadDiagnosticRunConfig(path);
+    Ensure(config.clock.fixed_step_ns == 16'666'667, "clock.step_ns was not parsed exactly");
+    Ensure(config.input.front().time_ns == 1, "a one-nanosecond input trigger was not preserved");
+    Ensure(config.captures.front().time_ns == 250'000'000, "capture time_ns was not parsed exactly");
+    Ensure(config.exit.time_ns == 1'000'000'000, "exit time_ns was not parsed exactly");
+
+    // The seconds spelling must round to the very same integer.
+    const std::filesystem::path seconds_path = root / "seconds.json";
+    Write(
+        seconds_path,
+        R"({
+            "version": 1,
+            "framebuffer_size": [64, 48],
+            "captures": [{"time_seconds": 0.25, "path": "captures/exact.ppm"}],
+            "exit": {"after_last_capture": true}
+        })");
+    const klvk::DiagnosticRunConfig seconds = klvk::LoadDiagnosticRunConfig(seconds_path);
+    Ensure(
+        seconds.captures.front().time_ns == config.captures.front().time_ns,
+        "the seconds and nanosecond spellings disagree");
+
+    constexpr std::array<std::string_view, 6> invalid_documents{
+        // Both spellings on one trigger.
+        R"({"version":1,"framebuffer_size":[64,48],"captures":[{"time_seconds":0.25,"time_ns":250000000,"path":"a.ppm"}],"exit":{"after_last_capture":true}})",
+        R"({"version":1,"exit":{"time_seconds":1,"time_ns":1000000000}})",
+        // Both spellings on the clock, and a clock with neither.
+        R"({"version":1,"clock":{"mode":"fixed","step_seconds":0.02,"step_ns":20000000},"exit":{"frame":1}})",
+        R"({"version":1,"clock":{"mode":"fixed"},"exit":{"frame":1}})",
+        // A nanosecond trigger must be a non-negative integer.
+        R"({"version":1,"exit":{"time_ns":-1}})",
+        R"({"version":1,"exit":{"time_ns":0.5}})"};
+    for (size_t index = 0; index != invalid_documents.size(); ++index)
+    {
+        const std::filesystem::path invalid = root / ("invalid_ns_" + std::to_string(index) + ".json");
+        Write(invalid, invalid_documents[index]);
+        EnsureThrows([&] { (void)klvk::LoadDiagnosticRunConfig(invalid); }, "invalid nanosecond document was accepted");
+    }
+    std::filesystem::remove_all(root);
+}
+
+// The recorder writes configurations through DiagnosticRunConfigToJson and the
+// replay reads them back through the parser. If the two vocabularies ever drift
+// apart a recording stops replaying, so round-trip every field here.
+void TestConfigSerializationRoundTrip()
+{
+    const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
+    const std::filesystem::path root =
+        std::filesystem::temp_directory_path() / ("klvk_diagnostic_roundtrip_test_" + std::to_string(nonce));
+    std::filesystem::create_directories(root);
+
+    klvk::DiagnosticRunConfig original;
+    original.presentation = klvk::DiagnosticPresentation::Offscreen;
+    original.framebuffer_size = edt::Vec2<u32>{640, 480};
+    original.clock.fixed_step_ns = 16'666'667;
+    original.input = {
+        {.frame = 1, .time_ns = std::nullopt, .event = klvk::DiagnosticMouseMoveInput{.position = {12.5f, 34.25f}}},
+        {.frame = 2,
+         .time_ns = std::nullopt,
+         .event =
+             klvk::DiagnosticMouseButtonInput{
+                 .button = klvk::MouseButton::Button5,
+                 .action = klvk::InputAction::Press}},
+        {.frame = 3, .time_ns = std::nullopt, .event = klvk::DiagnosticMouseScrollInput{.offset = {-1.5f, 2.f}}},
+        {.frame = 4,
+         .time_ns = std::nullopt,
+         .event = klvk::DiagnosticKeyInput{.key = klvk::Key::LeftCtrl, .action = klvk::InputAction::Release}}};
+    original.captures = {{.frame = 5, .time_ns = std::nullopt, .path = "captures/a.ppm", .include_ui = false}};
+    original.video = klvk::DiagnosticVideoConfig{
+        .path = "captures/a.mp4",
+        .encoding = klvk::DiagnosticVideoEncoding::H264,
+        .encoding_device = klvk::DiagnosticVideoEncodingDevice::Cpu,
+        .compression_level = 7,
+        .include_ui = false,
+        .log_ffmpeg = false};
+    original.exit.frame = 42;
+    original.application = nlohmann::json{{"seed", 7}};
+
+    const std::filesystem::path path = root / "roundtrip.json";
+    Write(path, klvk::DiagnosticRunConfigToJson(original).dump(2));
+    const klvk::DiagnosticRunConfig parsed = klvk::LoadDiagnosticRunConfig(path);
+
+    Ensure(parsed.presentation == original.presentation, "presentation did not survive the round trip");
+    Ensure(parsed.framebuffer_size == original.framebuffer_size, "framebuffer_size did not survive the round trip");
+    Ensure(parsed.clock.fixed_step_ns == original.clock.fixed_step_ns, "clock step did not survive the round trip");
+    Ensure(parsed.exit.frame == original.exit.frame, "exit did not survive the round trip");
+    Ensure(parsed.application == original.application, "application config did not survive the round trip");
+
+    Ensure(parsed.input.size() == original.input.size(), "input count did not survive the round trip");
+    for (size_t index = 0; index != original.input.size(); ++index)
+    {
+        Ensure(parsed.input[index].frame == original.input[index].frame, "an input frame did not survive");
+        Ensure(parsed.input[index].time_ns == original.input[index].time_ns, "an input time did not survive");
+        Ensure(parsed.input[index].event == original.input[index].event, "an input event did not survive");
+    }
+
+    Ensure(parsed.captures.size() == 1, "capture count did not survive the round trip");
+    Ensure(parsed.captures[0].frame == original.captures[0].frame, "a capture frame did not survive");
+    Ensure(parsed.captures[0].path == original.captures[0].path, "a capture path did not survive");
+    Ensure(parsed.captures[0].include_ui == original.captures[0].include_ui, "a capture include_ui did not survive");
+
+    Ensure(parsed.video.has_value(), "video did not survive the round trip");
+    Ensure(parsed.video->path == original.video->path, "video path did not survive");
+    Ensure(parsed.video->encoding == original.video->encoding, "video encoding did not survive");
+    Ensure(parsed.video->encoding_device == original.video->encoding_device, "video device did not survive");
+    Ensure(
+        parsed.video->compression_level == original.video->compression_level,
+        "video compression level did not survive");
+    Ensure(parsed.video->include_ui == original.video->include_ui, "video include_ui did not survive");
+    Ensure(parsed.video->log_ffmpeg == original.video->log_ffmpeg, "video log_ffmpeg did not survive");
+
+    // Trigger domains cannot be mixed within one configuration, so exercise the
+    // time domain separately - an exact nanosecond must survive serialization too.
+    klvk::DiagnosticRunConfig timed;
+    timed.framebuffer_size = edt::Vec2<u32>{64, 48};
+    timed.input = {
+        {.frame = std::nullopt,
+         .time_ns = 250'000'001,
+         .event = klvk::DiagnosticKeyInput{.key = klvk::Key::W, .action = klvk::InputAction::Press}}};
+    timed.exit.time_ns = 1'000'000'001;
+
+    const std::filesystem::path timed_path = root / "timed.json";
+    Write(timed_path, klvk::DiagnosticRunConfigToJson(timed).dump(2));
+    const klvk::DiagnosticRunConfig parsed_timed = klvk::LoadDiagnosticRunConfig(timed_path);
+    Ensure(parsed_timed.input.size() == 1, "timed input did not survive the round trip");
+    Ensure(parsed_timed.input[0].time_ns == 250'000'001, "an exact input nanosecond did not survive");
+    Ensure(parsed_timed.exit.time_ns == 1'000'000'001, "an exact exit nanosecond did not survive");
+
+    std::filesystem::remove_all(root);
+}
+
+void TestCommandLineParsing()
+{
+    using klvk::ParseDiagnosticCommandLine;
+    const auto parse = [](std::initializer_list<std::string_view> arguments)
+    {
+        const std::vector<std::string_view> storage(arguments);
+        return ParseDiagnosticCommandLine(storage);
+    };
+
+    const auto separated = parse({"--klvk-diagnostics", "a.json", "--klvk-record-input", "b.json"});
+    Ensure(separated.config_path == std::filesystem::path("a.json"), "separated config path was not parsed");
+    Ensure(separated.input_record_path == std::filesystem::path("b.json"), "separated record path was not parsed");
+
+    const auto joined = parse({"--klvk-record-input=b.json", "--klvk-diagnostics=a.json"});
+    Ensure(joined.config_path == std::filesystem::path("a.json"), "joined config path was not parsed");
+    Ensure(joined.input_record_path == std::filesystem::path("b.json"), "joined record path was not parsed");
+
+    // Recording without replaying is the ordinary case: an interactive session.
+    const auto record_only = parse({"--seed", "7", "--klvk-record-input", "b.json"});
+    Ensure(!record_only.config_path.has_value(), "a config path appeared without the option");
+    Ensure(record_only.input_record_path == std::filesystem::path("b.json"), "record path was not parsed alone");
+
+    const auto none = parse({"--seed", "7"});
+    Ensure(!none.config_path.has_value() && !none.input_record_path.has_value(), "application arguments were consumed");
+
+    // The presentation override lets one recording replay offscreen in CI and in
+    // a window while debugging, without editing the file.
+    const auto visible = parse({"--klvk-diagnostics", "a.json", "--klvk-presentation", "visible"});
+    Ensure(visible.presentation == klvk::DiagnosticPresentation::Visible, "presentation override was not parsed");
+    const auto offscreen = parse({"--klvk-presentation=offscreen"});
+    Ensure(offscreen.presentation == klvk::DiagnosticPresentation::Offscreen, "joined presentation was not parsed");
+    Ensure(!none.presentation.has_value(), "a presentation appeared without the option");
+    EnsureThrows([&] { (void)parse({"--klvk-presentation", "windowed"}); }, "an unknown presentation was accepted");
+    EnsureThrows(
+        [&] { (void)parse({"--klvk-presentation", "visible", "--klvk-presentation", "hidden"}); },
+        "a repeated presentation was accepted");
+
+    EnsureThrows([&] { (void)parse({"--klvk-unknown", "x"}); }, "an unknown klvk option was accepted");
+    EnsureThrows([&] { (void)parse({"--klvk-record-input"}); }, "a missing option value was accepted");
+    EnsureThrows([&] { (void)parse({"--klvk-record-input="}); }, "an empty option value was accepted");
+    EnsureThrows(
+        [&] { (void)parse({"--klvk-record-input", "a", "--klvk-record-input", "b"}); },
+        "a repeated option was accepted");
+}
+
 void Run()
 {
+    TestConfigSerializationRoundTrip();
+    TestCommandLineParsing();
+    TestExactNanosecondTimes();
     const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
     const std::filesystem::path root =
         std::filesystem::temp_directory_path() / ("klvk_diagnostic_config_test_" + std::to_string(nonce));
@@ -75,7 +275,7 @@ void Run()
     const klvk::DiagnosticRunConfig config = klvk::LoadDiagnosticRunConfig(valid_path);
     Ensure(config.presentation == klvk::DiagnosticPresentation::Hidden, "presentation was not parsed");
     Ensure(config.framebuffer_size == edt::Vec2<u32>{320, 240}, "framebuffer size was not parsed");
-    Ensure(config.clock.fixed_step_seconds.has_value(), "fixed clock was not parsed");
+    Ensure(config.clock.fixed_step_ns.has_value(), "fixed clock was not parsed");
     Ensure(config.input.size() == 6, "input events were not parsed");
     const auto& mouse_move = std::get<klvk::DiagnosticMouseMoveInput>(config.input[0].event);
     Ensure(mouse_move.position == edt::Vec2f{123.5f, 45.25f}, "mouse position was not parsed");
@@ -99,8 +299,8 @@ void Run()
         "key release was not parsed");
     Ensure(config.captures.size() == 3 && config.captures.front().frame == 2, "captures were not parsed");
     Ensure(!config.captures.front().include_ui, "include_ui was not parsed");
-    Ensure(config.captures[1].time_seconds == 0.25, "first time-point capture was not parsed");
-    Ensure(config.captures[2].time_seconds == 0.5, "second time-point capture was not parsed");
+    Ensure(config.captures[1].time_ns == 250'000'000, "first time-point capture was not parsed");
+    Ensure(config.captures[2].time_ns == 500'000'000, "second time-point capture was not parsed");
     Ensure(config.exit.after_last_capture, "exit condition was not parsed");
     Ensure(config.application.at("seed") == 7, "application configuration was not preserved");
 

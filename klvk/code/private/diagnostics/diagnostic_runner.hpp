@@ -34,8 +34,8 @@ public:
         Window& window);
     ~DiagnosticRunner();
 
-    void Advance(u64 frame, double time_seconds);
-    void AdvanceInput(u64 frame, double time_seconds);
+    void Advance(u64 frame, TimerDuration elapsed);
+    void AdvanceInput(u64 frame, TimerDuration elapsed);
     [[nodiscard]] bool NeedsReadback(bool include_ui) const noexcept;
 
     // The image must be in COLOR_ATTACHMENT_OPTIMAL. Returns true after recording
@@ -75,6 +75,7 @@ private:
     void ScheduleCapture(size_t capture_index, bool quit_after_last_capture);
     void ScheduleInput(const DiagnosticInputConfig& input);
     void ApplyInput(const DiagnosticInputEvent& input);
+    void ApplyModifier(Key key);
     void ScheduleQuit(const DiagnosticExitConfig& exit);
     void ProcessReadback(PendingCapture& capture);
 

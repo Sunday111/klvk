@@ -9,6 +9,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_runner.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_video_encoder.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_video_encoder.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/input_recorder.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/input_recorder.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/events/event_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/filesystem/filesystem.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/math/transform.cpp

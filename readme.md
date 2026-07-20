@@ -89,8 +89,17 @@ this entry point.
   window outside the desktop before hiding it because some Vulkan drivers otherwise report a fallback surface extent.
 - `framebuffer_size` is required when captures are present and is enforced exactly, including after an example changes
   its window size during initialization.
+- **Time is exact nanoseconds.** Every trigger is stored and compared as a `u64` nanosecond count, and under a fixed
+  clock logical time is the integer product `frame * step`, never an accumulated float. Any trigger may therefore be
+  written either as `time_seconds` (convenient when authoring by hand, rounded to nanoseconds once at parse time) or as
+  `time_ns` (exact). The clock step is likewise `clock.step_seconds` or `clock.step_ns`. The two spellings are mutually
+  exclusive on a single trigger and on the clock. Prefer `time_ns` wherever a run must reproduce another run exactly:
+  a value such as 1/60 s has no exact binary representation, so only the integer form round-trips unchanged. The video
+  stream timebase is built from `step_ns` directly, so the file's timebase matches the clock the frames were rendered on.
+  `Application::GetTimeSeconds()` and the other `float` accessors remain for application convenience and are lossy by
+  construction; they are not part of the diagnostic timing path.
 - `input` schedules mouse and keyboard events before the target frame's application tick. Each event contains exactly
-  one of one-based `frame` or non-negative `time_seconds`. Supported types are `mouse_move` with `position`,
+  one trigger: one-based `frame`, `time_seconds`, or `time_ns`. Supported types are `mouse_move` with `position`,
   `mouse_button` with `button` and `action`, `mouse_scroll` with `offset`, and `key` with `key` and `action`. Actions are
   `press` and `release`; mouse buttons are `left`, `right`, `middle`, `button4`, and `button5`. Mouse positions use
   logical window coordinates, matching native cursor events.
@@ -98,9 +107,9 @@ this entry point.
   navigation and editing keys (`page_up`, `page_down`, `home`, `end`, `insert`, `delete`, `backspace`, `enter`, `escape`,
   `space`, `tab`), punctuation names, keypad names prefixed with `keypad_`, and left/right modifiers such as
   `left_ctrl`, `right_shift`, `left_alt`, and `right_super`.
-- `captures` is an array, so a run may contain any number of frame and time points. Each entry contains exactly one of
-  one-based `frame` or non-negative `time_seconds`. A time capture occurs on the first rendered frame whose diagnostic
-  time reaches the requested point. `include_ui` defaults to `true`.
+- `captures` is an array, so a run may contain any number of frame and time points. Each entry contains exactly one
+  trigger: one-based `frame`, `time_seconds`, or `time_ns`. A time capture occurs on the first rendered frame whose
+  diagnostic time reaches the requested point. `include_ui` defaults to `true`.
 - Capture files are binary RGB PPM (`P6`). Relative paths are resolved against the executable directory, not the process
   working directory. Parent directories are created and completed files atomically replace older captures.
 - `video` records every rendered frame in an MP4 file. `encoding` is `av1` (the default), `h264`, or `mpeg4`.
@@ -117,9 +126,9 @@ this entry point.
   a bounded three-frame queue; rendering waits when that queue is full, and shutdown drains and joins the encoder.
   Informational FFmpeg and encoder output is enabled by default through spdlog's `ffmpeg` logger; set `log_ffmpeg` to
   `false` in the `video` object to silence it.
-- `exit` contains exactly one of `frame`, `time_seconds`, or `after_last_capture`. The last form waits for every requested
-  capture to be submitted; klvk waits for GPU completion and finishes writing capture and video files before `Run`
-  returns.
+- `exit` contains exactly one of `frame`, `time_seconds`, `time_ns`, or `after_last_capture`. The last form waits for
+  every requested capture to be submitted; klvk waits for GPU completion and finishes writing capture and video files
+  before `Run` returns.
 - Capture and exit points are one-shot `TimerManager` jobs. Their callbacks emit typed capture/application-quit events;
   an interactive run creates no diagnostic timers and does no trigger-list polling.
 - A fixed clock controls klvk and ImGui frame time, and diagnostic runs ignore persisted `imgui.ini` state. Applications
@@ -130,6 +139,53 @@ With yae, pass application arguments after `--`:
 ```sh
 yae run klvk_painter2d_example -- --klvk-diagnostics /tmp/painter-capture.json
 ```
+
+### Recording real input for replay
+
+`--klvk-record-input <file>` writes the session's real mouse and keyboard input as a diagnostic configuration, so an
+interaction that reproduces a bug can be replayed headlessly and as often as needed. It needs no `--klvk-diagnostics`:
+the ordinary case is recording a normal interactive run.
+
+```sh
+yae run klvk_falling_sand_example -- --klvk-record-input /tmp/session.json   # interact, then close the window
+yae run klvk_falling_sand_example -- --klvk-diagnostics /tmp/session.json    # replay it
+```
+
+The recorder listens to the same four window entry points the replay path writes to, so the two share one vocabulary by
+construction; `DiagnosticRunConfigToJson` is the parser's inverse and is round-tripped in the tests. The file it writes
+is complete and immediately replayable — `offscreen` presentation (no display server needed), the recorded
+`framebuffer_size`, a fixed clock, the input, and an `exit` at the last frame of the session. Add `captures` or a
+`video` block to it to get output from the replay.
+
+- Events are pinned to the **frame** they arrived on, not to a timestamp. A frame trigger reproduces the original
+  input-to-frame association whatever clock the replay runs at, whereas a wall-clock timestamp recorded at a variable
+  frame rate would land on a different frame under a fixed step.
+- Redundant cursor events are collapsed to at most one per frame, which is all a replay can apply — input is dispatched
+  once per frame — and keeps the file small.
+#### Replaying in a real window
+
+By default a recording replays `offscreen`, which needs no display server and suits CI. To watch it instead, override the
+presentation on the command line rather than editing the file, so one recording serves both purposes:
+
+```sh
+yae run klvk_falling_sand_example -- --klvk-diagnostics /tmp/session.json --klvk-presentation visible
+```
+
+- `--klvk-presentation <visible|hidden|offscreen>` overrides the configuration's own `presentation`. It requires
+  `--klvk-diagnostics`, since there is nothing to override without it.
+- A **visible** replay is paced to real time: a fixed clock otherwise means "render as fast as possible", which is right
+  for an offscreen run but makes a windowed one flash past unwatchably. Each frame is held until the wall clock reaches
+  `frame * step`, so the replay runs at the rate it was recorded at. Offscreen and hidden runs are unaffected and still
+  render flat out.
+- While a configuration carrying `input` is replayed, real mouse and keyboard events are **dropped** before they reach
+  the application — otherwise moving the cursor across the window would alter the run being reproduced. One limitation:
+  klvk installs ImGui's own GLFW callbacks, so ImGui-side state such as hover still observes the real cursor. Keep the
+  pointer off the window if the application's UI feeds back into what you are reproducing.
+
+- Replay reproduces **input**, not the whole world. A live session has a variable frame duration while the replay uses a
+  fixed step, so anything else that is non-deterministic — an unseeded RNG, a wall-clock read, thread scheduling — still
+  has to be pinned for the replayed run to diverge from the recorded one. Applications can seed themselves from the
+  `application` object, which is carried through the recording unchanged.
 
 For repeatable main-versus-branch rendering checks, see the
 [diagnostic smoke-test suite](diagnostics/smoke/readme.md).
