@@ -14,6 +14,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_window.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/input_mapping.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/input_mapping.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/os/os.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/rendering/curve_renderer_2d.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/rendering/instanced_sprite_renderer_2d.cpp
@@ -45,9 +47,11 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/event_listener_interface.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/event_listener_method.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/event_manager.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/keyboard_events.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/mouse_events.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/window_events.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/filesystem/filesystem.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/input.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/integral_aliases.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/macro/ensure_enum_size.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/math/rotator.hpp

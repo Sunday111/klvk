@@ -12,10 +12,12 @@
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/events/event_manager.hpp"
+#include "klvk/events/keyboard_events.hpp"
 #include "klvk/events/mouse_events.hpp"
 #include "klvk/events/window_events.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/window.hpp"
+#include "platform/input_mapping.hpp"
 
 namespace klvk
 {
@@ -49,7 +51,13 @@ struct Window::Impl
 
     static void MouseButtonCallback(GLFWwindow* glfw_window, int button, int action, int mods)
     {
-        CallWindowMethod<&Window::OnMouseButton>(glfw_window, button, action, mods);
+        (void)mods;
+        const std::optional<MouseButton> mapped = MouseButtonFromGlfw(button);
+        if (!mapped.has_value()) return;
+        CallWindowMethod<&Window::OnMouseButton>(
+            glfw_window,
+            *mapped,
+            action == GLFW_RELEASE ? InputAction::Release : InputAction::Press);
     }
 
     static void MouseScrollCallback(GLFWwindow* glfw_window, double x_offset, double y_offset)
@@ -58,6 +66,18 @@ struct Window::Impl
             glfw_window,
             static_cast<float>(x_offset),
             static_cast<float>(y_offset));
+    }
+
+    static void KeyCallback(GLFWwindow* glfw_window, int key, int scancode, int action, int mods)
+    {
+        (void)scancode;
+        (void)mods;
+        const std::optional<Key> mapped = KeyFromGlfw(key);
+        if (!mapped.has_value()) return;
+        CallWindowMethod<&Window::OnKey>(
+            glfw_window,
+            *mapped,
+            action == GLFW_RELEASE ? InputAction::Release : InputAction::Press);
     }
 
     GLFWwindow* window = nullptr;
@@ -160,7 +180,19 @@ void Window::SetTitle(const char* title)
 
 bool Window::IsKeyPressed(int key) const
 {
-    return impl_->window && glfwGetKey(impl_->window, key) == GLFW_PRESS;
+    const std::optional<Key> mapped = KeyFromGlfw(key);
+    return (mapped.has_value() && IsKeyPressed(*mapped)) ||
+           (impl_->window && glfwGetKey(impl_->window, key) == GLFW_PRESS);
+}
+
+bool Window::IsKeyPressed(Key key) const
+{
+    return keys_.test(static_cast<size_t>(key));
+}
+
+bool Window::IsMouseButtonPressed(MouseButton button) const
+{
+    return mouse_buttons_.test(static_cast<size_t>(button));
 }
 
 u32 Window::MakeWindowId()
@@ -190,6 +222,7 @@ void Window::Create()
     glfwSetCursorPosCallback(impl_->window, Impl::MouseCallback);
     glfwSetMouseButtonCallback(impl_->window, Impl::MouseButtonCallback);
     glfwSetScrollCallback(impl_->window, Impl::MouseScrollCallback);
+    glfwSetKeyCallback(impl_->window, Impl::KeyCallback);
 
     double cursor_x{};
     double cursor_y{};
@@ -222,28 +255,33 @@ void Window::OnMouseMove(Vec2f new_cursor)
     app_->GetEventManager().Emit(events::OnMouseMove{.previous = prev, .current = cursor_});
 }
 
-void Window::OnMouseButton(int button, int action, [[maybe_unused]] int mods)
+void Window::OnMouseButton(MouseButton button, InputAction action)
 {
-    switch (button)
+    mouse_buttons_.set(static_cast<size_t>(button), action == InputAction::Press);
+    app_->GetEventManager().Emit(events::OnMouseButton{.button = button, .action = action});
+
+    if (button != MouseButton::Right) return;
+    if (action == InputAction::Press)
     {
-    case GLFW_MOUSE_BUTTON_RIGHT:
-        if (action == GLFW_PRESS)
-        {
-            glfwSetInputMode(impl_->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-            input_mode_ = true;
-        }
-        else if (action == GLFW_RELEASE)
-        {
-            glfwSetInputMode(impl_->window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-            input_mode_ = false;
-        }
-        break;
+        if (impl_->window) glfwSetInputMode(impl_->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        input_mode_ = true;
+    }
+    else
+    {
+        if (impl_->window) glfwSetInputMode(impl_->window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        input_mode_ = false;
     }
 }
 
 void Window::OnMouseScroll(float dx, float dy)
 {
     app_->GetEventManager().Emit(events::OnMouseScroll{.value = {dx, dy}});
+}
+
+void Window::OnKey(Key key, InputAction action)
+{
+    keys_.set(static_cast<size_t>(key), action == InputAction::Press);
+    app_->GetEventManager().Emit(events::OnKey{.key = key, .action = action});
 }
 
 bool Window::IsFocused() const noexcept

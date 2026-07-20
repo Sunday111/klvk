@@ -484,7 +484,8 @@ void Application::RunImpl()
             *state_->diagnostic_config_,
             state_->executable_dir_,
             kFramesInFlight,
-            state_->event_manager_);
+            state_->event_manager_,
+            *state_->window_);
     }
     MainLoop();
 
@@ -693,6 +694,10 @@ void Application::PreTick()
     else
     {
         state_->glfw_.BeginImGuiFrame();
+    }
+    if (state_->diagnostic_runner_)
+    {
+        state_->diagnostic_runner_->AdvanceInput(state_->completed_frames_ + 1, state_->GetElapsedTimeSeconds());
     }
     if (const auto step = state_->GetFixedStep()) ImGui::GetIO().DeltaTime = static_cast<float>(*step);
     ImGui::NewFrame();

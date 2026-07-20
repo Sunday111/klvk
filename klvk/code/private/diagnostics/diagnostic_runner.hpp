@@ -15,6 +15,7 @@ namespace klvk
 {
 
 class DeviceContext;
+class Window;
 namespace events
 {
 class EventManager;
@@ -27,10 +28,12 @@ public:
         const DiagnosticRunConfig& config,
         const std::filesystem::path& executable_directory,
         size_t frames_in_flight,
-        events::EventManager& event_manager);
+        events::EventManager& event_manager,
+        Window& window);
     ~DiagnosticRunner();
 
     void Advance(u64 frame, double time_seconds);
+    void AdvanceInput(u64 frame, double time_seconds);
     [[nodiscard]] bool HasQueuedCaptures(bool include_ui) const noexcept;
 
     // The image must be in COLOR_ATTACHMENT_OPTIMAL. Returns true after recording
@@ -67,6 +70,8 @@ private:
 
     void OnCaptureDue(const events::DiagnosticCaptureDue& event);
     void ScheduleCapture(size_t capture_index, bool quit_after_last_capture);
+    void ScheduleInput(const DiagnosticInputConfig& input);
+    void ApplyInput(const DiagnosticInputEvent& input);
     void ScheduleQuit(const DiagnosticExitConfig& exit);
     static void WritePpm(PendingCapture& capture);
 
@@ -75,9 +80,13 @@ private:
     std::vector<size_t> queued_without_ui_;
     std::vector<size_t> queued_with_ui_;
     TimerManager timers_;
+    TimerManager input_timers_;
     events::EventManager& event_manager_;
+    Window& window_;
     std::unique_ptr<events::IEventListener> event_listener_;
     size_t triggered_capture_count_ = 0;
+    size_t input_count_ = 0;
+    size_t applied_input_count_ = 0;
 };
 
 }  // namespace klvk

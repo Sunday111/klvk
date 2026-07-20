@@ -1,10 +1,12 @@
 #pragma once
 
+#include <bitset>
 #include <memory>
 #include <optional>
 #include <vector>
 
 #include "EverydayTools/Math/Matrix.hpp"
+#include "klvk/input.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
@@ -15,6 +17,7 @@ using namespace edt::lazy_matrix_aliases;  // NOLINT
 
 class Application;
 class DeviceContext;
+class DiagnosticRunner;
 class GlfwState;
 
 class Window
@@ -48,10 +51,13 @@ public:
     void SetTitle(const char* title);
 
     [[nodiscard]] bool IsKeyPressed(int key) const;
+    [[nodiscard]] bool IsKeyPressed(Key key) const;
+    [[nodiscard]] bool IsMouseButtonPressed(MouseButton button) const;
 
 private:
     friend class Application;
     friend class DeviceContext;
+    friend class DiagnosticRunner;
     friend class GlfwState;
 
     enum class Backend : u8
@@ -69,8 +75,9 @@ private:
     void Destroy();
     void OnResize(int width, int height);
     void OnMouseMove(Vec2f new_cursor);
-    void OnMouseButton(int button, int action, [[maybe_unused]] int mods);
+    void OnMouseButton(MouseButton button, InputAction action);
     void OnMouseScroll([[maybe_unused]] float dx, float dy);
+    void OnKey(Key key, InputAction action);
 
     [[nodiscard]] void* GetPlatformHandle() const noexcept;
     [[nodiscard]] std::vector<const char*> GetRequiredVulkanInstanceExtensions() const;
@@ -84,6 +91,8 @@ private:
     u32 width_;
     u32 height_;
     std::optional<Vec2<u32>> fixed_framebuffer_size_;
+    std::bitset<static_cast<size_t>(Key::Count)> keys_;
+    std::bitset<static_cast<size_t>(MouseButton::Count)> mouse_buttons_;
     bool input_mode_ = false;
 };
 

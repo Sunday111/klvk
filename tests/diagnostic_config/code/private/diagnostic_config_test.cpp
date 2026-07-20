@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <variant>
 
 #include "klvk/diagnostics/diagnostic_run_config.hpp"
 #include "klvk/integral_aliases.hpp"
@@ -55,6 +56,14 @@ void Run()
             "presentation": "hidden",
             "framebuffer_size": [320, 240],
             "clock": {"mode": "fixed", "step_seconds": 0.0166666667},
+            "input": [
+                {"frame": 1, "type": "mouse_move", "position": [123.5, 45.25]},
+                {"frame": 2, "type": "mouse_button", "button": "left", "action": "press"},
+                {"frame": 3, "type": "mouse_button", "button": "button5", "action": "release"},
+                {"time_seconds": 0.25, "type": "mouse_scroll", "offset": [-1.5, 2]},
+                {"time_seconds": 0.5, "type": "key", "key": "left_ctrl", "action": "press"},
+                {"time_seconds": 0.5, "type": "key", "key": "w", "action": "release"}
+            ],
             "captures": [
                 {"frame": 2, "path": "captures/test.ppm", "include_ui": false},
                 {"time_seconds": 0.25, "path": "captures/at-time-1.ppm"},
@@ -67,6 +76,27 @@ void Run()
     Ensure(config.presentation == klvk::DiagnosticPresentation::Hidden, "presentation was not parsed");
     Ensure(config.framebuffer_size == edt::Vec2<u32>{320, 240}, "framebuffer size was not parsed");
     Ensure(config.clock.fixed_step_seconds.has_value(), "fixed clock was not parsed");
+    Ensure(config.input.size() == 6, "input events were not parsed");
+    const auto& mouse_move = std::get<klvk::DiagnosticMouseMoveInput>(config.input[0].event);
+    Ensure(mouse_move.position == edt::Vec2f{123.5f, 45.25f}, "mouse position was not parsed");
+    const auto& mouse_press = std::get<klvk::DiagnosticMouseButtonInput>(config.input[1].event);
+    Ensure(
+        mouse_press.button == klvk::MouseButton::Left && mouse_press.action == klvk::InputAction::Press,
+        "mouse button press was not parsed");
+    const auto& mouse_release = std::get<klvk::DiagnosticMouseButtonInput>(config.input[2].event);
+    Ensure(
+        mouse_release.button == klvk::MouseButton::Button5 && mouse_release.action == klvk::InputAction::Release,
+        "mouse button release was not parsed");
+    const auto& mouse_scroll = std::get<klvk::DiagnosticMouseScrollInput>(config.input[3].event);
+    Ensure(mouse_scroll.offset == edt::Vec2f{-1.5f, 2.f}, "mouse scroll was not parsed");
+    const auto& ctrl_press = std::get<klvk::DiagnosticKeyInput>(config.input[4].event);
+    Ensure(
+        ctrl_press.key == klvk::Key::LeftCtrl && ctrl_press.action == klvk::InputAction::Press,
+        "modifier key press was not parsed");
+    const auto& key_release = std::get<klvk::DiagnosticKeyInput>(config.input[5].event);
+    Ensure(
+        key_release.key == klvk::Key::W && key_release.action == klvk::InputAction::Release,
+        "key release was not parsed");
     Ensure(config.captures.size() == 3 && config.captures.front().frame == 2, "captures were not parsed");
     Ensure(!config.captures.front().include_ui, "include_ui was not parsed");
     Ensure(config.captures[1].time_seconds == 0.25, "first time-point capture was not parsed");
@@ -104,6 +134,18 @@ void Run()
         R"({"version":1,"clock":{"mode":"fixed","step_seconds":1e300},"exit":{"frame":1}})",
         R"({"version":1,"framebuffer_size":[2147483647,2147483647],"captures":[{"frame":1,"path":"a.ppm"}],"exit":{"after_last_capture":true}})",
         R"({"version":1,"framebuffer_size":[1,1],"captures":[{"frame":0,"path":"a.ppm"}],"exit":{"after_last_capture":true}})",
+        R"({"version":1,"input":{},"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"type":"key","key":"w","action":"press"}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"frame":1,"time_seconds":0,"type":"key","key":"w","action":"press"}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"frame":1,"type":"unknown"}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"frame":1,"type":"key","key":"unknown","action":"press"}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"frame":1,"type":"key","key":"w","action":"repeat"}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"frame":1,"type":"mouse_button","button":"button6","action":"press"}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"frame":1,"type":"mouse_move","position":[1]}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"frame":1,"type":"mouse_scroll","offset":[0,1e300]}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"frame":1,"type":"mouse_move","position":[1,2],"extra":true}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"frame":2,"type":"key","key":"w","action":"press"}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"time_seconds":0,"type":"key","key":"w","action":"press"}],"exit":{"frame":1}})",
         R"({"version":1,"exit":{}})"};
     for (size_t index = 0; index != invalid_documents.size(); ++index)
     {
