@@ -11,13 +11,14 @@
             "magic_enum",
             "unordered_dense",
             "nlohmann_json",
-            "glfw",
             "vulkan_headers",
             "volk",
             "vma",
             "imgui_vulkan"
         ],
-        "Private": []
+        "Private": [
+            "glfw"
+        ]
     },
     "ExtraCMakeFiles": [
         "shader_cache",

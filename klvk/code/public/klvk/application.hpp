@@ -86,7 +86,7 @@ public:
     [[nodiscard]] VkFormat GetDepthFormat() const;
 
     // Valid between PreTick and PostTick: the command buffer of the frame being recorded
-    // (inside an active dynamic rendering pass targeting the swapchain image)
+    // (inside an active dynamic rendering pass targeting the presentation image)
     // and the index of the frame-in-flight slot it belongs to.
     [[nodiscard]] VkCommandBuffer GetCurrentCommandBuffer() const;
     [[nodiscard]] size_t GetFrameInFlightIndex() const;

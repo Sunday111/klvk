@@ -1,11 +1,12 @@
 #pragma once
 
+#include <memory>
 #include <optional>
+#include <vector>
 
 #include "EverydayTools/Math/Matrix.hpp"
 #include "klvk/integral_aliases.hpp"
-
-struct GLFWwindow;
+#include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk
 {
@@ -13,6 +14,8 @@ namespace klvk
 using namespace edt::lazy_matrix_aliases;  // NOLINT
 
 class Application;
+class DeviceContext;
+class GlfwState;
 
 class Window
 {
@@ -33,8 +36,6 @@ public:
 
     // Size of the surface to render to, in pixels. Differs from GetSize on high-dpi displays.
     [[nodiscard]] Vec2<u32> GetFramebufferSize() const noexcept;
-
-    [[nodiscard]] GLFWwindow* GetGlfwWindow() const noexcept { return window_; }
     [[nodiscard]] float GetAspect() const noexcept
     {
         return static_cast<float>(GetWidth()) / static_cast<float>(GetHeight());
@@ -50,24 +51,19 @@ public:
 
 private:
     friend class Application;
+    friend class DeviceContext;
+    friend class GlfwState;
 
+    enum class Backend : u8
+    {
+        Glfw,
+        Offscreen,
+    };
+
+    Window(Application& app, u32 width, u32 height, Backend backend);
+    [[nodiscard]] static std::unique_ptr<Window> CreateOffscreen(Application& app, u32 width, u32 height);
     void SetFixedFramebufferSize(Vec2<u32> size);
     static u32 MakeWindowId();
-    static Window* GetWindow(GLFWwindow* glfw_window) noexcept;
-
-    template <auto method, typename... Args>
-    static void CallWndMethod(GLFWwindow* glfw_window, Args&&... args)
-    {
-        [[likely]] if (Window* window = GetWindow(glfw_window))
-        {
-            (window->*method)(std::forward<Args>(args)...);
-        }
-    }
-
-    static void FrameBufferSizeCallback(GLFWwindow* glfw_window, int width, int height);
-    static void MouseCallback(GLFWwindow* glfw_window, double x, double y);
-    static void MouseButtonCallback(GLFWwindow* glfw_window, int button, int action, int mods);
-    static void MouseScrollCallback(GLFWwindow* glfw_window, double x_offset, double y_offset);
 
     void Create();
     void Destroy();
@@ -76,9 +72,13 @@ private:
     void OnMouseButton(int button, int action, [[maybe_unused]] int mods);
     void OnMouseScroll([[maybe_unused]] float dx, float dy);
 
-private:
+    [[nodiscard]] void* GetPlatformHandle() const noexcept;
+    [[nodiscard]] std::vector<const char*> GetRequiredVulkanInstanceExtensions() const;
+    [[nodiscard]] VkSurfaceKHR CreateVulkanSurface(VkInstance instance) const;
+
+    struct Impl;
     Application* app_ = nullptr;
-    GLFWwindow* window_ = nullptr;
+    std::unique_ptr<Impl> impl_;
     Vec2f cursor_;
     u32 id_;
     u32 width_;

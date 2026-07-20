@@ -11,7 +11,9 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/filesystem/filesystem.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/math/transform.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/mesh/procedural_mesh_generator.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_window.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/os/os.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/rendering/curve_renderer_2d.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/rendering/instanced_sprite_renderer_2d.cpp
@@ -25,12 +27,12 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/device_context.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/gpu_buffer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/graphics_pipeline_builder.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/offscreen_render_target.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/swapchain.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/texture.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/vma_usage.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/vulkan_api.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/vulkan_common.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/window.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/application.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/camera/camera_2d.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/camera/camera_3d.hpp
@@ -80,6 +82,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/device_context.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/gpu_buffer.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/graphics_pipeline_builder.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/offscreen_render_target.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/render_target.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/swapchain.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/texture.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vk_object.hpp
@@ -97,11 +101,11 @@ target_link_libraries(klvk PUBLIC ass
                                   magic_enum
                                   unordered_dense
                                   nlohmann_json
-                                  glfw
                                   Vulkan-Headers
                                   volk
                                   VulkanMemoryAllocator
                                   imgui_vulkan)
+target_link_libraries(klvk PRIVATE glfw)
 target_include_directories(klvk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/code/public)
 target_include_directories(klvk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/code/private)
 include(${CMAKE_CURRENT_SOURCE_DIR}/shader_cache.cmake)

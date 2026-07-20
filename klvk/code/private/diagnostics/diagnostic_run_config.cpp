@@ -124,13 +124,12 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
         }
         else if (presentation == "offscreen")
         {
-            ErrorHandling::ThrowWithMessage(
-                "Diagnostic presentation 'offscreen' is not available yet; use 'hidden' for the first-stage backend");
+            result.presentation = DiagnosticPresentation::Offscreen;
         }
         else
         {
             ErrorHandling::ThrowWithMessage(
-                "Unknown diagnostic presentation '{}' (expected 'visible' or 'hidden')",
+                "Unknown diagnostic presentation '{}' (expected 'visible', 'hidden', or 'offscreen')",
                 presentation);
         }
     }
@@ -147,9 +146,12 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
         ErrorHandling::Ensure(
             width <= static_cast<u64>(std::numeric_limits<int>::max()) &&
                 height <= static_cast<u64>(std::numeric_limits<int>::max()),
-            "framebuffer_size dimensions exceed the GLFW integer size limit");
+            "framebuffer_size dimensions exceed the runtime integer size limit");
         result.framebuffer_size = edt::Vec2<u32>{static_cast<u32>(width), static_cast<u32>(height)};
     }
+    ErrorHandling::Ensure(
+        result.presentation != DiagnosticPresentation::Offscreen || result.framebuffer_size.has_value(),
+        "Offscreen diagnostic presentation requires an explicit framebuffer_size");
 
     if (root.contains("clock"))
     {

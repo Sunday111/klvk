@@ -4,6 +4,7 @@
 
 #include "EverydayTools/Math/Matrix.hpp"
 #include "klvk/integral_aliases.hpp"
+#include "klvk/vulkan/render_target.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
 VK_DEFINE_HANDLE(VmaAllocation)
@@ -13,7 +14,7 @@ namespace klvk
 
 class DeviceContext;
 
-class Swapchain
+class Swapchain final : public RenderTarget
 {
 public:
     static constexpr VkFormat kDepthFormat = VK_FORMAT_D32_SFLOAT;
@@ -21,18 +22,18 @@ public:
     Swapchain(DeviceContext& context, edt::Vec2<u32> framebuffer_size, VkImageUsageFlags additional_image_usage = 0);
     Swapchain(const Swapchain&) = delete;
     Swapchain(Swapchain&&) = delete;
-    ~Swapchain();
+    ~Swapchain() override;
 
     void Recreate(edt::Vec2<u32> framebuffer_size);
 
     [[nodiscard]] VkSwapchainKHR GetHandle() const noexcept { return swapchain_; }
-    [[nodiscard]] VkFormat GetFormat() const noexcept { return format_.format; }
-    [[nodiscard]] VkExtent2D GetExtent() const noexcept { return extent_; }
-    [[nodiscard]] size_t GetImageCount() const noexcept { return images_.size(); }
-    [[nodiscard]] VkImage GetImage(size_t index) const { return images_[index]; }
-    [[nodiscard]] VkImageView GetImageView(size_t index) const { return image_views_[index]; }
-    [[nodiscard]] VkImage GetDepthImage(size_t index) const { return depth_images_[index]; }
-    [[nodiscard]] VkImageView GetDepthImageView(size_t index) const { return depth_image_views_[index]; }
+    [[nodiscard]] VkFormat GetFormat() const noexcept override { return format_.format; }
+    [[nodiscard]] VkExtent2D GetExtent() const noexcept override { return extent_; }
+    [[nodiscard]] size_t GetImageCount() const noexcept override { return images_.size(); }
+    [[nodiscard]] VkImage GetImage(size_t index) const override { return images_[index]; }
+    [[nodiscard]] VkImageView GetImageView(size_t index) const override { return image_views_[index]; }
+    [[nodiscard]] VkImage GetDepthImage(size_t index) const override { return depth_images_[index]; }
+    [[nodiscard]] VkImageView GetDepthImageView(size_t index) const override { return depth_image_views_[index]; }
 
 private:
     void Create(edt::Vec2<u32> framebuffer_size, VkSwapchainKHR old_swapchain);

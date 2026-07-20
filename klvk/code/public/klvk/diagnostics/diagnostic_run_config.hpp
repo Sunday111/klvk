@@ -17,6 +17,7 @@ enum class DiagnosticPresentation : u8
 {
     Visible,
     Hidden,
+    Offscreen,
 };
 
 struct DiagnosticClockConfig

@@ -1,35 +1,30 @@
 #pragma once
 
-#include <GLFW/glfw3.h>
-
-#include <stdexcept>
+#include "EverydayTools/Math/Matrix.hpp"
 
 namespace klvk
 {
 
+class Window;
+
 class GlfwState
 {
 public:
-    ~GlfwState() { Uninitialize(); }
+    ~GlfwState();
 
-    void Initialize()
-    {
-        [[unlikely]] if (!glfwInit())
-        {
-            throw std::runtime_error("failed to initialize glfw");
-        }
+    void Initialize();
+    void Uninitialize();
+    [[nodiscard]] bool ConfigureForVulkan(bool hidden);
+    [[nodiscard]] bool IsVulkanSupported() const;
+    [[nodiscard]] edt::Vec2f GetPrimaryMonitorContentScale() const;
+    void ShowWindow(Window& window) const;
+    void HideWindow(Window& window) const;
+    void PollEvents() const;
+    void WaitEvents() const;
 
-        initialized_ = true;
-    }
-
-    void Uninitialize()
-    {
-        if (initialized_)
-        {
-            glfwTerminate();
-            initialized_ = false;
-        }
-    }
+    [[nodiscard]] bool InitializeImGui(Window& window) const;
+    void ShutdownImGui() const;
+    void BeginImGuiFrame() const;
 
 private:
     bool initialized_ = false;
