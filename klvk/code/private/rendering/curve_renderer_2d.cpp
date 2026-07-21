@@ -110,8 +110,8 @@ CurveRenderer2d::CurveRenderer2d(Application& app, VkFormat color_format) : app_
         device,
         GraphicsPipelineBuilder(app)
             .Layout(pipeline_layout_)
-            .VertexShaderFile(app.GetShaderDir() / "klvk" / "curve2d.vert")
-            .FragmentShaderFile(app.GetShaderDir() / "klvk" / "curve2d.frag")
+            .VertexShaderFile(app.GetShaderDir() / "klvk" / "curve2d.vert.slang")
+            .FragmentShaderFile(app.GetShaderDir() / "klvk" / "curve2d.frag.slang")
             .VertexBinding(0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX)
             .VertexAttribute(0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, position))
             .VertexAttribute(1, 0, VK_FORMAT_R8G8B8A8_UNORM, offsetof(Vertex, color))

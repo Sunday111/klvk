@@ -62,8 +62,8 @@ InstancedSpriteRenderer2d::InstancedSpriteRenderer2d(Application& app, const Tex
         device,
         GraphicsPipelineBuilder(app)
             .Layout(pipeline_layout_)
-            .VertexShaderFile(app.GetShaderDir() / "klvk/instanced_sprite.vert")
-            .FragmentShaderFile(app.GetShaderDir() / "klvk/instanced_sprite.frag")
+            .VertexShaderFile(app.GetShaderDir() / "klvk/instanced_sprite.vert.slang")
+            .FragmentShaderFile(app.GetShaderDir() / "klvk/instanced_sprite.frag.slang")
             .AlphaBlend()
             .Build()};
 }
