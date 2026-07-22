@@ -102,9 +102,9 @@ class GeometryShaderApp : public klvk::Application
                 device,
                 klvk::GraphicsPipelineBuilder(*this)
                     .Layout(pipeline_layout_)
-                    .VertexShaderFile(shader_dir / "points_to_quads_2d.vert")
-                    .GeometryShaderFile(shader_dir / "points_to_quads_2d.geom")
-                    .FragmentShaderFile(shader_dir / "points_to_quads_2d.frag")
+                    .VertexShaderFile(shader_dir / "points_to_quads_2d.vert.slang")
+                    .GeometryShaderFile(shader_dir / "points_to_quads_2d.geom.slang")
+                    .FragmentShaderFile(shader_dir / "points_to_quads_2d.frag.slang")
                     .Topology(VK_PRIMITIVE_TOPOLOGY_POINT_LIST)
                     .AlphaBlend()
                     .Build()};

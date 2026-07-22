@@ -145,8 +145,8 @@ class SimpleLitCubeApp : public klvk::Application
             device,
             klvk::GraphicsPipelineBuilder(*this)
                 .Layout(pipeline_layout_)
-                .VertexShaderFile(shader_dir / "basic_light_3d.vert")
-                .FragmentShaderFile(shader_dir / "basic_light_3d.frag")
+                .VertexShaderFile(shader_dir / "basic_light_3d.vert.slang")
+                .FragmentShaderFile(shader_dir / "basic_light_3d.frag.slang")
                 .Topology(topology)
                 .CullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE)
                 .VertexBinding(0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX)

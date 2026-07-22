@@ -90,13 +90,13 @@ class RenderToTextureApp : public klvk::Application
                 })};
         color_pipeline_ = klvk::VkObject<VkPipeline>{
             device,
-            CreatePipeline(context, "color.vert", "color.frag", color_pipeline_layout_, kOffscreenFormat)};
+            CreatePipeline(context, "color.vert.slang", "color.frag.slang", color_pipeline_layout_, kOffscreenFormat)};
         texture_pipeline_ = klvk::VkObject<VkPipeline>{
             device,
             CreatePipeline(
                 context,
-                "textured_quad.vert",
-                "textured_quad.frag",
+                "textured_quad.vert.slang",
+                "textured_quad.frag.slang",
                 texture_pipeline_layout_,
                 GetSwapchainFormat())};
     }
