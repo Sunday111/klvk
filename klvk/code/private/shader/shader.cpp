@@ -69,11 +69,20 @@ Shader::Shader(DeviceContext& context, std::string_view name) : context_(&contex
     {
         std::filesystem::path path = base;
         path += extension;
-        if (!std::filesystem::exists(path)) continue;
-
-        stages_.emplace_back(stage, context.CreateShaderModuleFromSource(path));
+        // Prefer a Slang stage (<name>.frag.slang) over the GLSL one, so an
+        // example can be migrated stage by stage; the cache routes by extension.
+        std::filesystem::path slang_path = path;
+        slang_path += ".slang";
+        if (std::filesystem::exists(slang_path))
+        {
+            stages_.emplace_back(stage, context.CreateShaderModuleFromSource(slang_path));
+        }
+        else if (std::filesystem::exists(path))
+        {
+            stages_.emplace_back(stage, context.CreateShaderModuleFromSource(path));
+        }
     }
-    ErrorHandling::Ensure(!stages_.empty(), "Shader '{}': no GLSL stages found at {}", name_, base.string());
+    ErrorHandling::Ensure(!stages_.empty(), "Shader '{}': no shader stages found at {}", name_, base.string());
 
     std::filesystem::path config_path = base;
     config_path += ".shader.json";
