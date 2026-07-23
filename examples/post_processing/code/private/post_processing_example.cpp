@@ -82,11 +82,12 @@ class PostProcessingApp : public klvk::Application
                  .pSetLayouts = &set_layout,
                  .pushConstantRangeCount = 1,
                  .pPushConstantRanges = &scene_range})};
-        scene_pipeline_ =
-            klvk::VkObject<VkPipeline>{device, CreatePipeline(context, "scene.frag", scene_layout_, kTargetFormat)};
+        scene_pipeline_ = klvk::VkObject<VkPipeline>{
+            device,
+            CreatePipeline(context, "scene.frag.slang", scene_layout_, kTargetFormat)};
         blur_pipeline_ = klvk::VkObject<VkPipeline>{
             device,
-            CreatePipeline(context, "blur.frag", blur_layout_, GetSwapchainFormat())};
+            CreatePipeline(context, "blur.frag.slang", blur_layout_, GetSwapchainFormat())};
     }
 
     VkPipeline
@@ -95,7 +96,7 @@ class PostProcessingApp : public klvk::Application
         const std::filesystem::path shader_dir = GetShaderDir() / "post_processing";
         return klvk::GraphicsPipelineBuilder(context)
             .Layout(layout)
-            .VertexShaderFile(shader_dir / "fullscreen.vert")
+            .VertexShaderFile(shader_dir / "fullscreen.vert.slang")
             .FragmentShaderFile(shader_dir / fragment_name)
             .ColorFormat(format)
             .Build();

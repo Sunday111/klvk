@@ -2,6 +2,11 @@
   "version": 1,
   "cases": [
     {
+      "name": "compute_shader",
+      "target": "klvk_compute_shader_example",
+      "config": "configs/rendering.json"
+    },
+    {
       "name": "curve",
       "target": "klvk_curve_example",
       "config": "configs/rendering.json"
@@ -27,6 +32,16 @@
       "config": "configs/rendering.json"
     },
     {
+      "name": "minimal_cube",
+      "target": "klvk_minimal_cube_example",
+      "config": "configs/rendering.json"
+    },
+    {
+      "name": "post_processing",
+      "target": "klvk_post_processing_example",
+      "config": "configs/rendering.json"
+    },
+    {
       "name": "render_to_texture",
       "target": "klvk_render_to_texture_example",
       "config": "configs/rendering.json"
@@ -34,6 +49,16 @@
     {
       "name": "simple_lit_cube",
       "target": "klvk_simple_lit_cube_example",
+      "config": "configs/rendering.json"
+    },
+    {
+      "name": "textured_quad",
+      "target": "klvk_textured_quad_example",
+      "config": "configs/rendering.json"
+    },
+    {
+      "name": "two_textures",
+      "target": "klvk_two_textures_example",
       "config": "configs/rendering.json"
     }
   ]

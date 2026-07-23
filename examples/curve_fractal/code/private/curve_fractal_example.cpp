@@ -311,8 +311,8 @@ class CurveFractalApp : public klvk::Application
         const std::filesystem::path shader_dir = GetShaderDir() / "curve_fractal";
         return klvk::GraphicsPipelineBuilder(*this)
             .Layout(pipeline_layout_)
-            .VertexShaderFile(shader_dir / "textured_quad.vert")
-            .FragmentShaderFile(shader_dir / "textured_quad.frag")
+            .VertexShaderFile(shader_dir / "textured_quad.vert.slang")
+            .FragmentShaderFile(shader_dir / "textured_quad.frag.slang")
             .Build();
     }
 

@@ -104,8 +104,8 @@ class TwoTexturesApp : public klvk::Application
             device,
             klvk::GraphicsPipelineBuilder(*this)
                 .Layout(pipeline_layout_)
-                .VertexShaderFile(shader_dir / "two_textures_2d.vert")
-                .FragmentShaderFile(shader_dir / "two_textures_2d.frag")
+                .VertexShaderFile(shader_dir / "two_textures_2d.vert.slang")
+                .FragmentShaderFile(shader_dir / "two_textures_2d.frag.slang")
                 .AlphaBlend()
                 .Build()};
     }

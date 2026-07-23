@@ -189,10 +189,10 @@ class ComputeShaderApp : public klvk::Application
     void CreatePipelines(klvk::DeviceContext& context)
     {
         const VkDevice device = context.GetDevice();
-        const VkShaderModule compute = Load(context, "particles.comp");
-        const VkShaderModule particles_vertex = Load(context, "particles.vert");
-        const VkShaderModule bodies_vertex = Load(context, "bodies.vert");
-        const VkShaderModule fragment = Load(context, "particles.frag");
+        const VkShaderModule compute = Load(context, "particles.comp.slang");
+        const VkShaderModule particles_vertex = Load(context, "particles.vert.slang");
+        const VkShaderModule bodies_vertex = Load(context, "bodies.vert.slang");
+        const VkShaderModule fragment = Load(context, "particles.frag.slang");
         auto cleanup = klvk::OnScopeLeave(
             [&]
             {

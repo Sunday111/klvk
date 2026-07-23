@@ -81,8 +81,8 @@ class CubeApp : public klvk::Application
             device,
             klvk::GraphicsPipelineBuilder(*this)
                 .Layout(pipeline_layout_)
-                .VertexShaderFile(shader_dir / "just_color_3d.vert")
-                .FragmentShaderFile(shader_dir / "just_color_3d.frag")
+                .VertexShaderFile(shader_dir / "just_color_3d.vert.slang")
+                .FragmentShaderFile(shader_dir / "just_color_3d.frag.slang")
                 .Topology(mesh.topology)
                 .CullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE)
                 .VertexBinding(0, sizeof(edt::Vec3f), VK_VERTEX_INPUT_RATE_VERTEX)
