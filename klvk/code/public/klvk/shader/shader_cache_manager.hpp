@@ -17,7 +17,7 @@
 namespace klvk
 {
 
-// Compiles GLSL on one background thread and owns the process-local SPIR-V cache.
+// Compiles GLSL or Slang on one background thread and owns the process-local SPIR-V cache.
 // Concurrent requests for the same source are coalesced. Callers block only when
 // their requested shader is neither in memory nor in the persistent cache.
 class ShaderCacheManager
@@ -34,8 +34,10 @@ public:
     ShaderCacheManager(ShaderCacheManager&&) = delete;
     ~ShaderCacheManager();
 
-    // source_path must name a GLSL stage below source_root. The returned data is
-    // immutable and remains alive as long as either the caller or manager holds it.
+    // source_path must name a GLSL or Slang stage below source_root. Slang stages must be
+    // self-contained: imports and includes are rejected until persistent cache entries track
+    // transitive dependency contents. The returned data is immutable and remains alive as long
+    // as either the caller or manager holds it.
     [[nodiscard]] std::shared_ptr<const std::vector<u32>> GetOrCompile(const std::filesystem::path& source_path);
 
     [[nodiscard]] const std::filesystem::path& GetSourceRoot() const noexcept { return source_root_; }

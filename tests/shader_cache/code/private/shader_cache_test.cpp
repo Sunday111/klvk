@@ -42,6 +42,8 @@ void Run()
     const std::filesystem::path cache = root / "cache";
     std::filesystem::create_directories(sources);
     const std::filesystem::path shader = sources / "test.comp";
+    const std::filesystem::path slang_shader = sources / "test.comp.slang";
+    const std::filesystem::path slang_dependency = sources / "dependency.slang";
     Write(shader, "#version 450\nlayout(local_size_x=1) in; void main() {}\n");
 
     std::shared_ptr<const std::vector<u32>> expected;
@@ -83,10 +85,30 @@ void Run()
 
         Write(shader, "#version 450\nlayout(local_size_x=2) in; void main() {}\n");
         Ensure(manager.GetOrCompile(shader) != nullptr, "cache did not recover after source correction");
+
+        Write(slang_shader, "[shader(\"compute\")] [numthreads(1, 1, 1)] void main() {}\n");
+        Ensure(manager.GetOrCompile(slang_shader) != nullptr, "self-contained Slang shader did not compile");
+
+        Write(slang_dependency, "static const uint dependency_value = 1;\n");
+        Write(
+            slang_shader,
+            "#include \"dependency.slang\"\n"
+            "[shader(\"compute\")] [numthreads(1, 1, 1)] void main() { uint value = dependency_value; }\n");
+        try
+        {
+            (void)manager.GetOrCompile(slang_shader);
+            throw std::runtime_error("dependency-bearing Slang shader was accepted by the persistent cache");
+        }
+        catch (const std::exception& error)
+        {
+            Ensure(
+                std::string_view(error.what()).find("imports and includes are unsupported") != std::string_view::npos,
+                "dependency-bearing Slang shader did not report the cache restriction");
+        }
     }
 
     const auto files = CacheFiles(cache);
-    Ensure(files.size() == 2, "successful cache entries were not flushed at shutdown");
+    Ensure(files.size() == 3, "successful cache entries were not flushed at shutdown");
     {
         klvk::ShaderCacheManager manager(sources, cache);
         Ensure(manager.GetOrCompile(shader) != nullptr, "persistent entry could not be loaded");

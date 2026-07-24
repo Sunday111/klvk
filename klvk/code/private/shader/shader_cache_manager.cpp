@@ -91,6 +91,17 @@ shaderc_shader_kind ShaderKind(const std::filesystem::path& path)
 // Distinguishes a Slang cache entry from a GLSL one so identical bytes under the
 // two languages never collide.
 constexpr u32 kSlangLanguageTag = 0x5'1A;
+constexpr std::string_view kSlangTargetProfile = "spirv_1_6";
+constexpr SlangCompileTarget kSlangTargetFormat = SLANG_SPIRV;
+constexpr SlangTargetFlags kSlangTargetFlags = kDefaultTargetFlags;
+constexpr SlangFloatingPointMode kSlangFloatingPointMode = SLANG_FLOATING_POINT_MODE_DEFAULT;
+constexpr SlangLineDirectiveMode kSlangLineDirectiveMode = SLANG_LINE_DIRECTIVE_MODE_DEFAULT;
+constexpr bool kSlangForceScalarBufferLayout = false;
+constexpr slang::SessionFlags kSlangSessionFlags = slang::kSessionFlags_None;
+constexpr SlangMatrixLayoutMode kSlangMatrixLayout = SLANG_MATRIX_LAYOUT_COLUMN_MAJOR;
+constexpr bool kSlangEnableEffectAnnotations = false;
+constexpr bool kSlangAllowGlslSyntax = false;
+constexpr bool kSlangSkipSpirvValidation = false;
 
 u64 MakeKey(std::string_view source, shaderc_shader_kind kind, u32 spirv_version, u32 spirv_revision)
 {
@@ -107,16 +118,27 @@ u64 MakeKey(std::string_view source, shaderc_shader_kind kind, u32 spirv_version
     return HashValue(hash, optimize);
 }
 
-// A Slang source fully determines its output - the stage lives in a [shader(...)]
-// attribute, not a caller-supplied kind - so the source bytes and the toolchain
-// version are the whole key. SLANG_TAG_VERSION is compile-time, so bumping the
-// Slang SDK invalidates every cached entry automatically.
+// Slang cache entries are currently restricted to self-contained source files.
+// Hash every output-affecting target/session option used below as well as the
+// compiler version. Dependency-bearing modules are rejected at the compiler
+// boundary until their transitive contents can participate in this key.
 u64 MakeSlangKey(std::string_view source)
 {
     u64 hash = HashBytes(kFnvOffset, source.data(), source.size());
     hash = HashValue(hash, kSlangLanguageTag);
     constexpr std::string_view toolchain = SLANG_TAG_VERSION;
     hash = HashBytes(hash, toolchain.data(), toolchain.size());
+    hash = HashValue(hash, kSlangTargetFormat);
+    hash = HashBytes(hash, kSlangTargetProfile.data(), kSlangTargetProfile.size());
+    hash = HashValue(hash, kSlangTargetFlags);
+    hash = HashValue(hash, kSlangFloatingPointMode);
+    hash = HashValue(hash, kSlangLineDirectiveMode);
+    hash = HashValue(hash, kSlangForceScalarBufferLayout);
+    hash = HashValue(hash, kSlangSessionFlags);
+    hash = HashValue(hash, kSlangMatrixLayout);
+    hash = HashValue(hash, kSlangEnableEffectAnnotations);
+    hash = HashValue(hash, kSlangAllowGlslSyntax);
+    hash = HashValue(hash, kSlangSkipSpirvValidation);
     hash = HashValue(hash, kCacheFormatVersion);
     return hash;
 }
@@ -148,15 +170,21 @@ std::vector<u32> CompileSlangToSpirv(const std::string& source, const std::files
     slang::IGlobalSession& global = SlangGlobalSession();
 
     slang::TargetDesc target{};
-    target.format = SLANG_SPIRV;
-    target.profile = global.findProfile("spirv_1_6");
+    target.format = kSlangTargetFormat;
+    target.profile = global.findProfile(kSlangTargetProfile.data());
+    target.flags = kSlangTargetFlags;
+    target.floatingPointMode = kSlangFloatingPointMode;
+    target.lineDirectiveMode = kSlangLineDirectiveMode;
+    target.forceGLSLScalarBufferLayout = kSlangForceScalarBufferLayout;
 
     slang::SessionDesc session_desc{};
     session_desc.targets = &target;
     session_desc.targetCount = 1;
-    // These shaders were authored for GLSL's column-major matrices; matching it
-    // lets ports keep their matrix math unchanged.
-    session_desc.defaultMatrixLayoutMode = SLANG_MATRIX_LAYOUT_COLUMN_MAJOR;
+    session_desc.flags = kSlangSessionFlags;
+    session_desc.defaultMatrixLayoutMode = kSlangMatrixLayout;
+    session_desc.enableEffectAnnotations = kSlangEnableEffectAnnotations;
+    session_desc.allowGLSLSyntax = kSlangAllowGlslSyntax;
+    session_desc.skipSPIRVValidation = kSlangSkipSpirvValidation;
 
     Slang::ComPtr<slang::ISession> session;
     ErrorHandling::Ensure(
@@ -176,6 +204,27 @@ std::vector<u32> CompileSlangToSpirv(const std::string& source, const std::files
         "Failed to compile Slang shader '{}':\n{}",
         source_path.string(),
         BlobText(diagnostics));
+    const SlangInt32 dependency_count = module->getDependencyFileCount();
+    bool has_external_dependency = false;
+    std::string external_dependencies;
+    for (SlangInt32 index = 0; index != dependency_count; ++index)
+    {
+        const char* dependency_path = module->getDependencyFilePath(index);
+        if (dependency_path == nullptr ||
+            std::filesystem::weakly_canonical(dependency_path) != std::filesystem::weakly_canonical(source_path))
+        {
+            has_external_dependency = true;
+            if (!external_dependencies.empty()) external_dependencies += ", ";
+            external_dependencies += dependency_path == nullptr ? "<unknown>" : dependency_path;
+        }
+    }
+    ErrorHandling::Ensure(
+        !has_external_dependency,
+        "Slang shader '{}' references external dependency files ({}); imports and includes are unsupported until "
+        "shader "
+        "cache keys track transitive dependency contents",
+        source_path.string(),
+        external_dependencies);
 
     // One stage per file, entry point named main so the pipeline's hardcoded
     // "main" entry name resolves in the emitted SPIR-V.

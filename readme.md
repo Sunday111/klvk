@@ -5,13 +5,18 @@ API (`Application`, `Window`, events, camera) built on Vulkan 1.3 with dynamic r
 
 - Function loading via [volk](https://github.com/zeux/volk).
 - Memory management via [VulkanMemoryAllocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator).
-- GLSL is staged at build time and compiled to SPIR-V on demand with `shaderc`.
+- GLSL and Slang are staged at build time and compiled to SPIR-V on demand with `shaderc` and Slang, respectively.
+- Slang shader files must currently be self-contained. Imports and includes fail explicitly until persistent shader
+  cache entries track and validate transitive source dependencies.
 - `ShaderCacheManager` coalesces concurrent requests, retains SPIR-V in memory, and periodically persists validated,
   content-addressed entries from its worker thread. By default the persistent `shader_cache` directory is created next
   to the executable's `content` directory; embedders may provide an explicit path.
 - ImGui with the GLFW + Vulkan backends.
 
 This is a [yae](https://github.com/Sunday111/yae) package: add it as a package dependency and link the `klvk` module.
+The current `yae-slang` package provides a verified binary artifact only for Linux x86-64, so Slang-enabled klvk builds
+through yae are currently limited to that host. Supporting another host requires adding its official artifact URL and
+checksum to `yae-slang`; platform selection remains generic yae functionality.
 
 ## Integral aliases
 
