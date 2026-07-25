@@ -33,8 +33,58 @@ std::vector<std::filesystem::path> CacheFiles(const std::filesystem::path& direc
     return result;
 }
 
+void TestPureValidation()
+{
+    klvk::ShaderValueType double_vector{};
+    double_vector.scalar = klvk::ShaderScalarType::Float64;
+    double_vector.rows = 3;
+    Ensure(klvk::ShaderValueLocationCount(double_vector) == 2, "64-bit interface location accounting is incorrect");
+
+    auto vertex = std::make_shared<klvk::ShaderInterface>();
+    vertex->stage = VK_SHADER_STAGE_VERTEX_BIT;
+    klvk::ShaderDescriptorBinding vertex_descriptor{};
+    vertex_descriptor.name = "scene";
+    vertex_descriptor.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    vertex_descriptor.stages = vertex->stage;
+    vertex->descriptors.push_back(vertex_descriptor);
+    klvk::ShaderInterfaceVariable output{};
+    output.name = "color";
+    output.location = 0;
+    output.type.scalar = klvk::ShaderScalarType::Float32;
+    output.type.rows = 4;
+    vertex->outputs.push_back(output);
+
+    auto fragment = std::make_shared<klvk::ShaderInterface>();
+    fragment->stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    klvk::ShaderDescriptorBinding fragment_descriptor = vertex_descriptor;
+    fragment_descriptor.stages = fragment->stage;
+    fragment->descriptors.push_back(fragment_descriptor);
+    klvk::ShaderInterfaceVariable input = output;
+    fragment->inputs.push_back(input);
+
+    const auto program = klvk::MergeShaderInterfaces({vertex, fragment});
+    Ensure(program.descriptors.size() == 1, "matching descriptors were not merged");
+    Ensure(
+        program.descriptors.front().stages == (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+        "descriptor stage masks were not merged");
+
+    fragment->descriptors.front().type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    try
+    {
+        (void)klvk::MergeShaderInterfaces({vertex, fragment});
+        throw std::runtime_error("descriptor conflict was accepted");
+    }
+    catch (const std::exception& error)
+    {
+        Ensure(
+            std::string_view(error.what()).find("descriptor conflict") != std::string_view::npos,
+            "descriptor conflict produced an unclear error");
+    }
+}
+
 void Run()
 {
+    TestPureValidation();
     const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
     const std::filesystem::path root =
         std::filesystem::temp_directory_path() / ("klvk_shader_cache_test_" + std::to_string(nonce));
@@ -43,13 +93,18 @@ void Run()
     std::filesystem::create_directories(sources);
     const std::filesystem::path shader = sources / "test.comp";
     const std::filesystem::path slang_shader = sources / "test.comp.slang";
+    const std::filesystem::path reflection_shader = sources / "reflection.comp.slang";
+    const std::filesystem::path vertex_shader = sources / "varying.vert.slang";
+    const std::filesystem::path geometry_shader = sources / "varying.geom.slang";
+    const std::filesystem::path fragment_shader = sources / "varying.frag.slang";
     const std::filesystem::path slang_dependency = sources / "dependency.slang";
     Write(shader, "#version 450\nlayout(local_size_x=1) in; void main() {}\n");
 
-    std::shared_ptr<const std::vector<u32>> expected;
+    std::shared_ptr<const klvk::CompiledShader> expected;
+    std::shared_ptr<const klvk::ShaderInterface> expected_interface;
     {
         klvk::ShaderCacheManager manager(sources, cache, {.flush_interval = std::chrono::milliseconds(20)});
-        std::vector<std::future<std::shared_ptr<const std::vector<u32>>>> futures;
+        std::vector<std::future<std::shared_ptr<const klvk::CompiledShader>>> futures;
         for (size_t i = 0; i != 16; ++i)
         {
             futures.push_back(std::async(std::launch::async, [&] { return manager.GetOrCompile(shader); }));
@@ -89,6 +144,69 @@ void Run()
         Write(slang_shader, "[shader(\"compute\")] [numthreads(1, 1, 1)] void main() {}\n");
         Ensure(manager.GetOrCompile(slang_shader) != nullptr, "self-contained Slang shader did not compile");
 
+        Write(
+            reflection_shader,
+            "struct Item { float4 position; uint id; };\n"
+            "[[vk::binding(2, 1)]] RWStructuredBuffer<Item> items;\n"
+            "struct PushConstants { float2 offset; uint count; };\n"
+            "[[vk::push_constant]] PushConstants pc;\n"
+            "[[vk::constant_id(7)]] const uint MODE = 3;\n"
+            "[shader(\"compute\")] [numthreads(8, 4, 2)]\n"
+            "void main(uint3 id: SV_DispatchThreadID) {\n"
+            "  if (id.x < pc.count) items[id.x].position.xy += pc.offset * MODE;\n"
+            "}\n");
+        const auto reflected = manager.GetOrCompile(reflection_shader);
+        Ensure(reflected->interface != nullptr, "Slang reflection was not retained");
+        Ensure(reflected->interface->stage == VK_SHADER_STAGE_COMPUTE_BIT, "compute stage was not reflected");
+        Ensure(reflected->interface->workgroup_size == std::array<u32, 3>{8, 4, 2}, "workgroup size mismatch");
+        Ensure(reflected->interface->descriptors.size() == 1, "descriptor binding was not reflected");
+        Ensure(reflected->interface->descriptors.front().set == 1, "descriptor set was not reflected");
+        Ensure(reflected->interface->descriptors.front().binding == 2, "descriptor binding index mismatch");
+        Ensure(reflected->interface->push_constants.size() == 1, "push constants were not reflected");
+        Ensure(reflected->interface->specialization_constants.size() == 1, "specialization constant was not reflected");
+        Ensure(reflected->interface->specialization_constants.front().id == 7, "specialization constant id mismatch");
+        expected_interface = reflected->interface;
+
+        Write(
+            vertex_shader,
+            "struct Varying {\n"
+            "  float4 position : SV_Position;\n"
+            "  [[vk::location(0)]] float4 color : COLOR;\n"
+            "};\n"
+            "[shader(\"vertex\")] Varying main(uint id : SV_VertexID) {\n"
+            "  Varying result;\n"
+            "  result.position = float4(float(id), 0, 0, 1);\n"
+            "  result.color = float4(1, 0, 0, 1);\n"
+            "  return result;\n"
+            "}\n");
+        Write(
+            geometry_shader,
+            "struct Varying {\n"
+            "  float4 position : SV_Position;\n"
+            "  [[vk::location(0)]] float4 color : COLOR;\n"
+            "};\n"
+            "[shader(\"geometry\")] [maxvertexcount(1)]\n"
+            "void main(point Varying input[1], inout PointStream<Varying> output) {\n"
+            "  output.Append(input[0]);\n"
+            "}\n");
+        Write(
+            fragment_shader,
+            "struct Input { [[vk::location(0)]] float4 color : COLOR; };\n"
+            "[shader(\"fragment\")] float4 main(Input input) : SV_Target {\n"
+            "  return input.color;\n"
+            "}\n");
+        const auto vertex_reflected = manager.GetOrCompile(vertex_shader);
+        const auto geometry_reflected = manager.GetOrCompile(geometry_shader);
+        const auto fragment_reflected = manager.GetOrCompile(fragment_shader);
+        Ensure(geometry_reflected->interface->inputs.size() == 2, "geometry primitive-array input was not flattened");
+        Ensure(geometry_reflected->interface->outputs.size() == 2, "geometry output stream was not flattened");
+        const auto varying_program = klvk::MergeShaderInterfaces(
+            {vertex_reflected->interface, geometry_reflected->interface, fragment_reflected->interface});
+        Ensure(
+            varying_program.stages ==
+                (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+            "vertex-geometry-fragment interface merge failed");
+
         Write(slang_dependency, "static const uint dependency_value = 1;\n");
         Write(
             slang_shader,
@@ -108,10 +226,14 @@ void Run()
     }
 
     const auto files = CacheFiles(cache);
-    Ensure(files.size() == 3, "successful cache entries were not flushed at shutdown");
+    Ensure(files.size() == 7, "successful cache entries were not flushed at shutdown");
     {
         klvk::ShaderCacheManager manager(sources, cache);
         Ensure(manager.GetOrCompile(shader) != nullptr, "persistent entry could not be loaded");
+        const auto reflected = manager.GetOrCompile(reflection_shader);
+        Ensure(
+            reflected->interface != nullptr && *reflected->interface == *expected_interface,
+            "warm-cache reflection differs from cold compilation");
     }
 
     // Every corrupt persistent record must be treated as a miss, never passed

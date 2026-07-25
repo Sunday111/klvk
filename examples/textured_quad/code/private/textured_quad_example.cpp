@@ -60,18 +60,9 @@ class TexturedQuadApp : public klvk::Application
                 .offset = 0,
                 .size = sizeof(PushConstants),
             };
-            const VkDescriptorSetLayout set_layout = descriptor_sets_.GetLayout();
-            pipeline_layout_ = klvk::VkObject<VkPipelineLayout>{
-                device,
-                klvk::Vulkan::CreatePipelineLayout(
-                    device,
-                    {
-                        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                        .setLayoutCount = 1,
-                        .pSetLayouts = &set_layout,
-                        .pushConstantRangeCount = 1,
-                        .pPushConstantRanges = &push_constant_range,
-                    })};
+            const auto set_layout = descriptor_sets_.GetLayoutView();
+            pipeline_layout_ =
+                klvk::PipelineLayout{context, std::span{&set_layout, 1}, std::span{&push_constant_range, 1}};
 
             const std::filesystem::path shader_dir = GetShaderDir() / "textured_quad_2d";
             pipeline_ = klvk::VkObject<VkPipeline>{
@@ -95,14 +86,19 @@ class TexturedQuadApp : public klvk::Application
         klvk::Vulkan::CmdBindDescriptorSets(
             command_buffer,
             VK_PIPELINE_BIND_POINT_GRAPHICS,
-            pipeline_layout_,
+            pipeline_layout_.GetHandle(),
             0,
             std::span{&descriptor_set, 1});
 
         const PushConstants push_constants{
             .color = edt::Math::GetRainbowColorsA(GetTimeSeconds()).Cast<float>() / 255.f,
         };
-        klvk::Vulkan::CmdPushConstants(command_buffer, pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, push_constants);
+        klvk::Vulkan::CmdPushConstants(
+            command_buffer,
+            pipeline_layout_.GetHandle(),
+            VK_SHADER_STAGE_VERTEX_BIT,
+            0,
+            push_constants);
 
         klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
     }
@@ -110,7 +106,7 @@ class TexturedQuadApp : public klvk::Application
 private:
     std::unique_ptr<klvk::Texture> texture_;
     klvk::DescriptorSets descriptor_sets_;
-    klvk::VkObject<VkPipelineLayout> pipeline_layout_;
+    klvk::PipelineLayout pipeline_layout_;
     klvk::VkObject<VkPipeline> pipeline_;
 };
 

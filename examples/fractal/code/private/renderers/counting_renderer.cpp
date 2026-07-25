@@ -103,37 +103,51 @@ CountingRenderer::CountingRenderer(klvk::Application& app, size_t max_iterations
     draw_set_ = sets[1];
 
     {
+        const klvk::DescriptorSetLayoutDescription set_description{
+            .bindings = {{
+                .binding = 0,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount = 1,
+                .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+            }}};
+        const std::array set_layouts{klvk::DescriptorSetLayoutView{
+            .handle = compute_set_layout_,
+            .description = &set_description,
+        }};
         const VkPushConstantRange push_constant_range{
             .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
             .offset = 0,
             .size = sizeof(FractalPushConstants),
         };
-        compute_pipeline_layout_ = klvk::Vulkan::CreatePipelineLayout(
-            device,
-            {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                .setLayoutCount = 1,
-                .pSetLayouts = &compute_set_layout_,
-                .pushConstantRangeCount = 1,
-                .pPushConstantRanges = &push_constant_range,
-            });
+        compute_pipeline_layout_ = klvk::PipelineLayout(context, set_layouts, std::span{&push_constant_range, 1});
     }
 
     {
+        const klvk::DescriptorSetLayoutDescription set_description{
+            .bindings = {
+                {
+                    .binding = 0,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                    .descriptorCount = 1,
+                    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                },
+                {
+                    .binding = 1,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                    .descriptorCount = 1,
+                    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                },
+            }};
+        const std::array set_layouts{klvk::DescriptorSetLayoutView{
+            .handle = draw_set_layout_,
+            .description = &set_description,
+        }};
         const VkPushConstantRange push_constant_range{
             .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
             .offset = 0,
             .size = sizeof(DrawPushConstants),
         };
-        draw_pipeline_layout_ = klvk::Vulkan::CreatePipelineLayout(
-            device,
-            {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                .setLayoutCount = 1,
-                .pSetLayouts = &draw_set_layout_,
-                .pushConstantRangeCount = 1,
-                .pPushConstantRanges = &push_constant_range,
-            });
+        draw_pipeline_layout_ = klvk::PipelineLayout(context, set_layouts, std::span{&push_constant_range, 1});
     }
 }
 
@@ -144,8 +158,6 @@ CountingRenderer::~CountingRenderer() noexcept
     VkDevice device = context.GetDevice();
     klvk::Vulkan::DestroyPipelineNE(device, draw_pipeline_);
     klvk::Vulkan::DestroyPipelineNE(device, compute_pipeline_);
-    klvk::Vulkan::DestroyPipelineLayoutNE(device, draw_pipeline_layout_);
-    klvk::Vulkan::DestroyPipelineLayoutNE(device, compute_pipeline_layout_);
     klvk::Vulkan::DestroyDescriptorPoolNE(device, descriptor_pool_);
     klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, draw_set_layout_);
     klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, compute_set_layout_);
@@ -166,17 +178,18 @@ void CountingRenderer::ApplySettings(const FractalSettings& settings)
         klvk::Vulkan::DestroyPipelineNE(device, compute_pipeline_);
         klvk::Vulkan::DestroyPipelineNE(device, draw_pipeline_);
 
+        const klvk::ShaderStages compute_stages = compute_shader_.MakeStages();
+        (void)compute_pipeline_layout_.Validate(compute_stages);
         const VkComputePipelineCreateInfo compute_info{
             .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-            .stage = compute_shader_.MakeShaderStages().front(),
-            .layout = compute_pipeline_layout_,
+            .stage = compute_stages.GetCreateInfos().front(),
+            .layout = compute_pipeline_layout_.GetHandle(),
         };
         compute_pipeline_ =
             klvk::Vulkan::CreateComputePipelines(device, VK_NULL_HANDLE, std::span{&compute_info, 1}).front();
 
-        auto stages = fullscreen_shader_.MakeShaderStages();
-        const auto fragment_stages = draw_shader_.MakeShaderStages();
-        stages.insert(stages.end(), fragment_stages.begin(), fragment_stages.end());
+        auto stages = fullscreen_shader_.MakeStages();
+        stages.Append(draw_shader_.MakeStages());
         draw_pipeline_ = CreateFullscreenPipeline(*app_, draw_pipeline_layout_, stages);
         pipelines_shader_version_ = compute_shader_.GetVersion();
     }
@@ -273,14 +286,14 @@ void CountingRenderer::PrepareFrame(VkCommandBuffer command_buffer, const Fracta
     klvk::Vulkan::CmdBindDescriptorSets(
         command_buffer,
         VK_PIPELINE_BIND_POINT_COMPUTE,
-        compute_pipeline_layout_,
+        compute_pipeline_layout_.GetHandle(),
         0,
         std::span{&compute_set_, 1});
 
     const FractalPushConstants push_constants = MakeFractalPushConstants(settings, render_transforms_.screen_to_world);
     klvk::Vulkan::CmdPushConstants(
         command_buffer,
-        compute_pipeline_layout_,
+        compute_pipeline_layout_.GetHandle(),
         VK_SHADER_STAGE_COMPUTE_BIT,
         0,
         push_constants);
@@ -309,14 +322,14 @@ void CountingRenderer::Render(VkCommandBuffer command_buffer, const FractalSetti
     klvk::Vulkan::CmdBindDescriptorSets(
         command_buffer,
         VK_PIPELINE_BIND_POINT_GRAPHICS,
-        draw_pipeline_layout_,
+        draw_pipeline_layout_.GetHandle(),
         0,
         std::span{&draw_set_, 1});
 
     const DrawPushConstants push_constants{.resolution = settings.viewport.size.Cast<float>()};
     klvk::Vulkan::CmdPushConstants(
         command_buffer,
-        draw_pipeline_layout_,
+        draw_pipeline_layout_.GetHandle(),
         VK_SHADER_STAGE_FRAGMENT_BIT,
         0,
         push_constants);

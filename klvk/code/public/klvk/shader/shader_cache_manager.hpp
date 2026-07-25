@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "klvk/integral_aliases.hpp"
+#include "klvk/shader/shader_interface.hpp"
 
 namespace klvk
 {
@@ -38,7 +39,7 @@ public:
     // self-contained: imports and includes are rejected until persistent cache entries track
     // transitive dependency contents. The returned data is immutable and remains alive as long
     // as either the caller or manager holds it.
-    [[nodiscard]] std::shared_ptr<const std::vector<u32>> GetOrCompile(const std::filesystem::path& source_path);
+    [[nodiscard]] std::shared_ptr<const CompiledShader> GetOrCompile(const std::filesystem::path& source_path);
 
     [[nodiscard]] const std::filesystem::path& GetSourceRoot() const noexcept { return source_root_; }
     [[nodiscard]] const std::filesystem::path& GetCacheRoot() const noexcept { return cache_root_; }
@@ -54,7 +55,7 @@ private:
     struct Entry
     {
         EntryState state = EntryState::Pending;
-        std::shared_ptr<const std::vector<u32>> spirv;
+        std::shared_ptr<const CompiledShader> shader;
         std::exception_ptr failure;
         u64 generation = 0;
         u64 persisted_generation = 0;
@@ -71,7 +72,7 @@ private:
     void WorkerMain();
     void Compile(const CompileJob& job);
     void FlushDirtyEntries();
-    [[nodiscard]] std::shared_ptr<const std::vector<u32>> TryLoad(u64 key) const;
+    [[nodiscard]] std::shared_ptr<const CompiledShader> TryLoad(u64 key) const;
 
     std::filesystem::path source_root_;
     std::filesystem::path cache_root_;

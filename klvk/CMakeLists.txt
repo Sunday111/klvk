@@ -25,6 +25,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/rendering/instanced_sprite_renderer_2d.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_cache_manager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_interface.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_stages.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/texture/procedural_texture_generator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/timing/timer_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/simple_imgui_combo.cpp
@@ -34,6 +36,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/gpu_buffer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/graphics_pipeline_builder.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/offscreen_render_target.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/pipeline_layout.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/swapchain.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/texture.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/vma_usage.cpp
@@ -69,6 +72,9 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/define_handle.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/shader.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/shader_cache_manager.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/shader_interface.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/shader_module.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/shader_stages.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/signed_integral_aliases.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/class_member_traits.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/constexpr_string_hash.hpp
@@ -91,6 +97,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/gpu_buffer.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/graphics_pipeline_builder.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/offscreen_render_target.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/pipeline_layout.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/render_target.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/swapchain.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/texture.hpp

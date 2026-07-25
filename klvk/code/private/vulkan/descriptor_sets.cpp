@@ -81,7 +81,12 @@ DescriptorSets DescriptorSets::Builder::Build(u32 set_count)
             .pSetLayouts = layouts.data(),
         });
 
-    return DescriptorSets{context, std::move(layout), std::move(pool), std::move(sets), std::move(bindings_)};
+    return DescriptorSets{
+        context,
+        std::move(layout),
+        std::move(pool),
+        std::move(sets),
+        DescriptorSetLayoutDescription{.bindings = std::move(bindings_)}};
 }
 
 DescriptorSets::DescriptorSets(
@@ -89,21 +94,50 @@ DescriptorSets::DescriptorSets(
     VkObject<VkDescriptorSetLayout> layout,
     VkObject<VkDescriptorPool> pool,
     std::vector<VkDescriptorSet> sets,
-    std::vector<VkDescriptorSetLayoutBinding> bindings)
+    DescriptorSetLayoutDescription layout_description)
     : context_(&context),
       layout_(std::move(layout)),
       pool_(std::move(pool)),
       sets_(std::move(sets)),
-      bindings_(std::move(bindings))
+      layout_description_(std::move(layout_description))
 {
 }
 
 VkDescriptorType DescriptorSets::TypeOfBinding(u32 binding) const
 {
-    const auto it =
-        std::ranges::find_if(bindings_, [&](const VkDescriptorSetLayoutBinding& b) { return b.binding == binding; });
-    ErrorHandling::Ensure(it != bindings_.end(), "DescriptorSets: unknown binding {}", binding);
+    const auto it = std::ranges::find_if(
+        layout_description_.bindings,
+        [&](const VkDescriptorSetLayoutBinding& b) { return b.binding == binding; });
+    ErrorHandling::Ensure(it != layout_description_.bindings.end(), "DescriptorSets: unknown binding {}", binding);
     return it->descriptorType;
+}
+
+void DescriptorSets::ValidateAgainst(const ShaderProgramInterface& program, u32 set_index) const
+{
+    std::vector<const ShaderDescriptorBinding*> reflected;
+    for (const auto& descriptor : program.descriptors)
+    {
+        if (descriptor.set == set_index) reflected.push_back(&descriptor);
+    }
+    for (const ShaderDescriptorBinding* descriptor : reflected)
+    {
+        ErrorHandling::Ensure(
+            !descriptor->unbounded,
+            "Unbounded descriptor set {} binding {} requires variable descriptor flags, which are not modeled",
+            descriptor->set,
+            descriptor->binding);
+        const auto binding = std::ranges::find(
+            layout_description_.bindings,
+            descriptor->binding,
+            &VkDescriptorSetLayoutBinding::binding);
+        ErrorHandling::Ensure(
+            binding != layout_description_.bindings.end() && binding->descriptorType == descriptor->type &&
+                binding->descriptorCount >= descriptor->count &&
+                (binding->stageFlags & descriptor->stages) == descriptor->stages,
+            "Descriptor set {} binding {} does not match shader reflection",
+            set_index,
+            descriptor->binding);
+    }
 }
 
 void DescriptorSets::WriteBuffer(

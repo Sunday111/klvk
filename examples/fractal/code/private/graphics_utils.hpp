@@ -1,9 +1,9 @@
 #pragma once
 
-#include <span>
-
 #include "klvk/application.hpp"
 #include "klvk/camera/viewport.hpp"
+#include "klvk/shader/shader_stages.hpp"
+#include "klvk/vulkan/pipeline_layout.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
 
@@ -24,11 +24,11 @@ static_assert(sizeof(FractalPushConstants) == 72);
 
 // Fullscreen triangle list (6 vertices, no vertex buffers), no blending, dynamic
 // viewport and scissor, targeting the swapchain format. Stages usually come from
-// klvk::Shader::MakeShaderStages.
+// klvk::Shader::MakeStages.
 [[nodiscard]] VkPipeline CreateFullscreenPipeline(
     klvk::Application& app,
-    VkPipelineLayout pipeline_layout,
-    std::span<const VkPipelineShaderStageCreateInfo> stages);
+    const klvk::PipelineLayout& pipeline_layout,
+    const klvk::ShaderStages& stages);
 
 // Applies a viewport given in klgl's convention (origin at the bottom-left corner of the
 // window) by flipping it the same way the application flips the default viewport.

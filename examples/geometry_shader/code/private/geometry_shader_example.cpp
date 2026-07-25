@@ -84,18 +84,9 @@ class GeometryShaderApp : public klvk::Application
                 .offset = 0,
                 .size = sizeof(float),
             };
-            const VkDescriptorSetLayout set_layout = descriptor_sets_.GetLayout();
-            pipeline_layout_ = klvk::VkObject<VkPipelineLayout>{
-                device,
-                klvk::Vulkan::CreatePipelineLayout(
-                    device,
-                    {
-                        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                        .setLayoutCount = 1,
-                        .pSetLayouts = &set_layout,
-                        .pushConstantRangeCount = 1,
-                        .pPushConstantRanges = &push_constant_range,
-                    })};
+            const auto set_layout = descriptor_sets_.GetLayoutView();
+            pipeline_layout_ =
+                klvk::PipelineLayout{context, std::span{&set_layout, 1}, std::span{&push_constant_range, 1}};
 
             const std::filesystem::path shader_dir = GetShaderDir() / "points_to_quads_2d";
             pipeline_ = klvk::VkObject<VkPipeline>{
@@ -156,12 +147,12 @@ class GeometryShaderApp : public klvk::Application
         klvk::Vulkan::CmdBindDescriptorSets(
             command_buffer,
             VK_PIPELINE_BIND_POINT_GRAPHICS,
-            pipeline_layout_,
+            pipeline_layout_.GetHandle(),
             0,
             std::span{&descriptor_set, 1});
         klvk::Vulkan::CmdPushConstants(
             command_buffer,
-            pipeline_layout_,
+            pipeline_layout_.GetHandle(),
             VK_SHADER_STAGE_FRAGMENT_BIT,
             0,
             figure_border_);
@@ -173,7 +164,7 @@ private:
     std::vector<Object> objects_;
     klvk::DescriptorSets descriptor_sets_;
     std::array<klvk::GpuBuffer, kFramesInFlight> object_buffers_{};
-    klvk::VkObject<VkPipelineLayout> pipeline_layout_;
+    klvk::PipelineLayout pipeline_layout_;
     klvk::VkObject<VkPipeline> pipeline_;
 };
 

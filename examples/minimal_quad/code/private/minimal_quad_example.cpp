@@ -40,15 +40,7 @@ class QuadApp : public klvk::Application
             .offset = 0,
             .size = sizeof(PushConstants),
         };
-        pipeline_layout_ = klvk::VkObject<VkPipelineLayout>{
-            device,
-            klvk::Vulkan::CreatePipelineLayout(
-                device,
-                {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                    .pushConstantRangeCount = 1,
-                    .pPushConstantRanges = &push_constant_range,
-                })};
+        pipeline_layout_ = klvk::PipelineLayout{context, {}, std::span{&push_constant_range, 1}};
 
         const std::filesystem::path shader_dir = GetShaderDir() / "just_color_2d";
         pipeline_ = klvk::VkObject<VkPipeline>{
@@ -79,12 +71,17 @@ class QuadApp : public klvk::Application
 
         VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
         klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-        klvk::Vulkan::CmdPushConstants(command_buffer, pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, push_constants);
+        klvk::Vulkan::CmdPushConstants(
+            command_buffer,
+            pipeline_layout_.GetHandle(),
+            VK_SHADER_STAGE_VERTEX_BIT,
+            0,
+            push_constants);
         klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
     }
 
 private:
-    klvk::VkObject<VkPipelineLayout> pipeline_layout_;
+    klvk::PipelineLayout pipeline_layout_;
     klvk::VkObject<VkPipeline> pipeline_;
 };
 

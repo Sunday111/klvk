@@ -1,14 +1,6 @@
 {
-    "definitions": [
-        {
-            "name": "MAX_ITERATIONS",
-            "type": "int",
-            "default": 200
-        },
-        {
-            "name": "INSIDE_OUT_SPACE",
-            "type": "int",
-            "default": 1
-        }
-    ]
+    "specialization_constants": {
+        "MAX_ITERATIONS": 200,
+        "INSIDE_OUT_SPACE": 1
+    }
 }

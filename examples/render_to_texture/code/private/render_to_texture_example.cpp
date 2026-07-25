@@ -69,25 +69,9 @@ class RenderToTextureApp : public klvk::Application
             .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
             .size = sizeof(ColorPushConstants),
         };
-        color_pipeline_layout_ = klvk::VkObject<VkPipelineLayout>{
-            device,
-            klvk::Vulkan::CreatePipelineLayout(
-                device,
-                {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                    .pushConstantRangeCount = 1,
-                    .pPushConstantRanges = &push_constant_range,
-                })};
-        const VkDescriptorSetLayout set_layout = descriptor_sets_.GetLayout();
-        texture_pipeline_layout_ = klvk::VkObject<VkPipelineLayout>{
-            device,
-            klvk::Vulkan::CreatePipelineLayout(
-                device,
-                {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                    .setLayoutCount = 1,
-                    .pSetLayouts = &set_layout,
-                })};
+        color_pipeline_layout_ = klvk::PipelineLayout{context, {}, std::span{&push_constant_range, 1}};
+        const auto set_layout = descriptor_sets_.GetLayoutView();
+        texture_pipeline_layout_ = klvk::PipelineLayout{context, std::span{&set_layout, 1}};
         color_pipeline_ = klvk::VkObject<VkPipeline>{
             device,
             CreatePipeline(context, "color.vert.slang", "color.frag.slang", color_pipeline_layout_, kOffscreenFormat)};
@@ -105,7 +89,7 @@ class RenderToTextureApp : public klvk::Application
         klvk::DeviceContext& context,
         const char* vertex_name,
         const char* fragment_name,
-        VkPipelineLayout layout,
+        const klvk::PipelineLayout& layout,
         VkFormat color_format)
     {
         const std::filesystem::path shader_dir = GetShaderDir() / "render_to_texture";
@@ -230,7 +214,7 @@ class RenderToTextureApp : public klvk::Application
         klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, color_pipeline_);
         klvk::Vulkan::CmdPushConstants(
             command_buffer,
-            color_pipeline_layout_,
+            color_pipeline_layout_.GetHandle(),
             VK_SHADER_STAGE_VERTEX_BIT,
             0,
             push_constants);
@@ -255,7 +239,7 @@ class RenderToTextureApp : public klvk::Application
         klvk::Vulkan::CmdBindDescriptorSets(
             command_buffer,
             VK_PIPELINE_BIND_POINT_GRAPHICS,
-            texture_pipeline_layout_,
+            texture_pipeline_layout_.GetHandle(),
             0,
             std::span{&descriptor_set, 1});
         klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
@@ -292,8 +276,8 @@ public:
 private:
     klvk::DescriptorSets descriptor_sets_;
     klvk::VkObject<VkSampler> sampler_;
-    klvk::VkObject<VkPipelineLayout> color_pipeline_layout_;
-    klvk::VkObject<VkPipelineLayout> texture_pipeline_layout_;
+    klvk::PipelineLayout color_pipeline_layout_;
+    klvk::PipelineLayout texture_pipeline_layout_;
     klvk::VkObject<VkPipeline> color_pipeline_;
     klvk::VkObject<VkPipeline> texture_pipeline_;
     std::array<OffscreenTarget, kFramesInFlight> targets_{};

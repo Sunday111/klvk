@@ -7,6 +7,7 @@
 #include "klvk/application.hpp"
 #include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
+#include "klvk/vulkan/pipeline_layout.hpp"
 #include "klvk/vulkan/vk_object.hpp"
 
 namespace klvk
@@ -60,7 +61,7 @@ private:
     std::vector<Instance> instances_;
 
     DescriptorSets descriptor_sets_;
-    VkObject<VkPipelineLayout> pipeline_layout_;
+    PipelineLayout pipeline_layout_;
     VkObject<VkPipeline> pipeline_;
     std::array<GpuBuffer, Application::kFramesInFlight> instance_buffers_{};
 };

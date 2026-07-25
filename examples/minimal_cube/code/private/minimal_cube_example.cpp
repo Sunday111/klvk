@@ -66,15 +66,7 @@ class CubeApp : public klvk::Application
             .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
             .size = sizeof(PushConstants),
         };
-        pipeline_layout_ = klvk::VkObject<VkPipelineLayout>{
-            device,
-            klvk::Vulkan::CreatePipelineLayout(
-                device,
-                {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                    .pushConstantRangeCount = 1,
-                    .pPushConstantRanges = &push_constant_range,
-                })};
+        pipeline_layout_ = klvk::PipelineLayout{context, {}, std::span{&push_constant_range, 1}};
 
         const std::filesystem::path shader_dir = GetShaderDir() / "just_color_3d";
         pipeline_ = klvk::VkObject<VkPipeline>{
@@ -113,7 +105,12 @@ class CubeApp : public klvk::Application
         klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
         klvk::Vulkan::CmdBindVertexBuffers(command_buffer, 0, std::span{&vertex_buffer, 1}, std::span{&offset, 1});
         klvk::Vulkan::CmdBindIndexBuffer(command_buffer, index_buffer_.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
-        klvk::Vulkan::CmdPushConstants(command_buffer, pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, push_constants);
+        klvk::Vulkan::CmdPushConstants(
+            command_buffer,
+            pipeline_layout_.GetHandle(),
+            VK_SHADER_STAGE_VERTEX_BIT,
+            0,
+            push_constants);
         klvk::Vulkan::CmdDrawIndexed(command_buffer, index_count_, 1, 0, 0, 0);
 
         if (ImGui::Begin("Settings"))
@@ -161,7 +158,7 @@ private:
     std::unique_ptr<klvk::events::IEventListener> event_listener_;
     klvk::GpuBuffer vertex_buffer_;
     klvk::GpuBuffer index_buffer_;
-    klvk::VkObject<VkPipelineLayout> pipeline_layout_;
+    klvk::PipelineLayout pipeline_layout_;
     klvk::VkObject<VkPipeline> pipeline_;
     u32 index_count_ = 0;
     float move_speed_ = 5.f;

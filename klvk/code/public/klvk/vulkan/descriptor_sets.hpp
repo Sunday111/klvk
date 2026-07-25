@@ -3,6 +3,8 @@
 #include <vector>
 
 #include "klvk/integral_aliases.hpp"
+#include "klvk/shader/shader_interface.hpp"
+#include "klvk/vulkan/pipeline_layout.hpp"
 #include "klvk/vulkan/vk_object.hpp"
 
 namespace klvk
@@ -40,8 +42,17 @@ public:
     DescriptorSets() = default;
 
     [[nodiscard]] VkDescriptorSetLayout GetLayout() const noexcept { return layout_.GetHandle(); }
+    [[nodiscard]] const DescriptorSetLayoutDescription& GetLayoutDescription() const noexcept
+    {
+        return layout_description_;
+    }
+    [[nodiscard]] DescriptorSetLayoutView GetLayoutView() const noexcept
+    {
+        return {.handle = GetLayout(), .description = &layout_description_};
+    }
     [[nodiscard]] VkDescriptorSet Get(size_t set_index) const { return sets_.at(set_index); }
     [[nodiscard]] size_t Count() const noexcept { return sets_.size(); }
+    void ValidateAgainst(const ShaderProgramInterface& program, u32 set_index) const;
 
     // Points a binding of the given set at a buffer. The descriptor type comes
     // from the binding declared in the builder (uniform or storage buffer).
@@ -61,7 +72,7 @@ private:
         VkObject<VkDescriptorSetLayout> layout,
         VkObject<VkDescriptorPool> pool,
         std::vector<VkDescriptorSet> sets,
-        std::vector<VkDescriptorSetLayoutBinding> bindings);
+        DescriptorSetLayoutDescription layout_description);
 
     [[nodiscard]] VkDescriptorType TypeOfBinding(u32 binding) const;
 
@@ -69,7 +80,7 @@ private:
     VkObject<VkDescriptorSetLayout> layout_;
     VkObject<VkDescriptorPool> pool_;
     std::vector<VkDescriptorSet> sets_;
-    std::vector<VkDescriptorSetLayoutBinding> bindings_;
+    DescriptorSetLayoutDescription layout_description_;
 };
 
 }  // namespace klvk

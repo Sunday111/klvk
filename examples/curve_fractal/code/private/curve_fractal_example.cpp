@@ -295,14 +295,8 @@ class CurveFractalApp : public klvk::Application
                  .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
                  .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
                  .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER})};
-        const VkDescriptorSetLayout set_layout = descriptor_sets_.GetLayout();
-        pipeline_layout_ = klvk::VkObject<VkPipelineLayout>{
-            device,
-            klvk::Vulkan::CreatePipelineLayout(
-                device,
-                {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                 .setLayoutCount = 1,
-                 .pSetLayouts = &set_layout})};
+        const auto set_layout = descriptor_sets_.GetLayoutView();
+        pipeline_layout_ = klvk::PipelineLayout{context, std::span{&set_layout, 1}};
         pipeline_ = klvk::VkObject<VkPipeline>{device, CreateDisplayPipeline(context)};
     }
 
@@ -442,7 +436,7 @@ class CurveFractalApp : public klvk::Application
         klvk::Vulkan::CmdBindDescriptorSets(
             command_buffer,
             VK_PIPELINE_BIND_POINT_GRAPHICS,
-            pipeline_layout_,
+            pipeline_layout_.GetHandle(),
             0,
             std::span{&descriptor_set, 1});
         klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
@@ -509,7 +503,7 @@ private:
     OffscreenTarget target_{};
     klvk::DescriptorSets descriptor_sets_;
     klvk::VkObject<VkSampler> sampler_;
-    klvk::VkObject<VkPipelineLayout> pipeline_layout_;
+    klvk::PipelineLayout pipeline_layout_;
     klvk::VkObject<VkPipeline> pipeline_;
 };
 

@@ -65,23 +65,9 @@ class PostProcessingApp : public klvk::Application
         const VkPushConstantRange scene_range{
             .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
             .size = sizeof(PushConstants)};
-        scene_layout_ = klvk::VkObject<VkPipelineLayout>{
-            device,
-            klvk::Vulkan::CreatePipelineLayout(
-                device,
-                {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                 .pushConstantRangeCount = 1,
-                 .pPushConstantRanges = &scene_range})};
-        const VkDescriptorSetLayout set_layout = descriptor_sets_.GetLayout();
-        blur_layout_ = klvk::VkObject<VkPipelineLayout>{
-            device,
-            klvk::Vulkan::CreatePipelineLayout(
-                device,
-                {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                 .setLayoutCount = 1,
-                 .pSetLayouts = &set_layout,
-                 .pushConstantRangeCount = 1,
-                 .pPushConstantRanges = &scene_range})};
+        scene_layout_ = klvk::PipelineLayout{context, {}, std::span{&scene_range, 1}};
+        const auto set_layout = descriptor_sets_.GetLayoutView();
+        blur_layout_ = klvk::PipelineLayout{context, std::span{&set_layout, 1}, std::span{&scene_range, 1}};
         scene_pipeline_ = klvk::VkObject<VkPipeline>{
             device,
             CreatePipeline(context, "scene.frag.slang", scene_layout_, kTargetFormat)};
@@ -90,8 +76,11 @@ class PostProcessingApp : public klvk::Application
             CreatePipeline(context, "blur.frag.slang", blur_layout_, GetSwapchainFormat())};
     }
 
-    VkPipeline
-    CreatePipeline(klvk::DeviceContext& context, const char* fragment_name, VkPipelineLayout layout, VkFormat format)
+    VkPipeline CreatePipeline(
+        klvk::DeviceContext& context,
+        const char* fragment_name,
+        const klvk::PipelineLayout& layout,
+        VkFormat format)
     {
         const std::filesystem::path shader_dir = GetShaderDir() / "post_processing";
         return klvk::GraphicsPipelineBuilder(context)
@@ -180,7 +169,12 @@ class PostProcessingApp : public klvk::Application
         SetViewport(command_buffer);
         klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, scene_pipeline_);
         const PushConstants constants{.data = {GetTimeSeconds(), 0.f, 0.f, 0.f}};
-        klvk::Vulkan::CmdPushConstants(command_buffer, scene_layout_, VK_SHADER_STAGE_FRAGMENT_BIT, 0, constants);
+        klvk::Vulkan::CmdPushConstants(
+            command_buffer,
+            scene_layout_.GetHandle(),
+            VK_SHADER_STAGE_FRAGMENT_BIT,
+            0,
+            constants);
         klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
         klvk::Vulkan::CmdEndRendering(command_buffer);
         barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -217,11 +211,16 @@ class PostProcessingApp : public klvk::Application
         klvk::Vulkan::CmdBindDescriptorSets(
             command_buffer,
             VK_PIPELINE_BIND_POINT_GRAPHICS,
-            blur_layout_,
+            blur_layout_.GetHandle(),
             0,
             std::span{&set, 1});
         const PushConstants constants{.data = {static_cast<float>(radius_), spread_, mix_, 0.f}};
-        klvk::Vulkan::CmdPushConstants(command_buffer, blur_layout_, VK_SHADER_STAGE_FRAGMENT_BIT, 0, constants);
+        klvk::Vulkan::CmdPushConstants(
+            command_buffer,
+            blur_layout_.GetHandle(),
+            VK_SHADER_STAGE_FRAGMENT_BIT,
+            0,
+            constants);
         klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
     }
 
@@ -248,8 +247,8 @@ public:
 private:
     klvk::DescriptorSets descriptor_sets_;
     klvk::VkObject<VkSampler> sampler_;
-    klvk::VkObject<VkPipelineLayout> scene_layout_;
-    klvk::VkObject<VkPipelineLayout> blur_layout_;
+    klvk::PipelineLayout scene_layout_;
+    klvk::PipelineLayout blur_layout_;
     klvk::VkObject<VkPipeline> scene_pipeline_;
     klvk::VkObject<VkPipeline> blur_pipeline_;
     std::array<Target, kFramesInFlight> targets_{};

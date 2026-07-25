@@ -32,6 +32,7 @@ SimpleGpuRenderer::SimpleGpuRenderer(klvk::Application& app, size_t max_iteratio
         .descriptorCount = 1,
         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
     };
+    set_layout_description_.bindings = {binding};
     set_layout_ = klvk::Vulkan::CreateDescriptorSetLayout(
         device,
         {
@@ -75,15 +76,12 @@ SimpleGpuRenderer::SimpleGpuRenderer(klvk::Application& app, size_t max_iteratio
         .offset = 0,
         .size = sizeof(FractalPushConstants),
     };
-    pipeline_layout_ = klvk::Vulkan::CreatePipelineLayout(
-        device,
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .setLayoutCount = 1,
-            .pSetLayouts = &set_layout_,
-            .pushConstantRangeCount = 1,
-            .pPushConstantRanges = &push_constant_range,
-        });
+    const klvk::DescriptorSetLayoutView set_layout_view{
+        .handle = set_layout_,
+        .description = &set_layout_description_,
+    };
+    pipeline_layout_ =
+        klvk::PipelineLayout{context, std::span{&set_layout_view, 1}, std::span{&push_constant_range, 1}};
 }
 
 SimpleGpuRenderer::~SimpleGpuRenderer() noexcept
@@ -92,7 +90,6 @@ SimpleGpuRenderer::~SimpleGpuRenderer() noexcept
     context.WaitIdle();
     VkDevice device = context.GetDevice();
     klvk::Vulkan::DestroyPipelineNE(device, pipeline_);
-    klvk::Vulkan::DestroyPipelineLayoutNE(device, pipeline_layout_);
     klvk::Vulkan::DestroyDescriptorPoolNE(device, descriptor_pool_);
     klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, set_layout_);
 }
@@ -109,9 +106,8 @@ void SimpleGpuRenderer::ApplySettings(const FractalSettings& settings)
         context.WaitIdle();  // the old pipeline may still be referenced by the frame in flight
         klvk::Vulkan::DestroyPipelineNE(context.GetDevice(), pipeline_);
 
-        auto stages = fullscreen_shader_.MakeShaderStages();
-        const auto fragment_stages = fractal_shader_.MakeShaderStages();
-        stages.insert(stages.end(), fragment_stages.begin(), fragment_stages.end());
+        auto stages = fullscreen_shader_.MakeStages();
+        stages.Append(fractal_shader_.MakeStages());
         pipeline_ = CreateFullscreenPipeline(*app_, pipeline_layout_, stages);
         pipeline_shader_version_ = fractal_shader_.GetVersion();
     }
@@ -132,12 +128,17 @@ void SimpleGpuRenderer::Render(VkCommandBuffer command_buffer, const FractalSett
     klvk::Vulkan::CmdBindDescriptorSets(
         command_buffer,
         VK_PIPELINE_BIND_POINT_GRAPHICS,
-        pipeline_layout_,
+        pipeline_layout_.GetHandle(),
         0,
         std::span{&descriptor_set_, 1});
 
     const FractalPushConstants push_constants = MakeFractalPushConstants(settings, render_transforms_.screen_to_world);
-    klvk::Vulkan::CmdPushConstants(command_buffer, pipeline_layout_, VK_SHADER_STAGE_FRAGMENT_BIT, 0, push_constants);
+    klvk::Vulkan::CmdPushConstants(
+        command_buffer,
+        pipeline_layout_.GetHandle(),
+        VK_SHADER_STAGE_FRAGMENT_BIT,
+        0,
+        push_constants);
 
     klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
 }

@@ -28,6 +28,7 @@ InterpolationWidget::InterpolationWidget(klvk::Application& app, size_t num_colo
         .descriptorCount = 1,
         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
     };
+    set_layout_description_.bindings = {binding};
     set_layout_ = klvk::Vulkan::CreateDescriptorSetLayout(
         device,
         {
@@ -76,17 +77,14 @@ InterpolationWidget::InterpolationWidget(klvk::Application& app, size_t num_colo
         klvk::Vulkan::UpdateDescriptorSets(device, std::span{&write, 1});
     }
 
-    pipeline_layout_ = klvk::Vulkan::CreatePipelineLayout(
-        device,
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .setLayoutCount = 1,
-            .pSetLayouts = &set_layout_,
-        });
+    const klvk::DescriptorSetLayoutView set_layout_view{
+        .handle = set_layout_,
+        .description = &set_layout_description_,
+    };
+    pipeline_layout_ = klvk::PipelineLayout{context, std::span{&set_layout_view, 1}};
 
-    auto stages = fullscreen_shader_.MakeShaderStages();
-    const auto fragment_stages = widget_shader_.MakeShaderStages();
-    stages.insert(stages.end(), fragment_stages.begin(), fragment_stages.end());
+    auto stages = fullscreen_shader_.MakeStages();
+    stages.Append(widget_shader_.MakeStages());
     pipeline_ = CreateFullscreenPipeline(*app_, pipeline_layout_, stages);
 }
 
@@ -96,7 +94,6 @@ InterpolationWidget::~InterpolationWidget() noexcept
     context.WaitIdle();
     VkDevice device = context.GetDevice();
     klvk::Vulkan::DestroyPipelineNE(device, pipeline_);
-    klvk::Vulkan::DestroyPipelineLayoutNE(device, pipeline_layout_);
     klvk::Vulkan::DestroyDescriptorPoolNE(device, descriptor_pool_);
     klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, set_layout_);
 }
@@ -119,7 +116,7 @@ void InterpolationWidget::Render(
     klvk::Vulkan::CmdBindDescriptorSets(
         command_buffer,
         VK_PIPELINE_BIND_POINT_GRAPHICS,
-        pipeline_layout_,
+        pipeline_layout_.GetHandle(),
         0,
         std::span{&descriptor_sets_[frame_index], 1});
     klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);

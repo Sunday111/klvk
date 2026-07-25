@@ -5,6 +5,9 @@
 #include <vector>
 
 #include "klvk/integral_aliases.hpp"
+#include "klvk/shader/shader_module.hpp"
+#include "klvk/shader/shader_stages.hpp"
+#include "klvk/vulkan/pipeline_layout.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk
@@ -31,12 +34,14 @@ public:
     GraphicsPipelineBuilder(GraphicsPipelineBuilder&&) = delete;
     ~GraphicsPipelineBuilder();
 
-    GraphicsPipelineBuilder& Layout(VkPipelineLayout layout);
+    GraphicsPipelineBuilder& Layout(const PipelineLayout& layout);
+    GraphicsPipelineBuilder& UncheckedLayout(VkPipelineLayout layout);
 
-    // Reference externally owned stages (e.g. klvk::Shader::MakeShaderStages()).
+    // Reference externally owned stages (e.g. klvk::Shader::MakeStages()).
     // The stages - and anything they point at, such as specialization info - must
     // stay alive until Build() is called.
-    GraphicsPipelineBuilder& Stages(std::span<const VkPipelineShaderStageCreateInfo> stages);
+    GraphicsPipelineBuilder& Stages(const ShaderStages& stages);
+    GraphicsPipelineBuilder& UncheckedStages(std::span<const VkPipelineShaderStageCreateInfo> stages);
 
     // Compile a GLSL source through the device's shader cache and own the module.
     GraphicsPipelineBuilder& VertexShaderFile(const std::filesystem::path& path);
@@ -72,14 +77,16 @@ private:
     Application* app_ = nullptr;
     DeviceContext* context_ = nullptr;
 
-    std::vector<VkPipelineShaderStageCreateInfo> owned_stages_;
-    std::vector<VkShaderModule> owned_modules_;
-    std::span<const VkPipelineShaderStageCreateInfo> external_stages_;
+    std::vector<std::pair<VkShaderStageFlagBits, ShaderModule>> owned_modules_;
+    ShaderStages reflected_stages_;
+    std::span<const VkPipelineShaderStageCreateInfo> unchecked_stages_;
 
     std::vector<VkVertexInputBindingDescription> vertex_bindings_;
     std::vector<VkVertexInputAttributeDescription> vertex_attributes_;
 
     VkPipelineLayout layout_ = VK_NULL_HANDLE;
+    const PipelineLayout* reflected_layout_ = nullptr;
+    bool unchecked_layout_ = false;
     VkPrimitiveTopology topology_ = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     VkPolygonMode polygon_mode_ = VK_POLYGON_MODE_FILL;
     VkCullModeFlags cull_mode_ = VK_CULL_MODE_NONE;

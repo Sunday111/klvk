@@ -5,6 +5,7 @@
 #include "klvk/camera/camera_2d.hpp"
 #include "klvk/shader/shader.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
+#include "klvk/vulkan/pipeline_layout.hpp"
 
 class CountingRenderer : public FractalRenderer
 {
@@ -37,8 +38,8 @@ private:
     VkDescriptorSet compute_set_ = VK_NULL_HANDLE;
     VkDescriptorSet draw_set_ = VK_NULL_HANDLE;
 
-    VkPipelineLayout compute_pipeline_layout_ = VK_NULL_HANDLE;
-    VkPipelineLayout draw_pipeline_layout_ = VK_NULL_HANDLE;
+    klvk::PipelineLayout compute_pipeline_layout_;
+    klvk::PipelineLayout draw_pipeline_layout_;
     VkPipeline compute_pipeline_ = VK_NULL_HANDLE;
     VkPipeline draw_pipeline_ = VK_NULL_HANDLE;
 };

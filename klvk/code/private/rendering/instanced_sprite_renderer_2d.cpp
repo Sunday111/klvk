@@ -47,15 +47,8 @@ InstancedSpriteRenderer2d::InstancedSpriteRenderer2d(Application& app, const Tex
             .offset = 0,
             .size = sizeof(PushConstants),
         }};
-        const std::array set_layouts{descriptor_sets_.GetLayout()};
-        const VkPipelineLayoutCreateInfo layout_info{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .setLayoutCount = set_layouts.size(),
-            .pSetLayouts = set_layouts.data(),
-            .pushConstantRangeCount = push_constant_ranges.size(),
-            .pPushConstantRanges = push_constant_ranges.data(),
-        };
-        pipeline_layout_ = VkObject<VkPipelineLayout>{device, Vulkan::CreatePipelineLayout(device, layout_info)};
+        const std::array set_layouts{descriptor_sets_.GetLayoutView()};
+        pipeline_layout_ = PipelineLayout{context, set_layouts, push_constant_ranges};
     }
 
     pipeline_ = VkObject<VkPipeline>{
@@ -105,7 +98,7 @@ void InstancedSpriteRenderer2d::Render(const Mat3f& world_to_view)
     Vulkan::CmdBindDescriptorSetsNE(
         command_buffer,
         VK_PIPELINE_BIND_POINT_GRAPHICS,
-        pipeline_layout_,
+        pipeline_layout_.GetHandle(),
         0,
         descriptor_sets);
 
@@ -116,7 +109,12 @@ void InstancedSpriteRenderer2d::Render(const Mat3f& world_to_view)
         const Vec3f matrix_column = world_to_view.GetColumn(column);
         push_constants.columns[column] = Vec4f{matrix_column, 0.f};
     }
-    Vulkan::CmdPushConstantsNE(command_buffer, pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0, push_constants);
+    Vulkan::CmdPushConstantsNE(
+        command_buffer,
+        pipeline_layout_.GetHandle(),
+        VK_SHADER_STAGE_VERTEX_BIT,
+        0,
+        push_constants);
 
     Vulkan::CmdDrawNE(command_buffer, 6, static_cast<u32>(instances_.size()), 0, 0);
 }

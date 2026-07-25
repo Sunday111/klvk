@@ -8,6 +8,7 @@
 #include "klvk/error_handling.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/shader/shader_cache_manager.hpp"
+#include "klvk/shader/shader_module.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
 
@@ -121,11 +122,27 @@ ShaderCacheManager& DeviceContext::GetShaderCacheManager() const
     return *shader_cache_;
 }
 
-VkShaderModule DeviceContext::CreateShaderModuleFromSource(const std::filesystem::path& source_path) const
+ShaderModule DeviceContext::LoadShaderModule(const std::filesystem::path& source_path) const
 {
-    const auto spirv = GetShaderCacheManager().GetOrCompile(source_path);
+    const auto shader = GetShaderCacheManager().GetOrCompile(source_path);
+    ErrorHandling::Ensure(
+        shader->interface != nullptr,
+        "Shader '{}' has no reflection; use CreateShaderModuleFromSourceUnchecked for legacy GLSL",
+        source_path.string());
+    VkShaderModule module = CreateShaderModule(
+        std::string_view(reinterpret_cast<const char*>(shader->spirv->data()), shader->spirv->size() * sizeof(u32)),
+        source_path.filename().string());
+    return ShaderModule{
+        VkObject<VkShaderModule>{device_, module},
+        shader->interface,
+    };
+}
+
+VkShaderModule DeviceContext::CreateShaderModuleFromSourceUnchecked(const std::filesystem::path& source_path) const
+{
+    const auto shader = GetShaderCacheManager().GetOrCompile(source_path);
     return CreateShaderModule(
-        std::string_view(reinterpret_cast<const char*>(spirv->data()), spirv->size() * sizeof(u32)),
+        std::string_view(reinterpret_cast<const char*>(shader->spirv->data()), shader->spirv->size() * sizeof(u32)),
         source_path.filename().string());
 }
 

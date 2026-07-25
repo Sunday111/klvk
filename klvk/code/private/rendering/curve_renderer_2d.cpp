@@ -103,9 +103,7 @@ CurveRenderer2d::CurveRenderer2d(Application& app, VkFormat color_format) : app_
 {
     auto& context = app.GetDeviceContext();
     const VkDevice device = context.GetDevice();
-    pipeline_layout_ = VkObject<VkPipelineLayout>{
-        device,
-        Vulkan::CreatePipelineLayout(device, {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO})};
+    pipeline_layout_ = PipelineLayout{context, {}};
     pipeline_ = VkObject<VkPipeline>{
         device,
         GraphicsPipelineBuilder(app)

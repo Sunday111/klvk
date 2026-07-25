@@ -1,9 +1,5 @@
 {
-    "definitions": [
-        {
-            "name": "MAX_ITERATIONS",
-            "type": "int",
-            "default": 200
-        }
-    ]
+    "specialization_constants": {
+        "MAX_ITERATIONS": 200
+    }
 }

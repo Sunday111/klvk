@@ -28,8 +28,8 @@ FractalPushConstants MakeFractalPushConstants(const FractalSettings& settings, c
 
 VkPipeline CreateFullscreenPipeline(
     klvk::Application& app,
-    VkPipelineLayout pipeline_layout,
-    std::span<const VkPipelineShaderStageCreateInfo> stages)
+    const klvk::PipelineLayout& pipeline_layout,
+    const klvk::ShaderStages& stages)
 {
     return klvk::GraphicsPipelineBuilder(app).Layout(pipeline_layout).Stages(stages).Build();
 }

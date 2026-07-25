@@ -1,9 +1,5 @@
 {
-    "definitions": [
-        {
-            "name": "COLORS_COUNT",
-            "type": "int",
-            "default": 201
-        }
-    ]
+    "specialization_constants": {
+        "COLORS_COUNT": 201
+    }
 }

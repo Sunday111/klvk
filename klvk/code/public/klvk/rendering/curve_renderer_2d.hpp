@@ -7,6 +7,7 @@
 #include "EverydayTools/Math/Matrix.hpp"
 #include "klvk/application.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
+#include "klvk/vulkan/pipeline_layout.hpp"
 #include "klvk/vulkan/vk_object.hpp"
 
 namespace klvk
@@ -56,7 +57,7 @@ private:
     void EnsureBuffer(size_t frame_index, size_t bytes);
 
     Application* app_ = nullptr;
-    VkObject<VkPipelineLayout> pipeline_layout_;
+    PipelineLayout pipeline_layout_;
     VkObject<VkPipeline> pipeline_;
     std::array<GpuBuffer, Application::kFramesInFlight> buffers_{};
 };

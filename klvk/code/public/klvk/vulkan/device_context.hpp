@@ -13,6 +13,7 @@ namespace klvk
 {
 
 class ShaderCacheManager;
+class ShaderModule;
 class Window;
 
 #ifdef NDEBUG
@@ -66,7 +67,8 @@ public:
 
     [[nodiscard]] VkShaderModule CreateShaderModule(std::string_view spirv_bytes, std::string_view debug_name) const;
     void InitializeShaderCache(const std::filesystem::path& source_root, const std::filesystem::path& cache_root = {});
-    [[nodiscard]] VkShaderModule CreateShaderModuleFromSource(const std::filesystem::path& source_path) const;
+    [[nodiscard]] ShaderModule LoadShaderModule(const std::filesystem::path& source_path) const;
+    [[nodiscard]] VkShaderModule CreateShaderModuleFromSourceUnchecked(const std::filesystem::path& source_path) const;
     [[nodiscard]] ShaderCacheManager& GetShaderCacheManager() const;
 
 private:

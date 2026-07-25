@@ -1,6 +1,7 @@
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
 
 #include <array>
+#include <unordered_set>
 
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
@@ -21,6 +22,125 @@ namespace
 {
 constexpr VkColorComponentFlags kAllColorComponents =
     VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+struct VertexFormat
+{
+    ShaderScalarType scalar = ShaderScalarType::Unknown;
+    u32 components = 0;
+    u32 bytes = 0;
+    bool normalized = false;
+};
+
+VertexFormat DescribeVertexFormat(VkFormat format)
+{
+    switch (format)
+    {
+    case VK_FORMAT_R32_SFLOAT:
+        return {.scalar = ShaderScalarType::Float32, .components = 1, .bytes = 4, .normalized = false};
+    case VK_FORMAT_R32G32_SFLOAT:
+        return {.scalar = ShaderScalarType::Float32, .components = 2, .bytes = 8, .normalized = false};
+    case VK_FORMAT_R32G32B32_SFLOAT:
+        return {.scalar = ShaderScalarType::Float32, .components = 3, .bytes = 12, .normalized = false};
+    case VK_FORMAT_R32G32B32A32_SFLOAT:
+        return {.scalar = ShaderScalarType::Float32, .components = 4, .bytes = 16, .normalized = false};
+    case VK_FORMAT_R32_SINT:
+        return {.scalar = ShaderScalarType::Int32, .components = 1, .bytes = 4, .normalized = false};
+    case VK_FORMAT_R32G32_SINT:
+        return {.scalar = ShaderScalarType::Int32, .components = 2, .bytes = 8, .normalized = false};
+    case VK_FORMAT_R32G32B32_SINT:
+        return {.scalar = ShaderScalarType::Int32, .components = 3, .bytes = 12, .normalized = false};
+    case VK_FORMAT_R32G32B32A32_SINT:
+        return {.scalar = ShaderScalarType::Int32, .components = 4, .bytes = 16, .normalized = false};
+    case VK_FORMAT_R32_UINT:
+        return {.scalar = ShaderScalarType::UInt32, .components = 1, .bytes = 4, .normalized = false};
+    case VK_FORMAT_R32G32_UINT:
+        return {.scalar = ShaderScalarType::UInt32, .components = 2, .bytes = 8, .normalized = false};
+    case VK_FORMAT_R32G32B32_UINT:
+        return {.scalar = ShaderScalarType::UInt32, .components = 3, .bytes = 12, .normalized = false};
+    case VK_FORMAT_R32G32B32A32_UINT:
+        return {.scalar = ShaderScalarType::UInt32, .components = 4, .bytes = 16, .normalized = false};
+    case VK_FORMAT_R8G8B8A8_UNORM:
+        return {.scalar = ShaderScalarType::Float32, .components = 4, .bytes = 4, .normalized = true};
+    default:
+        ErrorHandling::ThrowWithMessage(
+            "GraphicsPipelineBuilder: unsupported reflected vertex format {}",
+            static_cast<u32>(format));
+    }
+    return {};
+}
+
+void ValidateVertexInput(
+    const ShaderStages& stages,
+    const std::vector<VkVertexInputBindingDescription>& bindings,
+    const std::vector<VkVertexInputAttributeDescription>& attributes)
+{
+    std::unordered_set<u32> binding_indices;
+    for (const auto& binding : bindings)
+    {
+        ErrorHandling::Ensure(
+            binding_indices.insert(binding.binding).second,
+            "GraphicsPipelineBuilder: duplicate vertex binding {}",
+            binding.binding);
+    }
+    std::unordered_set<u32> attribute_locations;
+    for (const auto& attribute : attributes)
+    {
+        ErrorHandling::Ensure(
+            attribute_locations.insert(attribute.location).second,
+            "GraphicsPipelineBuilder: duplicate vertex attribute location {}",
+            attribute.location);
+    }
+
+    const auto vertex_interface = std::ranges::find_if(
+        stages.GetInterfaces(),
+        [](const auto& interface) { return interface->stage == VK_SHADER_STAGE_VERTEX_BIT; });
+    if (vertex_interface == stages.GetInterfaces().end()) return;
+
+    size_t required_count = 0;
+    for (const ShaderInterfaceVariable& input : (*vertex_interface)->inputs)
+    {
+        if (input.built_in) continue;
+        ErrorHandling::Ensure(
+            ShaderScalarByteSize(input.type.scalar) == sizeof(u32),
+            "GraphicsPipelineBuilder: vertex shader input '{}' uses a non-32-bit scalar type",
+            input.name);
+        required_count += input.location_count;
+        for (u32 location_offset = 0; location_offset != input.location_count; ++location_offset)
+        {
+            const u32 location = input.location + location_offset;
+            const auto attribute =
+                std::ranges::find(attributes, location, &VkVertexInputAttributeDescription::location);
+            ErrorHandling::Ensure(
+                attribute != attributes.end(),
+                "GraphicsPipelineBuilder: vertex shader input '{}' requires missing location {}",
+                input.name,
+                location);
+            const auto binding =
+                std::ranges::find(bindings, attribute->binding, &VkVertexInputBindingDescription::binding);
+            ErrorHandling::Ensure(
+                binding != bindings.end(),
+                "GraphicsPipelineBuilder: vertex attribute location {} references missing binding {}",
+                location,
+                attribute->binding);
+            const VertexFormat format = DescribeVertexFormat(attribute->format);
+            const u32 expected_components = input.type.rows;
+            ErrorHandling::Ensure(
+                format.scalar == input.type.scalar && format.components == expected_components,
+                "GraphicsPipelineBuilder: vertex attribute location {} has an incompatible format",
+                location);
+            ErrorHandling::Ensure(
+                attribute->offset + format.bytes <= binding->stride,
+                "GraphicsPipelineBuilder: vertex attribute location {} exceeds binding {} stride",
+                location,
+                attribute->binding);
+        }
+    }
+    ErrorHandling::Ensure(
+        attributes.size() == required_count,
+        "GraphicsPipelineBuilder: {} vertex attributes were supplied but shaders require {}",
+        attributes.size(),
+        required_count);
+}
 }  // namespace
 
 GraphicsPipelineBuilder::GraphicsPipelineBuilder(Application& app)
@@ -36,21 +156,38 @@ GraphicsPipelineBuilder::GraphicsPipelineBuilder(DeviceContext& context)
 {
 }
 
-GraphicsPipelineBuilder::~GraphicsPipelineBuilder()
+GraphicsPipelineBuilder::~GraphicsPipelineBuilder() = default;
+
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::Layout(const PipelineLayout& layout)
 {
-    const VkDevice device = context_->GetDevice();
-    for (VkShaderModule module : owned_modules_) Vulkan::DestroyShaderModuleNE(device, module);
+    ErrorHandling::Ensure(!unchecked_layout_, "Cannot mix reflected and unchecked pipeline layouts");
+    reflected_layout_ = &layout;
+    layout_ = layout.GetHandle();
+    return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::Layout(VkPipelineLayout layout)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::UncheckedLayout(VkPipelineLayout layout)
 {
+    ErrorHandling::Ensure(reflected_layout_ == nullptr, "Cannot mix reflected and unchecked pipeline layouts");
+    unchecked_layout_ = true;
     layout_ = layout;
     return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::Stages(std::span<const VkPipelineShaderStageCreateInfo> stages)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::Stages(const ShaderStages& stages)
 {
-    external_stages_ = stages;
+    ErrorHandling::Ensure(unchecked_stages_.empty(), "Cannot mix reflected and unchecked shader stages");
+    reflected_stages_ = stages;
+    return *this;
+}
+
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::UncheckedStages(
+    std::span<const VkPipelineShaderStageCreateInfo> stages)
+{
+    ErrorHandling::Ensure(
+        reflected_stages_.GetCreateInfos().empty() && owned_modules_.empty(),
+        "Cannot mix reflected and unchecked shader stages");
+    unchecked_stages_ = stages;
     return *this;
 }
 
@@ -58,15 +195,13 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::ShaderFile(
     VkShaderStageFlagBits stage,
     const std::filesystem::path& path)
 {
-    const VkShaderModule module = context_->CreateShaderModuleFromSource(path);
-    owned_modules_.push_back(module);
-    owned_stages_.push_back(
-        VkPipelineShaderStageCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .stage = stage,
-            .module = module,
-            .pName = "main",
-        });
+    ErrorHandling::Ensure(unchecked_stages_.empty(), "Cannot mix reflected and unchecked shader stages");
+    ShaderModule module = context_->LoadShaderModule(path);
+    ErrorHandling::Ensure(
+        module.GetInterface()->stage == stage,
+        "Shader '{}' reflection stage does not match the pipeline stage",
+        path.string());
+    owned_modules_.emplace_back(stage, std::move(module));
     return *this;
 }
 
@@ -161,8 +296,46 @@ VkPipeline GraphicsPipelineBuilder::Build()
 {
     ErrorHandling::Ensure(layout_ != VK_NULL_HANDLE, "GraphicsPipelineBuilder: pipeline layout was not set");
 
+    ShaderStages owned_stages;
+    if (!owned_modules_.empty())
+    {
+        ErrorHandling::Ensure(
+            reflected_stages_.GetCreateInfos().empty(),
+            "GraphicsPipelineBuilder: file stages and external reflected stages cannot be mixed");
+        std::vector<VkPipelineShaderStageCreateInfo> create_infos;
+        std::vector<std::shared_ptr<const ShaderInterface>> interfaces;
+        for (const auto& [stage, module] : owned_modules_)
+        {
+            create_infos.push_back({
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .stage = stage,
+                .module = module.GetHandle(),
+                .pName = "main",
+            });
+            interfaces.push_back(module.GetInterface());
+        }
+        owned_stages = ShaderStages{std::move(create_infos), std::move(interfaces)};
+    }
+    const ShaderStages* reflected = !owned_stages.GetCreateInfos().empty()
+                                        ? &owned_stages
+                                        : (!reflected_stages_.GetCreateInfos().empty() ? &reflected_stages_ : nullptr);
+    const bool reflected_path = reflected != nullptr;
+    ErrorHandling::Ensure(
+        reflected_path == (reflected_layout_ != nullptr),
+        "GraphicsPipelineBuilder: reflected stages and reflected layout must be used together");
+    if (reflected_path)
+    {
+        (void)reflected_layout_->Validate(*reflected);
+        ValidateVertexInput(*reflected, vertex_bindings_, vertex_attributes_);
+    }
+    else
+    {
+        ErrorHandling::Ensure(
+            unchecked_layout_ && !unchecked_stages_.empty(),
+            "GraphicsPipelineBuilder: unchecked construction requires UncheckedLayout and UncheckedStages");
+    }
     const std::span<const VkPipelineShaderStageCreateInfo> stages =
-        external_stages_.empty() ? std::span<const VkPipelineShaderStageCreateInfo>{owned_stages_} : external_stages_;
+        reflected_path ? reflected->GetCreateInfos() : unchecked_stages_;
     ErrorHandling::Ensure(!stages.empty(), "GraphicsPipelineBuilder: no shader stages were set");
 
     const VkPipelineVertexInputStateCreateInfo vertex_input{

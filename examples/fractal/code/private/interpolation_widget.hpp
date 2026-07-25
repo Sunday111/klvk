@@ -4,6 +4,7 @@
 #include "klvk/camera/camera_2d.hpp"
 #include "klvk/shader/shader.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
+#include "klvk/vulkan/pipeline_layout.hpp"
 
 class FractalSettings;
 
@@ -25,7 +26,8 @@ private:
     klvk::Shader fullscreen_shader_;
     klvk::Shader widget_shader_;
     VkDescriptorSetLayout set_layout_ = VK_NULL_HANDLE;
+    klvk::DescriptorSetLayoutDescription set_layout_description_;
     VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
-    VkPipelineLayout pipeline_layout_ = VK_NULL_HANDLE;
+    klvk::PipelineLayout pipeline_layout_;
     VkPipeline pipeline_ = VK_NULL_HANDLE;
 };
