@@ -208,12 +208,16 @@ void DeviceContext::PickPhysicalDevice()
         if (presentation_enabled_ && !HasDeviceExtension(device, VK_KHR_SWAPCHAIN_EXTENSION_NAME)) continue;
 
         VkPhysicalDeviceVulkan13Features features13{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
-        VkPhysicalDeviceFeatures2 features2{
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+        VkPhysicalDeviceVulkan11Features features11{
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
             .pNext = &features13,
         };
+        VkPhysicalDeviceFeatures2 features2{
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+            .pNext = &features11,
+        };
         Vulkan::GetPhysicalDeviceFeatures2(device, features2);
-        if (!features13.dynamicRendering || !features13.synchronization2) continue;
+        if (!features11.shaderDrawParameters || !features13.dynamicRendering || !features13.synchronization2) continue;
 
         // Single queue family that can do both graphics and present keeps ownership simple.
         const auto families = Vulkan::GetPhysicalDeviceQueueFamilyProperties(device);
@@ -246,13 +250,15 @@ void DeviceContext::PickPhysicalDevice()
     {
         ErrorHandling::Ensure(
             physical_device_ != VK_NULL_HANDLE,
-            "No Vulkan device with 1.3 dynamic rendering and a graphics+present queue found");
+            "No Vulkan device with shader draw parameters, 1.3 dynamic rendering, synchronization2, and a "
+            "graphics+present queue found");
     }
     else
     {
         ErrorHandling::Ensure(
             physical_device_ != VK_NULL_HANDLE,
-            "No Vulkan device with 1.3 dynamic rendering and a graphics queue found");
+            "No Vulkan device with shader draw parameters, 1.3 dynamic rendering, synchronization2, and a graphics "
+            "queue found");
     }
 
     const VkPhysicalDeviceProperties properties = Vulkan::GetPhysicalDeviceProperties(physical_device_);
@@ -274,6 +280,11 @@ void DeviceContext::CreateDevice()
         .synchronization2 = VK_TRUE,
         .dynamicRendering = VK_TRUE,
     };
+    VkPhysicalDeviceVulkan11Features features11{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+        .pNext = &features13,
+        .shaderDrawParameters = VK_TRUE,
+    };
 
     // Optional features are enabled when the hardware has them; users query the
     // corresponding accessors before creating pipelines that need them.
@@ -284,7 +295,7 @@ void DeviceContext::CreateDevice()
 
     const VkPhysicalDeviceFeatures2 features2{
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-        .pNext = &features13,
+        .pNext = &features11,
         .features =
             {
                 .geometryShader = supported_features.geometryShader,
