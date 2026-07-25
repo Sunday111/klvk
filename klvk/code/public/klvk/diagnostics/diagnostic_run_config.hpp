@@ -63,6 +63,27 @@ struct DiagnosticVideoConfig
     bool log_ffmpeg = true;
 };
 
+// A checkpoint is a hash of the rendered framebuffer at one frame. Recorded on
+// a blessed run and re-checked on later ones, checkpoints answer the question a
+// replay actually needs answered: not "is this bit-exact" but "at which frame
+// did it stop matching".
+struct DiagnosticCheckpoint
+{
+    u64 frame = 0;
+    u64 hash = 0;
+
+    friend bool operator==(const DiagnosticCheckpoint&, const DiagnosticCheckpoint&) = default;
+};
+
+struct DiagnosticCheckpointConfig
+{
+    // Checkpoints are taken at every multiple of this frame count.
+    u64 every_frames = 0;
+    bool include_ui = false;
+    // Empty until a run is blessed; a later run compares against these.
+    std::vector<DiagnosticCheckpoint> expected;
+};
+
 struct DiagnosticMouseMoveInput
 {
     edt::Vec2f position{};
@@ -120,6 +141,7 @@ struct DiagnosticRunConfig
     std::vector<DiagnosticInputConfig> input;
     std::vector<DiagnosticCaptureConfig> captures;
     std::optional<DiagnosticVideoConfig> video;
+    std::optional<DiagnosticCheckpointConfig> checkpoints;
     DiagnosticExitConfig exit;
     nlohmann::json application = nlohmann::json::object();
 };
@@ -139,6 +161,9 @@ struct DiagnosticCommandLine
     // replayed offscreen in CI and in a real window while debugging without
     // editing the file.
     std::optional<DiagnosticPresentation> presentation;
+    // Writes the configuration back with this run's checkpoint hashes filled in,
+    // blessing it as the reference a later run is compared against.
+    std::optional<std::filesystem::path> write_checkpoints_path;
 };
 
 // Recognizes every klvk option in one pass, each spelled either as

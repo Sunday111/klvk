@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <vector>
 
 #include "diagnostic_events.hpp"
@@ -50,6 +51,13 @@ public:
         VkExtent2D extent,
         VkImageLayout final_layout);
 
+    // Empty when the run requested no checkpoints. Ordered by frame.
+    [[nodiscard]] const std::vector<DiagnosticCheckpoint>& GetCheckpoints() const noexcept { return checkpoints_; }
+
+    // The first frame whose hash disagreed with the configuration's expectation,
+    // or nullopt when nothing diverged (including when nothing was expected).
+    [[nodiscard]] std::optional<DiagnosticCheckpoint> GetFirstDivergence() const noexcept { return first_divergence_; }
+
     void ProcessCompletedFrame(size_t frame_in_flight);
     void ProcessAllCompleted();
     void EnsureComplete() const;
@@ -58,6 +66,9 @@ private:
     struct Capture
     {
         DiagnosticCaptureConfig config;
+        // A checkpoint is a capture whose pixels are hashed instead of written,
+        // so it reuses the whole scheduling and readback path unchanged.
+        std::optional<u64> checkpoint_frame;
         bool queued = false;
         bool recorded = false;
     };
@@ -69,6 +80,8 @@ private:
         VkExtent2D extent{};
         std::vector<std::filesystem::path> paths;
         std::optional<u64> video_frame;
+        // Set when this readback exists to be hashed rather than written out.
+        std::optional<u64> checkpoint_frame;
     };
 
     void OnCaptureDue(const events::DiagnosticCaptureDue& event);
@@ -79,7 +92,12 @@ private:
     void ScheduleQuit(const DiagnosticExitConfig& exit);
     void ProcessReadback(PendingCapture& capture);
 
+    void RecordCheckpoint(u64 frame, std::span<const std::byte> pixels);
+
     std::vector<Capture> captures_;
+    std::vector<DiagnosticCheckpoint> checkpoints_;
+    std::vector<DiagnosticCheckpoint> expected_checkpoints_;
+    std::optional<DiagnosticCheckpoint> first_divergence_;
     std::vector<std::vector<PendingCapture>> pending_;
     std::vector<size_t> queued_without_ui_;
     std::vector<size_t> queued_with_ui_;

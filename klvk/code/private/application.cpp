@@ -1,6 +1,7 @@
 #include "klvk/application.hpp"
 
 #include <backends/imgui_impl_vulkan.h>
+#include <fmt/core.h>
 #include <imgui.h>
 
 #include <algorithm>
@@ -20,6 +21,7 @@
 #include "klvk/events/application_events.hpp"
 #include "klvk/events/event_listener_method.hpp"
 #include "klvk/events/event_manager.hpp"
+#include "klvk/filesystem/filesystem.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/platform/os/os.hpp"
 #include "klvk/reflection/register_types.hpp"
@@ -85,6 +87,7 @@ struct Application::State
     std::optional<DiagnosticRunConfig> diagnostic_config_;
     std::unique_ptr<DiagnosticRunner> diagnostic_runner_;
     std::optional<std::filesystem::path> input_record_path_;
+    std::optional<std::filesystem::path> write_checkpoints_path_;
     std::unique_ptr<DiagnosticInputRecorder> input_recorder_;
 
     // The fixed step is exact nanoseconds, so logical time is an integer product
@@ -563,6 +566,18 @@ void Application::RunImpl()
         if (state_->diagnostic_runner_)
         {
             state_->diagnostic_runner_->ProcessAllCompleted();
+            if (state_->write_checkpoints_path_.has_value())
+            {
+                DiagnosticRunConfig blessed = *state_->diagnostic_config_;
+                blessed.checkpoints->expected = state_->diagnostic_runner_->GetCheckpoints();
+                Filesystem::WriteFile(
+                    *state_->write_checkpoints_path_,
+                    DiagnosticRunConfigToJson(blessed).dump(2) + "\n");
+                fmt::println(
+                    "klvk: wrote {} checkpoint hash(es) to {}",
+                    blessed.checkpoints->expected.size(),
+                    state_->write_checkpoints_path_->string());
+            }
             state_->diagnostic_runner_->EnsureComplete();
         }
     }
@@ -601,6 +616,13 @@ void Application::RunWithArguments(int argc, char** argv)
         state_->diagnostic_config_->presentation = *command_line.presentation;
     }
     state_->input_record_path_ = command_line.input_record_path;
+    if (command_line.write_checkpoints_path.has_value())
+    {
+        ErrorHandling::Ensure(
+            state_->diagnostic_config_.has_value() && state_->diagnostic_config_->checkpoints.has_value(),
+            "--klvk-write-checkpoints requires a diagnostic configuration with a 'checkpoints' section");
+        state_->write_checkpoints_path_ = command_line.write_checkpoints_path;
+    }
     Run();
 }
 
