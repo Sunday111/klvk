@@ -11,25 +11,15 @@ namespace
 {
 using namespace edt::lazy_matrix_aliases;  // NOLINT
 
-// The renderer only draws vertices, so each curve keeps its own control points,
-// tessellation parameters and vertex buffer.
 struct Curve
 {
     void Draw(Vec2f viewport_size, const Mat3f& world_to_view)
     {
-        klvk::CurveRenderer2d::BuildVertices(
-            points,
-            thickness,
-            segment_pixel_length,
-            viewport_size,
-            world_to_view,
-            vertices);
-        renderer->DrawVertices(vertices);
+        renderer->Draw(points, viewport_size, world_to_view, thickness, segment_pixel_length);
     }
 
     std::unique_ptr<klvk::CurveRenderer2d> renderer;
     std::vector<klvk::CurveRenderer2d::ControlPoint> points;
-    std::vector<klvk::CurveRenderer2d::Vertex> vertices;
     float thickness = 5.f;
     float segment_pixel_length = 8.f;
 };

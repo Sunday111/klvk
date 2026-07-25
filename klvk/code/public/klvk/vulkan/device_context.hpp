@@ -50,6 +50,9 @@ public:
     // True when the geometryShader feature was available and enabled on the device.
     [[nodiscard]] bool IsGeometryShaderEnabled() const noexcept { return geometry_shader_enabled_; }
 
+    // True when the tessellationShader feature was available and enabled on the device.
+    [[nodiscard]] bool IsTessellationShaderEnabled() const noexcept { return tessellation_shader_enabled_; }
+
     // True when VK_KHR_external_memory_fd was available and enabled, which lets device
     // memory allocated here be exported as an opaque fd and imported by another API (e.g. CUDA).
     [[nodiscard]] bool IsExternalMemoryFdEnabled() const noexcept { return external_memory_fd_enabled_; }
@@ -91,6 +94,7 @@ private:
     VmaAllocator allocator_ = VK_NULL_HANDLE;
     VkCommandPool one_time_pool_ = VK_NULL_HANDLE;
     bool geometry_shader_enabled_ = false;
+    bool tessellation_shader_enabled_ = false;
     bool external_memory_fd_enabled_ = false;
     bool presentation_enabled_ = false;
     std::unique_ptr<ShaderCacheManager> shader_cache_;

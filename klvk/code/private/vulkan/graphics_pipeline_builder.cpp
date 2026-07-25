@@ -210,6 +210,16 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::VertexShaderFile(const std::fi
     return ShaderFile(VK_SHADER_STAGE_VERTEX_BIT, path);
 }
 
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::TessellationControlShaderFile(const std::filesystem::path& path)
+{
+    return ShaderFile(VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, path);
+}
+
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::TessellationEvaluationShaderFile(const std::filesystem::path& path)
+{
+    return ShaderFile(VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, path);
+}
+
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::FragmentShaderFile(const std::filesystem::path& path)
 {
     return ShaderFile(VK_SHADER_STAGE_FRAGMENT_BIT, path);
@@ -223,6 +233,12 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::GeometryShaderFile(const std::
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::Topology(VkPrimitiveTopology topology)
 {
     topology_ = topology;
+    return *this;
+}
+
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::PatchControlPoints(u32 count)
+{
+    patch_control_points_ = count;
     return *this;
 }
 
@@ -338,6 +354,42 @@ VkPipeline GraphicsPipelineBuilder::Build()
         reflected_path ? reflected->GetCreateInfos() : unchecked_stages_;
     ErrorHandling::Ensure(!stages.empty(), "GraphicsPipelineBuilder: no shader stages were set");
 
+    const auto has_stage = [stages](VkShaderStageFlagBits stage)
+    {
+        return std::ranges::any_of(stages, [stage](const auto& info) { return info.stage == stage; });
+    };
+    const bool has_geometry = has_stage(VK_SHADER_STAGE_GEOMETRY_BIT);
+    const bool has_tessellation_control = has_stage(VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT);
+    const bool has_tessellation_evaluation = has_stage(VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT);
+    const bool has_tessellation = has_tessellation_control || has_tessellation_evaluation;
+    ErrorHandling::Ensure(
+        !has_geometry || context_->IsGeometryShaderEnabled(),
+        "GraphicsPipelineBuilder: geometry shader stage requires the geometryShader device feature");
+    ErrorHandling::Ensure(
+        has_tessellation_control == has_tessellation_evaluation,
+        "GraphicsPipelineBuilder: tessellation control and evaluation stages must be supplied together");
+    ErrorHandling::Ensure(
+        !has_tessellation || context_->IsTessellationShaderEnabled(),
+        "GraphicsPipelineBuilder: tessellation stages require the tessellationShader device feature");
+    ErrorHandling::Ensure(
+        has_tessellation == (topology_ == VK_PRIMITIVE_TOPOLOGY_PATCH_LIST),
+        "GraphicsPipelineBuilder: tessellation stages require patch-list topology, and patch-list topology requires "
+        "tessellation stages");
+    ErrorHandling::Ensure(
+        has_tessellation == (patch_control_points_ != 0),
+        "GraphicsPipelineBuilder: tessellation pipelines require a non-zero patch control-point count, and other "
+        "pipelines must not set one");
+    if (has_tessellation)
+    {
+        const VkPhysicalDeviceProperties properties =
+            Vulkan::GetPhysicalDeviceProperties(context_->GetPhysicalDevice());
+        ErrorHandling::Ensure(
+            patch_control_points_ <= properties.limits.maxTessellationPatchSize,
+            "GraphicsPipelineBuilder: {} patch control points exceed the device limit of {}",
+            patch_control_points_,
+            properties.limits.maxTessellationPatchSize);
+    }
+
     const VkPipelineVertexInputStateCreateInfo vertex_input{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .vertexBindingDescriptionCount = static_cast<u32>(vertex_bindings_.size()),
@@ -348,6 +400,10 @@ VkPipeline GraphicsPipelineBuilder::Build()
     const VkPipelineInputAssemblyStateCreateInfo input_assembly{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         .topology = topology_,
+    };
+    const VkPipelineTessellationStateCreateInfo tessellation{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
+        .patchControlPoints = patch_control_points_,
     };
     const VkPipelineViewportStateCreateInfo viewport_state{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
@@ -418,6 +474,7 @@ VkPipeline GraphicsPipelineBuilder::Build()
         .pStages = stages.data(),
         .pVertexInputState = &vertex_input,
         .pInputAssemblyState = &input_assembly,
+        .pTessellationState = has_tessellation ? &tessellation : nullptr,
         .pViewportState = &viewport_state,
         .pRasterizationState = &rasterization,
         .pMultisampleState = &multisample,

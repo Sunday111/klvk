@@ -157,17 +157,7 @@ class CurveFractalApp : public klvk::Application
     static constexpr float kCurveThickness = 1.f;
     static constexpr float kSegmentPixelLength = 8.f;
 
-    using Vertex = klvk::CurveRenderer2d::Vertex;
-
-    // The world-to-view transform the producer threads tessellate against. The
-    // render thread republishes it every frame; producers read the latest snapshot.
-    // While the camera is static (the usual case) this is exact; during a pan or
-    // zoom, curves already queued were baked against a slightly older transform.
-    struct SharedTransform
-    {
-        Mat3f world_to_view{};
-        Vec2f viewport_size{};
-    };
+    using ControlPoint = klvk::CurveRenderer2d::ControlPoint;
 
     struct OffscreenTarget
     {
@@ -195,12 +185,8 @@ class CurveFractalApp : public klvk::Application
         }
         draw_batch_.resize(kMaxCurvesPerFrame);
 
-        // Seed the transform the producers tessellate against before they start.
         const auto initial_viewport = klvk::Viewport::FromWindowSize(GetWindow().GetSize());
         transforms_.Update(camera_, initial_viewport, klvk::AspectRatioPolicy::ShrinkToFit);
-        shared_transform_ = {
-            .world_to_view = transforms_.world_to_view,
-            .viewport_size = initial_viewport.size.Cast<float>()};
 
         constexpr Vec2f eye{};
         constexpr float sample_extent = 3.f;
@@ -228,8 +214,7 @@ class CurveFractalApp : public klvk::Application
         std::mt19937_64 random(static_cast<unsigned>(color_seed));
         std::uniform_real_distribution<float> x_distribution(world_range.Min().x(), world_range.Max().x());
         std::uniform_real_distribution<float> y_distribution(world_range.Min().y(), world_range.Max().y());
-        std::vector<klvk::CurveRenderer2d::ControlPoint> points;
-        std::vector<Vertex> vertices;
+        std::vector<ControlPoint> points;
 
         while (!stop.stop_requested())
         {
@@ -254,26 +239,10 @@ class CurveFractalApp : public klvk::Application
                 points[i].color.w() = static_cast<float>(i) / static_cast<float>(num_points) * 0.2f;
             }
 
-            // Tessellate here on the producer thread (the expensive part), off the
-            // render thread. Uses the latest transform the render thread published.
-            SharedTransform transform;
-            {
-                std::scoped_lock transform_lock(transform_mutex_);
-                transform = shared_transform_;
-            }
-            klvk::CurveRenderer2d::BuildVertices(
-                points,
-                kCurveThickness,
-                kSegmentPixelLength,
-                transform.viewport_size,
-                transform.world_to_view,
-                vertices);
-            if (vertices.empty()) continue;
-
             std::unique_lock lock(queue_mutex_);
             queue_not_full_.wait(lock, stop, [&] { return produced_curves_.size() < kMaxCurves; });
             if (stop.stop_requested()) break;
-            produced_curves_.push_back(std::move(vertices));
+            produced_curves_.push_back(std::move(points));
         }
     }
 
@@ -405,16 +374,16 @@ class CurveFractalApp : public klvk::Application
 
         const auto viewport = klvk::Viewport::FromWindowSize(GetWindow().GetSize());
         transforms_.Update(camera_, viewport, klvk::AspectRatioPolicy::ShrinkToFit);
-        // Publish this frame's transform for the producer threads to tessellate
-        // against, then just upload and draw the vertices they already produced.
-        {
-            std::scoped_lock transform_lock(transform_mutex_);
-            shared_transform_ = {
-                .world_to_view = transforms_.world_to_view,
-                .viewport_size = viewport.size.Cast<float>()};
-        }
         const size_t curve_count = DrainProducedCurves();
-        for (size_t i = 0; i != curve_count; ++i) renderers_[i]->DrawVertices(draw_batch_[i]);
+        for (size_t i = 0; i != curve_count; ++i)
+        {
+            renderers_[i]->Draw(
+                draw_batch_[i],
+                viewport.size.Cast<float>(),
+                transforms_.world_to_view,
+                kCurveThickness,
+                kSegmentPixelLength);
+        }
         klvk::Vulkan::CmdEndRendering(command_buffer);
 
         barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -495,11 +464,9 @@ private:
     std::vector<std::jthread> producers_;
     std::mutex queue_mutex_;
     std::condition_variable_any queue_not_full_;
-    std::vector<std::vector<Vertex>> produced_curves_;
-    std::vector<std::vector<Vertex>> draw_batch_;
+    std::vector<std::vector<ControlPoint>> produced_curves_;
+    std::vector<std::vector<ControlPoint>> draw_batch_;
     std::vector<std::unique_ptr<klvk::CurveRenderer2d>> renderers_;
-    std::mutex transform_mutex_;
-    SharedTransform shared_transform_;
     OffscreenTarget target_{};
     klvk::DescriptorSets descriptor_sets_;
     klvk::VkObject<VkSampler> sampler_;

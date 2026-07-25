@@ -190,14 +190,12 @@ class PendulumApp : public klvk::Application
         }
         if (trail_.size() > 10)
         {
-            klvk::CurveRenderer2d::BuildVertices(
+            trail_renderer_->Draw(
                 trail_,
-                kTrailThickness,
-                kTrailSegmentPixelLength,
                 viewport.size.Cast<float>(),
                 transforms_.world_to_view,
-                trail_vertices_);
-            trail_renderer_->DrawVertices(trail_vertices_);
+                kTrailThickness,
+                kTrailSegmentPixelLength);
         }
     }
 
@@ -220,7 +218,6 @@ private:
     std::unique_ptr<klvk::CurveRenderer2d> trail_renderer_;
     std::vector<DoublePendulum> pendulums_;
     std::vector<klvk::CurveRenderer2d::ControlPoint> trail_;
-    std::vector<klvk::CurveRenderer2d::Vertex> trail_vertices_;
     float time_scale_ = 1.f;
     float total_trail_distance_ = 0.f;
 };

@@ -1,5 +1,13 @@
-// Port of curve2d.vert. Vertex attributes come from a vertex buffer; locations
-// match the C++ vertex input layout exactly.
+struct PushConstants
+{
+    float4 transform_x;
+    float4 transform_y;
+    float2 viewport_size;
+    float thickness;
+    float segment_pixel_length;
+};
+
+[[vk::push_constant]] PushConstants pc;
 
 struct VertexInput
 {
@@ -17,7 +25,11 @@ struct VertexOutput
 VertexOutput main(VertexInput input)
 {
     VertexOutput output;
-    output.position = float4(input.position, 0.0, 1.0);
+    output.position = float4(
+        dot(pc.transform_x.xyz, float3(input.position, 1.0)),
+        dot(pc.transform_y.xyz, float3(input.position, 1.0)),
+        0.0,
+        1.0);
     output.color = input.color;
     return output;
 }

@@ -24,42 +24,31 @@ public:
         Vec4f color{};
     };
 
-    // The stroke geometry produced by BuildVertices: a triangle list already in
-    // clip space, so the vertex shader is a pass-through.
-    struct Vertex
-    {
-        Vec2f position{};
-        Vec4u8 color{};
-    };
-
     explicit CurveRenderer2d(Application& app);
     CurveRenderer2d(Application& app, VkFormat color_format);
     CurveRenderer2d(const CurveRenderer2d&) = delete;
     CurveRenderer2d(CurveRenderer2d&&) = delete;
     ~CurveRenderer2d();
 
-    // Tessellates a curve (Catmull-Rom sampling plus miter joins) into out. This
-    // is pure CPU work touching no instance or GPU state, so it is safe to call
-    // from any thread - e.g. on the producer threads that generate the curves.
-    static void BuildVertices(
+    // Uploads compact control points and records a GPU-tessellated draw. Call at
+    // most once per renderer per frame: another call overwrites this frame's
+    // persistently mapped vertex and index buffers before submission.
+    void Draw(
         std::span<const ControlPoint> points,
-        float thickness,
-        float segment_pixel_length,
         Vec2f viewport_size,
         const Mat3f& world_to_view,
-        std::vector<Vertex>& out);
-
-    // Uploads pre-built vertices into this frame's buffer and records the draw
-    // into the application's current command buffer. Must run on the render thread.
-    void DrawVertices(std::span<const Vertex> vertices);
+        float thickness,
+        float segment_pixel_length);
 
 private:
-    void EnsureBuffer(size_t frame_index, size_t bytes);
+    void EnsureBuffers(size_t frame_index, size_t vertex_bytes, size_t index_bytes);
 
     Application* app_ = nullptr;
     PipelineLayout pipeline_layout_;
     VkObject<VkPipeline> pipeline_;
-    std::array<GpuBuffer, Application::kFramesInFlight> buffers_{};
+    std::array<GpuBuffer, Application::kFramesInFlight> vertex_buffers_{};
+    std::array<GpuBuffer, Application::kFramesInFlight> index_buffers_{};
+    std::vector<u32> indices_;
 };
 
 }  // namespace klvk

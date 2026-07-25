@@ -45,10 +45,13 @@ public:
 
     // Compile a GLSL source through the device's shader cache and own the module.
     GraphicsPipelineBuilder& VertexShaderFile(const std::filesystem::path& path);
+    GraphicsPipelineBuilder& TessellationControlShaderFile(const std::filesystem::path& path);
+    GraphicsPipelineBuilder& TessellationEvaluationShaderFile(const std::filesystem::path& path);
     GraphicsPipelineBuilder& FragmentShaderFile(const std::filesystem::path& path);
     GraphicsPipelineBuilder& GeometryShaderFile(const std::filesystem::path& path);
 
     GraphicsPipelineBuilder& Topology(VkPrimitiveTopology topology);
+    GraphicsPipelineBuilder& PatchControlPoints(u32 count);
     GraphicsPipelineBuilder& PolygonMode(VkPolygonMode mode);
     GraphicsPipelineBuilder& CullMode(VkCullModeFlags mode, VkFrontFace front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE);
 
@@ -88,6 +91,7 @@ private:
     const PipelineLayout* reflected_layout_ = nullptr;
     bool unchecked_layout_ = false;
     VkPrimitiveTopology topology_ = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    u32 patch_control_points_ = 0;
     VkPolygonMode polygon_mode_ = VK_POLYGON_MODE_FILL;
     VkCullModeFlags cull_mode_ = VK_CULL_MODE_NONE;
     VkFrontFace front_face_ = VK_FRONT_FACE_COUNTER_CLOCKWISE;

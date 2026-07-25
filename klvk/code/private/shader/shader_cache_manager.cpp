@@ -31,7 +31,7 @@ namespace
 constexpr u64 kFnvOffset = 14695981039346656037ull;
 constexpr u64 kFnvPrime = 1099511628211ull;
 constexpr u32 kCacheFormatVersion = 2;
-constexpr u32 kReflectionMetadataVersion = 3;
+constexpr u32 kReflectionMetadataVersion = 4;
 constexpr u32 kSpirvMagic = 0x07230203;
 constexpr size_t kMaximumSpirvBytes = 256 * 1024 * 1024;
 constexpr size_t kMaximumMetadataBytes = 16 * 1024 * 1024;
@@ -686,6 +686,34 @@ ShaderInterface ParseSlangInterface(slang::ProgramLayout& layout)
 
     for (const auto& parameter : entry_point.value("parameters", nlohmann::json::array()))
     {
+        const auto& parameter_type = parameter.at("type");
+        const auto& parameter_binding = parameter.value("binding", nlohmann::json::object());
+        // Slang serializes InputPatch/OutputPatch wrapper parameters as an
+        // opaque `None` type. Their element varyings are represented by the
+        // neighboring tessellation stage's result and cannot be decoded here.
+        const bool is_opaque_patch = (result.stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT ||
+                                      result.stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) &&
+                                     parameter_type.value("kind", "") == "None" &&
+                                     parameter_binding.value("kind", "") == "varyingInput";
+        if (is_opaque_patch) continue;
+        if (result.stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT && parameter_type.value("kind", "") == "struct")
+        {
+            const auto fields = parameter_type.value("fields", nlohmann::json::array());
+            const auto is_tessellation_builtin = [](const auto& field)
+            {
+                const std::string semantic = field.value("semanticName", "");
+                return semantic == "SV_TESSFACTOR" || semantic == "SV_INSIDETESSFACTOR";
+            };
+            const bool has_tessellation_builtin = std::ranges::any_of(fields, is_tessellation_builtin);
+            if (has_tessellation_builtin)
+            {
+                ErrorHandling::Ensure(
+                    std::ranges::all_of(fields, is_tessellation_builtin),
+                    "Slang JSON reflection cannot represent domain interfaces with user patch constants");
+                // Built-in-only patch constants are not per-vertex stage inputs.
+                continue;
+            }
+        }
         const bool is_output_stream = parameter.at("type").value("kind", "") == "outputStream";
         AppendInterfaceVariables(is_output_stream ? result.outputs : result.inputs, parameter);
     }

@@ -82,6 +82,48 @@ void TestPureValidation()
     }
 }
 
+void TestTessellationReflection(const std::filesystem::path& cache)
+{
+    std::filesystem::path repository = std::filesystem::path{__FILE__}.parent_path();
+    for (size_t i = 0; i != 4; ++i) repository = repository.parent_path();
+    const auto sources = repository / "klvk/content/shaders/klvk";
+    const std::array paths{
+        sources / "curve2d.vert.slang",
+        sources / "curve2d.hull.slang",
+        sources / "curve2d.domain.slang",
+        sources / "curve2d.geom.slang",
+        sources / "curve2d.frag.slang",
+    };
+    std::vector<std::shared_ptr<const klvk::ShaderInterface>> cold_interfaces;
+    {
+        klvk::ShaderCacheManager manager(sources, cache);
+        for (const auto& path : paths)
+        {
+            const auto compiled = manager.GetOrCompile(path);
+            Ensure(compiled->interface != nullptr, "curve tessellation stage was not reflected");
+            cold_interfaces.push_back(compiled->interface);
+        }
+        const auto program = klvk::MergeShaderInterfaces(cold_interfaces);
+        constexpr VkShaderStageFlags expected_stages =
+            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+            VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        Ensure(program.stages == expected_stages, "curve tessellation stage mask is incomplete");
+        Ensure(program.push_constants.size() == 1, "curve push constants were not merged");
+        constexpr VkShaderStageFlags push_stages = VK_SHADER_STAGE_VERTEX_BIT |
+                                                   VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+                                                   VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+        Ensure(program.push_constants.front().stages == push_stages, "curve push-constant stages are incorrect");
+    }
+    {
+        klvk::ShaderCacheManager manager(sources, cache);
+        for (size_t i = 0; i != paths.size(); ++i)
+        {
+            const auto warm = manager.GetOrCompile(paths[i]);
+            Ensure(*warm->interface == *cold_interfaces[i], "warm tessellation reflection differs from cold");
+        }
+    }
+}
+
 void Run()
 {
     TestPureValidation();
@@ -91,12 +133,14 @@ void Run()
     const std::filesystem::path sources = root / "sources";
     const std::filesystem::path cache = root / "cache";
     std::filesystem::create_directories(sources);
+    TestTessellationReflection(root / "tessellation_cache");
     const std::filesystem::path shader = sources / "test.comp";
     const std::filesystem::path slang_shader = sources / "test.comp.slang";
     const std::filesystem::path reflection_shader = sources / "reflection.comp.slang";
     const std::filesystem::path vertex_shader = sources / "varying.vert.slang";
     const std::filesystem::path geometry_shader = sources / "varying.geom.slang";
     const std::filesystem::path fragment_shader = sources / "varying.frag.slang";
+    const std::filesystem::path unsupported_patch_shader = sources / "unsupported_patch.domain.slang";
     const std::filesystem::path slang_dependency = sources / "dependency.slang";
     Write(shader, "#version 450\nlayout(local_size_x=1) in; void main() {}\n");
 
@@ -206,6 +250,29 @@ void Run()
             varying_program.stages ==
                 (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
             "vertex-geometry-fragment interface merge failed");
+
+        Write(
+            unsupported_patch_shader,
+            "struct ControlPoint { float4 position : SV_Position; };\n"
+            "struct PatchConstants { float factors[2] : SV_TessFactor; float user_value : TEXCOORD0; };\n"
+            "[shader(\"domain\")] [domain(\"isoline\")]\n"
+            "float4 main(PatchConstants constants, float2 uv : SV_DomainLocation,\n"
+            "  const OutputPatch<ControlPoint, 2> patch) : SV_Position {\n"
+            "  return patch[0].position + constants.user_value * 0.0 + uv.x * 0.0;\n"
+            "}\n");
+        try
+        {
+            (void)manager.GetOrCompile(unsupported_patch_shader);
+            throw std::runtime_error("user patch constants were accepted");
+        }
+        catch (const std::exception& error)
+        {
+            Ensure(
+                std::string_view(error.what())
+                        .find("Slang JSON reflection cannot represent domain interfaces with user patch constants") !=
+                    std::string_view::npos,
+                "user patch constants produced an unclear reflection error");
+        }
 
         Write(slang_dependency, "static const uint dependency_value = 1;\n");
         Write(

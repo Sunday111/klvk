@@ -280,11 +280,16 @@ void DeviceContext::CreateDevice()
     VkPhysicalDeviceFeatures supported_features{};
     vkGetPhysicalDeviceFeatures(physical_device_, &supported_features);
     geometry_shader_enabled_ = supported_features.geometryShader == VK_TRUE;
+    tessellation_shader_enabled_ = supported_features.tessellationShader == VK_TRUE;
 
     const VkPhysicalDeviceFeatures2 features2{
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         .pNext = &features13,
-        .features = {.geometryShader = supported_features.geometryShader},
+        .features =
+            {
+                .geometryShader = supported_features.geometryShader,
+                .tessellationShader = supported_features.tessellationShader,
+            },
     };
 
     std::vector<const char*> extensions;
