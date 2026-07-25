@@ -1,6 +1,7 @@
 #include <imgui.h>
 
 #include <EverydayTools/Math/Math.hpp>
+#include <cmath>
 
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
@@ -26,6 +27,17 @@ struct Curve
 
 class CurveApp : public klvk::Application
 {
+    void UpdateExtremeCurve(float time)
+    {
+        extreme_.points[0].position = {-0.8f, 0.60f};
+        extreme_.points[1].position = {-0.4f, 0.60f};
+        extreme_.points[2].position = {0.18f + 0.08f * std::sin(1.7f * time), 0.60f};
+        extreme_.points[3].position = {0.30f + 0.22f * std::sin(2.3f * time), 0.48f + 0.15f * std::cos(1.9f * time)};
+        extreme_.points[4].position = {0.18f - 0.08f * std::sin(1.3f * time), 0.36f};
+        extreme_.points[5].position = {-0.4f, 0.36f};
+        extreme_.points[6].position = {-0.8f, 0.36f};
+    }
+
     void Initialize() override
     {
         klvk::Application::Initialize();
@@ -72,6 +84,7 @@ class CurveApp : public klvk::Application
         };
         extreme_.thickness = 120.f;
         extreme_.segment_pixel_length = 100.f;
+        UpdateExtremeCurve(0.f);
     }
 
     void Tick() override
@@ -80,6 +93,7 @@ class CurveApp : public klvk::Application
         ImGui::SliderFloat("Spiral thickness", &spiral_.thickness, 1.f, 60.f);
         ImGui::SliderFloat("Secondary thickness", &secondary_.thickness, 1.f, 60.f);
         ImGui::SliderFloat("Extreme thickness", &extreme_.thickness, 10.f, 180.f);
+        UpdateExtremeCurve(GetTimeSeconds());
         const Vec2f viewport = GetWindow().GetFramebufferSize().Cast<float>();
         const float minimum_extent = viewport.Min();
         const Mat3f view = edt::Math::ScaleMatrix(minimum_extent / viewport);
