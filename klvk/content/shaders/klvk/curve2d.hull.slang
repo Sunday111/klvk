@@ -5,6 +5,7 @@ struct PushConstants
     float2 viewport_size;
     float thickness;
     float segment_pixel_length;
+    float antialias;
 };
 
 [[vk::push_constant]] PushConstants pc;

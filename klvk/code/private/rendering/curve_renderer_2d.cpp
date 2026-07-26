@@ -27,10 +27,47 @@ struct alignas(16) PushConstants
     Vec2f viewport_size{};
     float thickness = 0.f;
     float segment_pixel_length = 0.f;
+    // Antialiasing half-width in pixels. 1 gives smooth, round-capped strokes
+    // (CompositeMode::Union); 0 gives sharp, butt-capped strokes whose per-segment
+    // quads do not overlap at joints (CompositeMode::Accumulate) so alpha-over
+    // accumulation does not double-count them.
+    float antialias = 1.f;
 };
 
 static_assert(sizeof(CurveRenderer2d::ControlPoint) == 24);
-static_assert(sizeof(PushConstants) == 48);
+static_assert(sizeof(PushConstants) == 64);
+
+// The fragment shader outputs premultiplied color (rgb*coverage*a, coverage*a).
+// CompositeMode::Union takes the per-channel MAX so overlapping/self-intersecting
+// coverage unions instead of alpha-over double-blending; it is correct only over a
+// black/transparent clear (the direct-to-target consumers clear to (0,0,0,0)).
+constexpr VkPipelineColorBlendAttachmentState kUnionBlend{
+    .blendEnable = VK_TRUE,
+    .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,   // factors ignored by MAX; must be valid enums
+    .dstColorBlendFactor = VK_BLEND_FACTOR_ONE,
+    .colorBlendOp = VK_BLEND_OP_MAX,
+    .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+    .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+    .alphaBlendOp = VK_BLEND_OP_MAX,
+    .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+};
+
+// CompositeMode::Accumulate is premultiplied alpha-over - identical to straight
+// alpha-over for the composited result, so many stacked or frame-accumulated
+// strokes build up additively as before, now antialiased. Correct over any
+// background; use this when curves accumulate into a persistent target.
+constexpr VkPipelineColorBlendAttachmentState kAccumulateBlend{
+    .blendEnable = VK_TRUE,
+    .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+    .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+    .colorBlendOp = VK_BLEND_OP_ADD,
+    .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+    .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+    .alphaBlendOp = VK_BLEND_OP_ADD,
+    .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+};
 
 size_t GrowCapacity(size_t required)
 {
@@ -47,9 +84,10 @@ size_t GrowCapacity(size_t required)
 
 }  // namespace
 
-CurveRenderer2d::CurveRenderer2d(Application& app) : CurveRenderer2d(app, app.GetSwapchainFormat()) {}
+CurveRenderer2d::CurveRenderer2d(Application& app) : CurveRenderer2d(app, app.GetSwapchainFormat(), CompositeMode::Union) {}
 
-CurveRenderer2d::CurveRenderer2d(Application& app, VkFormat color_format) : app_(&app)
+CurveRenderer2d::CurveRenderer2d(Application& app, VkFormat color_format, CompositeMode composite)
+    : app_(&app), composite_(composite)
 {
     auto& context = app.GetDeviceContext();
     ErrorHandling::Ensure(
@@ -58,7 +96,8 @@ CurveRenderer2d::CurveRenderer2d(Application& app, VkFormat color_format) : app_
     ErrorHandling::Ensure(context.IsGeometryShaderEnabled(), "CurveRenderer2d requires Vulkan geometry-shader support");
 
     constexpr VkShaderStageFlags push_stages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
-                                               VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+                                               VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
+                                               VK_SHADER_STAGE_GEOMETRY_BIT;
     const std::array push_ranges{VkPushConstantRange{
         .stageFlags = push_stages,
         .offset = 0,
@@ -79,7 +118,7 @@ CurveRenderer2d::CurveRenderer2d(Application& app, VkFormat color_format) : app_
             .VertexBinding(0, sizeof(ControlPoint), VK_VERTEX_INPUT_RATE_VERTEX)
             .VertexAttribute(0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(ControlPoint, position))
             .VertexAttribute(1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(ControlPoint, color))
-            .AlphaBlend()
+            .Blend(composite == CompositeMode::Accumulate ? kAccumulateBlend : kUnionBlend)
             .ColorFormat(color_format)
             .Build()};
 }
@@ -162,6 +201,7 @@ void CurveRenderer2d::Draw(
         .viewport_size = viewport_size,
         .thickness = thickness,
         .segment_pixel_length = segment_pixel_length,
+        .antialias = composite_ == CompositeMode::Union ? 1.f : 0.f,
     };
     const VkCommandBuffer command_buffer = app_->GetCurrentCommandBuffer();
     const std::array vertex_buffers{vertex_buffers_[frame].GetHandle()};
@@ -173,7 +213,7 @@ void CurveRenderer2d::Draw(
         command_buffer,
         pipeline_layout_.GetHandle(),
         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
-            VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
+            VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_GEOMETRY_BIT,
         0,
         constants);
     Vulkan::CmdDrawIndexed(command_buffer, static_cast<u32>(indices_.size()), 1, 0, 0, 0);

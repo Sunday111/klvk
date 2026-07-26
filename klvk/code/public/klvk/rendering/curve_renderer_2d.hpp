@@ -6,6 +6,7 @@
 
 #include "EverydayTools/Math/Matrix.hpp"
 #include "klvk/application.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/pipeline_layout.hpp"
 #include "klvk/vulkan/vk_object.hpp"
@@ -24,8 +25,20 @@ public:
         Vec4f color{};
     };
 
+    // How overlapping coverage combines. Both antialias.
+    enum class CompositeMode : u8
+    {
+        // Overlapping coverage unions (max): a few self-intersecting strokes read
+        // as one silhouette with no double-blend. Correct only over a black clear.
+        Union,
+        // Overlapping coverage composites with alpha-over, so many stacked or
+        // frame-accumulated strokes build up additively (e.g. a curve fractal that
+        // accumulates into a persistent target). Correct over any background.
+        Accumulate,
+    };
+
     explicit CurveRenderer2d(Application& app);
-    CurveRenderer2d(Application& app, VkFormat color_format);
+    CurveRenderer2d(Application& app, VkFormat color_format, CompositeMode composite = CompositeMode::Union);
     CurveRenderer2d(const CurveRenderer2d&) = delete;
     CurveRenderer2d(CurveRenderer2d&&) = delete;
     ~CurveRenderer2d();
@@ -44,6 +57,7 @@ private:
     void EnsureBuffers(size_t frame_index, size_t vertex_bytes, size_t index_bytes);
 
     Application* app_ = nullptr;
+    CompositeMode composite_ = CompositeMode::Union;
     PipelineLayout pipeline_layout_;
     VkObject<VkPipeline> pipeline_;
     std::array<GpuBuffer, Application::kFramesInFlight> vertex_buffers_{};

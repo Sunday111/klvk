@@ -181,7 +181,7 @@ class CurveFractalApp : public klvk::Application
         renderers_.reserve(kMaxCurvesPerFrame);
         for (size_t i = 0; i != kMaxCurvesPerFrame; ++i)
         {
-            renderers_.emplace_back(std::make_unique<klvk::CurveRenderer2d>(*this, kOffscreenFormat));
+            renderers_.emplace_back(std::make_unique<klvk::CurveRenderer2d>(*this, kOffscreenFormat, klvk::CurveRenderer2d::CompositeMode::Accumulate));
         }
         draw_batch_.resize(kMaxCurvesPerFrame);
 
@@ -372,8 +372,18 @@ class CurveFractalApp : public klvk::Application
         klvk::Vulkan::CmdSetViewport(command_buffer, 0, std::span{&offscreen_viewport, 1});
         klvk::Vulkan::CmdSetScissor(command_buffer, 0, std::span{&scissor, 1});
 
-        const auto viewport = klvk::Viewport::FromWindowSize(GetWindow().GetSize());
+        // The offscreen pass renders at kFramebufferResolution, so the curve
+        // renderer's viewport_size (which its coverage math keys pixel-space
+        // distance on) and the camera aspect must both use that target size, not
+        // the window size — they differ whenever the window is smaller than the
+        // fixed offscreen target (e.g. a diagnostic capture forces a small size).
+        const auto viewport = klvk::Viewport::FromWindowSize(kFramebufferResolution);
         transforms_.Update(camera_, viewport, klvk::AspectRatioPolicy::ShrinkToFit);
+        // thickness and segment length are authored in display pixels; scale them
+        // to the offscreen target so a curve keeps the same on-screen weight (and
+        // the same accumulated density) as when it was drawn at the window size.
+        const float target_scale =
+            static_cast<float>(kFramebufferResolution.y()) / static_cast<float>(GetWindow().GetSize().y());
         const size_t curve_count = DrainProducedCurves();
         for (size_t i = 0; i != curve_count; ++i)
         {
@@ -381,8 +391,8 @@ class CurveFractalApp : public klvk::Application
                 draw_batch_[i],
                 viewport.size.Cast<float>(),
                 transforms_.world_to_view,
-                kCurveThickness,
-                kSegmentPixelLength);
+                kCurveThickness * target_scale,
+                kSegmentPixelLength * target_scale);
         }
         klvk::Vulkan::CmdEndRendering(command_buffer);
 
