@@ -2,6 +2,18 @@
     "dependencies": {
         "packages": [
             {
+                "link": "https://github.com/Sunday111/EverydayTools main",
+                "packages": [
+                    "EverydayTools"
+                ]
+            },
+            {
+                "link": "https://github.com/Sunday111/CppReflection main",
+                "packages": [
+                    "CppReflection"
+                ]
+            },
+            {
                 "link": "https://github.com/Sunday111/imgui_glfw_cmake yae",
                 "packages": [
                     "imgui_glfw_cmake"
