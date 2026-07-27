@@ -2,6 +2,12 @@
     "dependencies": {
         "packages": [
             {
+                "link": "https://github.com/Sunday111/ass main",
+                "packages": [
+                    "ass"
+                ]
+            },
+            {
                 "link": "https://github.com/Sunday111/EverydayTools main",
                 "packages": [
                     "EverydayTools"
