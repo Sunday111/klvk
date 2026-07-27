@@ -3,8 +3,8 @@
 
 #include <limits>
 
-#include "cpp_reflection/get_static_type_info.hpp"
-#include "cpp_reflection/type_registry.hpp"
+#include "refl/get_static_type_info.hpp"
+#include "refl/type_registry.hpp"
 #include "ass/fixed_unordered_map.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/integral_aliases.hpp"
@@ -244,7 +244,7 @@ inline constexpr auto kGuidToWidget = []
 
     auto add = [&]<typename T, typename Widget>(const std::tuple<T, Widget>&)
     {
-        auto guid = cppreflection::GetStaticTypeGUID<T>();
+        auto guid = refl::GetStaticTypeGUID<T>();
         if (map.Contains(guid))
         {
             throw std::runtime_error("Cannot add twice");
@@ -297,7 +297,7 @@ const TypeWidgets& GetTypeWidgets(const edt::GUID& guid)
         return kGuidToWidget.Get(guid);
     }
 
-    const auto type_info = cppreflection::GetTypeRegistry()->FindType(guid);
+    const auto type_info = refl::GetTypeRegistry()->FindType(guid);
     if (!type_info)
     {
         const auto char_arr = guid.ToCharArray();
@@ -324,8 +324,8 @@ bool SimpleTypeWidget(edt::GUID type_guid, std::string_view name, const void* va
 
 void TypeIdWidget(edt::GUID type_guid, void* base, bool& value_changed)
 {
-    const cppreflection::Type* type_info = cppreflection::GetTypeRegistry()->FindType(type_guid);
-    for (const cppreflection::Field* field : type_info->GetFields())
+    const refl::Type* type_info = refl::GetTypeRegistry()->FindType(type_guid);
+    for (const refl::Field* field : type_info->GetFields())
     {
         void* pmember = field->GetValue(base);
         value_changed |= SimpleTypeWidget(field->GetType()->GetGuid(), field->GetName(), pmember);

@@ -110,7 +110,7 @@ set_generic_compiler_options(klvk PRIVATE)
 target_link_libraries(klvk PUBLIC ass
                                   edt
                                   fmt
-                                  CppReflection
+                                  refl
                                   cpptrace::cpptrace
                                   expected
                                   magic_enum

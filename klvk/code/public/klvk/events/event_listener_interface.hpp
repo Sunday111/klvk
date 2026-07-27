@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <vector>
 
-namespace cppreflection
+namespace refl
 {
 class Type;
 }
@@ -16,7 +16,7 @@ public:
     using CallbackFunction = void (*)(IEventListener* listener, const void* event_data);
 
     virtual ~IEventListener() = default;
-    [[nodiscard]] virtual std::vector<const cppreflection::Type*> GetEventTypes() const = 0;
+    [[nodiscard]] virtual std::vector<const refl::Type*> GetEventTypes() const = 0;
     virtual CallbackFunction MakeCallbackFunction(const size_t index) = 0;
 };
 }  // namespace klvk::events

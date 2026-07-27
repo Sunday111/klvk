@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "cpp_reflection/get_type_info.hpp"
+#include "refl/get_type_info.hpp"
 #include "detail.hpp"
 #include "event_listener_interface.hpp"
 
@@ -32,9 +32,9 @@ public:
 
     static constexpr size_t kEventsCount = sizeof...(methods);
 
-    [[nodiscard]] std::vector<const cppreflection::Type*> GetEventTypes() const override
+    [[nodiscard]] std::vector<const refl::Type*> GetEventTypes() const override
     {
-        return {cppreflection::GetTypeInfo<std::decay_t<detail::ArgByIndex<decltype(methods), 0>>>()...};
+        return {refl::GetTypeInfo<std::decay_t<detail::ArgByIndex<decltype(methods), 0>>>()...};
     }
 
     static EventListenerMethodCallbacks Create(ObjectType* object)

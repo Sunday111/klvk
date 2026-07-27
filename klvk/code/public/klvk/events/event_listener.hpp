@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cpp_reflection/get_type_info.hpp>
+#include <refl/get_type_info.hpp>
 #include <concepts>
 #include <functional>
 #include <memory>
@@ -20,9 +20,9 @@ public:
     template <size_t index>
     using EventTypeByIndex = std::tuple_element_t<index, std::tuple<EventTypes...>>;
 
-    std::vector<const cppreflection::Type*> GetEventTypes() const override
+    std::vector<const refl::Type*> GetEventTypes() const override
     {
-        return {cppreflection::GetTypeInfo<EventTypes>()...};
+        return {refl::GetTypeInfo<EventTypes>()...};
     }
 
     template <typename... Functors>

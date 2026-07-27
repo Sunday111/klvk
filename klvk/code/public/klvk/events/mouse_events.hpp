@@ -1,7 +1,7 @@
 #pragma once
 
-#include "cpp_reflection/reflection_provider.hpp"
-#include "cpp_reflection/static_type/class.hpp"
+#include "refl/reflection_provider.hpp"
+#include "refl/static_type/class.hpp"
 #include "edt/math/matrix.hpp"
 #include "klvk/input.hpp"
 
@@ -28,7 +28,7 @@ public:
 };
 }  // namespace klvk::events
 
-namespace cppreflection
+namespace refl
 {
 
 template <>
@@ -36,7 +36,7 @@ struct TypeReflectionProvider<klvk::events::OnMouseMove>
 {
     [[nodiscard]] inline constexpr static auto ReflectType()
     {
-        return cppreflection::StaticClassTypeInfo<klvk::events::OnMouseMove>(
+        return refl::StaticClassTypeInfo<klvk::events::OnMouseMove>(
             "OnMouseMove",
             edt::GUID::Create("92FDFAB7-0D48-44A0-B0A3-9C2FA3EE9E68"));
     }
@@ -47,7 +47,7 @@ struct TypeReflectionProvider<klvk::events::OnMouseScroll>
 {
     [[nodiscard]] inline constexpr static auto ReflectType()
     {
-        return cppreflection::StaticClassTypeInfo<klvk::events::OnMouseScroll>(
+        return refl::StaticClassTypeInfo<klvk::events::OnMouseScroll>(
             "OnMouseScroll",
             edt::GUID::Create("14FD5774-D251-49E4-92CC-8134242E266A"));
     }
@@ -58,10 +58,10 @@ struct TypeReflectionProvider<klvk::events::OnMouseButton>
 {
     [[nodiscard]] inline constexpr static auto ReflectType()
     {
-        return cppreflection::StaticClassTypeInfo<klvk::events::OnMouseButton>(
+        return refl::StaticClassTypeInfo<klvk::events::OnMouseButton>(
             "OnMouseButton",
             edt::GUID::Create("651B35BC-7D83-4F22-9F0D-946929A66892"));
     }
 };
 
-}  // namespace cppreflection
+}  // namespace refl

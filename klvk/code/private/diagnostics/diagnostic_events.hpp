@@ -2,8 +2,8 @@
 
 #include <cstddef>
 
-#include "cpp_reflection/reflection_provider.hpp"
-#include "cpp_reflection/static_type/class.hpp"
+#include "refl/reflection_provider.hpp"
+#include "refl/static_type/class.hpp"
 #include "edt/guid.hpp"
 
 namespace klvk::events
@@ -16,7 +16,7 @@ struct DiagnosticCaptureDue
 
 }  // namespace klvk::events
 
-namespace cppreflection
+namespace refl
 {
 
 template <>
@@ -24,10 +24,10 @@ struct TypeReflectionProvider<klvk::events::DiagnosticCaptureDue>
 {
     [[nodiscard]] inline constexpr static auto ReflectType()
     {
-        return cppreflection::StaticClassTypeInfo<klvk::events::DiagnosticCaptureDue>(
+        return refl::StaticClassTypeInfo<klvk::events::DiagnosticCaptureDue>(
             "DiagnosticCaptureDue",
             edt::GUID::Create("FF2447D1-27C4-40C3-8230-666031DD28D0"));
     }
 };
 
-}  // namespace cppreflection
+}  // namespace refl

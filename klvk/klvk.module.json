@@ -5,7 +5,7 @@
             "ass",
             "edt",
             "fmtlib",
-            "CppReflection",
+            "refl",
             "cpptrace",
             "expected",
             "magic_enum",

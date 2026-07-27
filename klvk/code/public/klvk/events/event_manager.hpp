@@ -1,8 +1,8 @@
 #pragma once
 
-#include <cpp_reflection/get_type_info.hpp>
+#include <refl/get_type_info.hpp>
 
-#include "cpp_reflection/type.hpp"
+#include "refl/type.hpp"
 #include "ankerl/unordered_dense.h"
 #include "klvk/events/event_listener_interface.hpp"
 #include "klvk/integral_aliases.hpp"
@@ -15,7 +15,7 @@ class EventManager
 public:
     struct ListenerInfo
     {
-        ankerl::unordered_dense::set<const cppreflection::Type*> registered_types;
+        ankerl::unordered_dense::set<const refl::Type*> registered_types;
     };
 
     struct ListenerTypeEntry
@@ -24,7 +24,7 @@ public:
         IEventListener::CallbackFunction callback;
     };
 
-    void Emit(const cppreflection::Type* event_type, const void* event_data);
+    void Emit(const refl::Type* event_type, const void* event_data);
 
     // Registers event listeners and takes ownership on the object
     [[nodiscard("Use return value to remove event listener")]] IEventListener* AddEventListener(
@@ -40,14 +40,14 @@ public:
     template <typename EventType>
     void Emit(const EventType& event)
     {
-        Emit(cppreflection::GetTypeInfo<EventType>(), &event);
+        Emit(refl::GetTypeInfo<EventType>(), &event);
     }
 
 private:
-    void StopListeningEventType(IEventListener* listener, const cppreflection::Type* type);
+    void StopListeningEventType(IEventListener* listener, const refl::Type* type);
 
 private:
-    ankerl::unordered_dense::map<const cppreflection::Type*, std::vector<ListenerTypeEntry>> type_lookup_;
+    ankerl::unordered_dense::map<const refl::Type*, std::vector<ListenerTypeEntry>> type_lookup_;
     ankerl::unordered_dense::map<IEventListener*, ListenerInfo> all_listeners_;
 
     struct PtrHasher

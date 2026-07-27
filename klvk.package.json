@@ -14,9 +14,9 @@
                 ]
             },
             {
-                "link": "https://github.com/Sunday111/CppReflection main",
+                "link": "https://github.com/Sunday111/refl main",
                 "packages": [
-                    "CppReflection"
+                    "refl"
                 ]
             },
             {

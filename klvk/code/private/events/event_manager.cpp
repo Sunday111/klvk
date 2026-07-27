@@ -31,7 +31,7 @@ IEventListener* EventManager::AddEventListener(IEventListener& listener)
     }
     catch (...)
     {
-        for (const cppreflection::Type* type : iterator->second.registered_types)
+        for (const refl::Type* type : iterator->second.registered_types)
         {
             StopListeningEventType(&listener, type);
         }
@@ -65,7 +65,7 @@ void EventManager::UpdateListenTypes(IEventListener* listener)
         }
     }
 
-    for (const cppreflection::Type* type : previous_types)
+    for (const refl::Type* type : previous_types)
     {
         if (!listener_info.registered_types.contains(type))
         {
@@ -82,7 +82,7 @@ void EventManager::RemoveListener(IEventListener* listener)
 
     {
         auto& info = all_listeners_[listener];
-        for (const cppreflection::Type* type : info.registered_types)
+        for (const refl::Type* type : info.registered_types)
         {
             StopListeningEventType(listener, type);
         }
@@ -92,7 +92,7 @@ void EventManager::RemoveListener(IEventListener* listener)
     owned_listeners_.erase(listener);
 }
 
-void EventManager::Emit(const cppreflection::Type* event_type, const void* event_data)
+void EventManager::Emit(const refl::Type* event_type, const void* event_data)
 {
     auto iterator = type_lookup_.find(event_type);
     if (iterator == type_lookup_.end()) return;
@@ -104,7 +104,7 @@ void EventManager::Emit(const cppreflection::Type* event_type, const void* event
     }
 }
 
-void EventManager::StopListeningEventType(IEventListener* listener, const cppreflection::Type* type)
+void EventManager::StopListeningEventType(IEventListener* listener, const refl::Type* type)
 {
     if (auto it = type_lookup_.find(type); it != type_lookup_.end())
     {
