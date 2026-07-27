@@ -1,6 +1,6 @@
 #pragma once
 
-#include <CppReflection/GetTypeInfo.hpp>
+#include <cpp_reflection/get_type_info.hpp>
 
 #include "klvk/reflection/matrix_reflect.hpp"  // IWYU pragma: keep
 #include "type_id_widget_minimal.hpp"

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <CppReflection/GetTypeInfo.hpp>
+#include <cpp_reflection/get_type_info.hpp>
 
-#include "CppReflection/Type.hpp"
+#include "cpp_reflection/type.hpp"
 #include "ankerl/unordered_dense.h"
 #include "klvk/events/event_listener_interface.hpp"
 #include "klvk/integral_aliases.hpp"

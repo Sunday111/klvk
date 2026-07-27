@@ -2,8 +2,8 @@
 
 #include <cstddef>
 
-#include "CppReflection/ReflectionProvider.hpp"
-#include "CppReflection/StaticType/class.hpp"
+#include "cpp_reflection/reflection_provider.hpp"
+#include "cpp_reflection/static_type/class.hpp"
 #include "edt/guid.hpp"
 
 namespace klvk::events

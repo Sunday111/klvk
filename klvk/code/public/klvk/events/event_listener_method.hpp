@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "CppReflection/GetTypeInfo.hpp"
+#include "cpp_reflection/get_type_info.hpp"
 #include "detail.hpp"
 #include "event_listener_interface.hpp"
 

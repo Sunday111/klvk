@@ -3,8 +3,8 @@
 
 #include <limits>
 
-#include "CppReflection/GetStaticTypeInfo.hpp"
-#include "CppReflection/TypeRegistry.hpp"
+#include "cpp_reflection/get_static_type_info.hpp"
+#include "cpp_reflection/type_registry.hpp"
 #include "ass/fixed_unordered_map.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/integral_aliases.hpp"

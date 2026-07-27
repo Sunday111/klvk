@@ -1,6 +1,6 @@
 #pragma once
 
-#include <CppReflection/GetTypeInfo.hpp>
+#include <cpp_reflection/get_type_info.hpp>
 #include <concepts>
 #include <functional>
 #include <memory>
