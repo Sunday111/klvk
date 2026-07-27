@@ -1,7 +1,7 @@
 #include <imgui.h>
 
-#include <EverydayTools/Math/Math.hpp>
-#include <EverydayTools/Template/TaggedIdentifier.hpp>
+#include <edt/math/math.hpp>
+#include <edt/template/tagged_identifier.hpp>
 #include <limits>
 #include <optional>
 #include <random>

@@ -5,7 +5,7 @@
 #include <optional>
 #include <ranges>
 
-#include "EverydayTools/Math/Matrix.hpp"
+#include "edt/math/matrix.hpp"
 #include "klvk/error_handling.hpp"
 
 template <std::integral T>

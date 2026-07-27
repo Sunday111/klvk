@@ -2,7 +2,7 @@
 
 #include "CppReflection/ReflectionProvider.hpp"
 #include "CppReflection/StaticType/class.hpp"
-#include "EverydayTools/GUID.hpp"
+#include "edt/guid.hpp"
 #include "klvk/input.hpp"
 
 namespace klvk::events

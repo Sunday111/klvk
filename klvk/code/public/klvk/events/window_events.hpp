@@ -2,7 +2,7 @@
 
 #include "CppReflection/ReflectionProvider.hpp"
 #include "CppReflection/StaticType/class.hpp"
-#include "EverydayTools/Math/Matrix.hpp"
+#include "edt/math/matrix.hpp"
 
 namespace klvk::events
 {

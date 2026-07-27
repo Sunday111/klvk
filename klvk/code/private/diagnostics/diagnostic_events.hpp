@@ -4,7 +4,7 @@
 
 #include "CppReflection/ReflectionProvider.hpp"
 #include "CppReflection/StaticType/class.hpp"
-#include "EverydayTools/GUID.hpp"
+#include "edt/guid.hpp"
 
 namespace klvk::events
 {

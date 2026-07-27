@@ -1,6 +1,6 @@
 #pragma once
 
-#include "EverydayTools/Math/Math.hpp"
+#include "edt/math/math.hpp"
 
 namespace klvk
 {

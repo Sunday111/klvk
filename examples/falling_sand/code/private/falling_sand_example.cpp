@@ -1,8 +1,8 @@
 #include <fmt/format.h>
 #include <imgui.h>
 
-#include <EverydayTools/Math/Math.hpp>
-#include <EverydayTools/Template/TaggedIdentifier.hpp>
+#include <edt/math/math.hpp>
+#include <edt/template/tagged_identifier.hpp>
 #include <ass/fixed_bitset.hpp>
 #include <set>
 #include <string>

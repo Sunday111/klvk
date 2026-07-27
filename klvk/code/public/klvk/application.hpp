@@ -4,7 +4,7 @@
 #include <memory>
 #include <optional>
 
-#include "EverydayTools/Math/Matrix.hpp"
+#include "edt/math/matrix.hpp"
 #include "klvk/diagnostics/diagnostic_run_config.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 

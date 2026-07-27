@@ -1,7 +1,7 @@
 #include "klvk/mesh/procedural_mesh_generator.hpp"
 
-#include "EverydayTools/Math/Constants.hpp"
-#include "EverydayTools/Math/Math.hpp"
+#include "edt/math/constants.hpp"
+#include "edt/math/math.hpp"
 #include "klvk/integral_aliases.hpp"
 
 namespace klvk

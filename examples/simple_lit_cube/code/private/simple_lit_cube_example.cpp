@@ -1,6 +1,6 @@
 #include <imgui.h>
 
-#include <EverydayTools/Math/Math.hpp>
+#include <edt/math/math.hpp>
 
 #include "klvk/application.hpp"
 #include "klvk/camera/camera_3d.hpp"

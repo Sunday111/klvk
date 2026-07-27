@@ -2,8 +2,8 @@
 
 #include <vector>
 
-#include "EverydayTools/Math/Matrix.hpp"
-#include "EverydayTools/Ranges/ArrayIndices2d.hpp"
+#include "edt/math/matrix.hpp"
+#include "edt/ranges/array_indices2d.hpp"
 #include "klvk/integral_aliases.hpp"
 
 namespace klvk

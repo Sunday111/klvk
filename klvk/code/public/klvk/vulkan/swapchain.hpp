@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "EverydayTools/Math/Matrix.hpp"
+#include "edt/math/matrix.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/render_target.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"

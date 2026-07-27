@@ -3,7 +3,7 @@
 #include <array>
 #include <vector>
 
-#include "EverydayTools/Math/Matrix.hpp"
+#include "edt/math/matrix.hpp"
 #include "klvk/application.hpp"
 #include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"

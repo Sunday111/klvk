@@ -2,7 +2,7 @@
 
 #include <span>
 
-#include "EverydayTools/Math/Matrix.hpp"
+#include "edt/math/matrix.hpp"
 
 class Clipboard
 {

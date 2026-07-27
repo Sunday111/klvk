@@ -1,7 +1,7 @@
 #pragma once
 
-#include <EverydayTools/Math/Math.hpp>
-#include <EverydayTools/Math/Matrix.hpp>
+#include <edt/math/math.hpp>
+#include <edt/math/matrix.hpp>
 #include <vector>
 
 #include "klvk/camera/camera_2d.hpp"

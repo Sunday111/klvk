@@ -2,7 +2,7 @@
 
 #include <string_view>
 
-#include "EverydayTools/GUID.hpp"
+#include "edt/guid.hpp"
 
 namespace klvk
 {

@@ -8,7 +8,7 @@
 #include <variant>
 #include <vector>
 
-#include "EverydayTools/Math/Matrix.hpp"
+#include "edt/math/matrix.hpp"
 #include "klvk/input.hpp"
 #include "klvk/integral_aliases.hpp"
 

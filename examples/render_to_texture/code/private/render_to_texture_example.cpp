@@ -4,7 +4,7 @@
 
 #include <vk_mem_alloc.h>
 
-#include <EverydayTools/Math/Math.hpp>
+#include <edt/math/math.hpp>
 
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"

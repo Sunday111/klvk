@@ -1,7 +1,7 @@
 #pragma once
 
-#include <EverydayTools/Math/FloatRange.hpp>
-#include <EverydayTools/Math/Math.hpp>
+#include <edt/math/float_range.hpp>
+#include <edt/math/math.hpp>
 
 #include "klvk/integral_aliases.hpp"
 #include "viewport.hpp"

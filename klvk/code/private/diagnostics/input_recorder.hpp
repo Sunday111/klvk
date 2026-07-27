@@ -5,7 +5,7 @@
 #include <optional>
 #include <vector>
 
-#include "EverydayTools/Math/Matrix.hpp"
+#include "edt/math/matrix.hpp"
 #include "klvk/diagnostics/diagnostic_run_config.hpp"
 #include "klvk/events/event_listener_interface.hpp"
 #include "klvk/events/keyboard_events.hpp"

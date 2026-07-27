@@ -5,7 +5,7 @@
 #include <imgui.h>
 #include <vk_mem_alloc.h>
 
-#include <EverydayTools/Math/Math.hpp>
+#include <edt/math/math.hpp>
 #include <bit>
 #include <condition_variable>
 #include <mutex>

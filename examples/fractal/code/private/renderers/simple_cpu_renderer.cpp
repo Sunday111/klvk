@@ -2,7 +2,7 @@
 
 #include <vk_mem_alloc.h>
 
-#include <EverydayTools/Math/Math.hpp>
+#include <edt/math/math.hpp>
 
 #include "../fractal_settings.hpp"
 #include "klvk/integral_aliases.hpp"

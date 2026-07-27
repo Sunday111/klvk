@@ -6,7 +6,7 @@
 #include <concepts>
 #include <limits>
 
-#include "EverydayTools/Concepts/Callable.hpp"
+#include "edt/concepts/callable.hpp"
 #include "imgui.h"
 
 namespace klvk

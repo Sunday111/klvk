@@ -1,6 +1,6 @@
 #include <imgui.h>
 
-#include <EverydayTools/Math/Math.hpp>
+#include <edt/math/math.hpp>
 #include <cmath>
 
 #include "klvk/application.hpp"
