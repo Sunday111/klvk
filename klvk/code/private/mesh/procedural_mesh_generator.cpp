@@ -1,6 +1,7 @@
 #include "klvk/mesh/procedural_mesh_generator.hpp"
 
-#include "edt/math/constants.hpp"
+#include <numbers>
+
 #include "edt/math/math.hpp"
 #include "klvk/integral_aliases.hpp"
 
@@ -57,7 +58,7 @@ std::optional<GeneratedMeshData2d> ProceduralMeshGenerator::GenerateCircleMesh(s
     result.indices.resize(triangles_count + 2);
     result.vertices[1] = {0.f, 1.f};
 
-    const edt::Mat3f rotation = edt::Math::RotationMatrix2d(2 * edt::kPi<float> / static_cast<float>(triangles_count));
+    const edt::Mat3f rotation = edt::Math::RotationMatrix2d(2 * std::numbers::pi_v<float> / static_cast<float>(triangles_count));
     for (size_t index = 2; index != result.vertices.size(); ++index)
     {
         result.vertices[index] = edt::Math::TransformVector(rotation, result.vertices[index - 1]);
