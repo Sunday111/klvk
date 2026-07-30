@@ -25,7 +25,6 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/platform/os/os.hpp"
 #include "klvk/reflection/register_types.hpp"
-#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/timing/timer_manager.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/offscreen_render_target.hpp"

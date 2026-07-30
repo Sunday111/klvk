@@ -1,10 +1,9 @@
 #pragma once
 
-#include "refl/get_type_info.hpp"
-#include "refl/type_registry.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/reflection/matrix_reflect.hpp"  // IWYU pragma: keep (provides reflection for matrices)
-#include "klvk/signed_integral_aliases.hpp"
+#include "refl/get_type_info.hpp"
+#include "refl/type_registry.hpp"
 
 namespace klvk
 {

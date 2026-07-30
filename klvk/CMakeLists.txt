@@ -58,6 +58,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/mouse_events.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/window_events.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/filesystem/filesystem.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/float_aliases.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/input.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/integral_aliases.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/macro/ensure_enum_size.hpp
@@ -75,7 +76,6 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/shader_interface.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/shader_module.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/shader_stages.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/signed_integral_aliases.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/class_member_traits.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/constexpr_string_hash.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/get_enum_underlying.hpp

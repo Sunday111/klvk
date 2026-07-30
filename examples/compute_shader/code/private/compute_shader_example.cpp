@@ -15,7 +15,6 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/math/rotator.hpp"
 #include "klvk/shader/shader.hpp"
-#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/template/on_scope_leave.hpp"
 #include "klvk/ui/simple_type_widget.hpp"
 #include "klvk/vulkan/descriptor_sets.hpp"

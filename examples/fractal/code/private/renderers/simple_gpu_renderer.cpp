@@ -1,7 +1,7 @@
 #include "simple_gpu_renderer.hpp"
 
 #include "../fractal_settings.hpp"
-#include "klvk/signed_integral_aliases.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 
 // Vulkan create-info structs are designed for partial designated initialization;

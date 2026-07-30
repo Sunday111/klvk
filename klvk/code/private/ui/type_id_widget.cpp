@@ -3,14 +3,13 @@
 
 #include <limits>
 
-#include "refl/get_static_type_info.hpp"
-#include "refl/type_registry.hpp"
 #include "ass/fixed_unordered_map.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/reflection/matrix_reflect.hpp"  // IWYU pragma: keep
-#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/ui/type_id_widget_minimal.hpp"
+#include "refl/get_static_type_info.hpp"
+#include "refl/type_registry.hpp"
 
 namespace klvk
 {

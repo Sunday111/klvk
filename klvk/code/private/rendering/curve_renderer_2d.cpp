@@ -6,7 +6,6 @@
 
 #include "klvk/error_handling.hpp"
 #include "klvk/integral_aliases.hpp"
-#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
@@ -43,14 +42,14 @@ static_assert(sizeof(PushConstants) == 64);
 // black/transparent clear (the direct-to-target consumers clear to (0,0,0,0)).
 constexpr VkPipelineColorBlendAttachmentState kUnionBlend{
     .blendEnable = VK_TRUE,
-    .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,   // factors ignored by MAX; must be valid enums
+    .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,  // factors ignored by MAX; must be valid enums
     .dstColorBlendFactor = VK_BLEND_FACTOR_ONE,
     .colorBlendOp = VK_BLEND_OP_MAX,
     .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
     .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
     .alphaBlendOp = VK_BLEND_OP_MAX,
-    .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+    .colorWriteMask =
+        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
 };
 
 // CompositeMode::Accumulate is premultiplied alpha-over - identical to straight
@@ -65,8 +64,8 @@ constexpr VkPipelineColorBlendAttachmentState kAccumulateBlend{
     .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
     .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
     .alphaBlendOp = VK_BLEND_OP_ADD,
-    .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+    .colorWriteMask =
+        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
 };
 
 size_t GrowCapacity(size_t required)
@@ -84,10 +83,14 @@ size_t GrowCapacity(size_t required)
 
 }  // namespace
 
-CurveRenderer2d::CurveRenderer2d(Application& app) : CurveRenderer2d(app, app.GetSwapchainFormat(), CompositeMode::Union) {}
+CurveRenderer2d::CurveRenderer2d(Application& app)
+    : CurveRenderer2d(app, app.GetSwapchainFormat(), CompositeMode::Union)
+{
+}
 
 CurveRenderer2d::CurveRenderer2d(Application& app, VkFormat color_format, CompositeMode composite)
-    : app_(&app), composite_(composite)
+    : app_(&app),
+      composite_(composite)
 {
     auto& context = app.GetDeviceContext();
     ErrorHandling::Ensure(

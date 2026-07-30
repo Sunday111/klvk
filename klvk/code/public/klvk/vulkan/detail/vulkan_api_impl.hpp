@@ -14,7 +14,6 @@
 #include <utility>
 
 #include "klvk/integral_aliases.hpp"
-#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 
 namespace klvk

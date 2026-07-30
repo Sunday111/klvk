@@ -11,7 +11,6 @@
 
 #include "klvk/error_handling.hpp"
 #include "klvk/integral_aliases.hpp"
-#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/timing/timer_manager.hpp"
 #include "platform/input_mapping.hpp"
 

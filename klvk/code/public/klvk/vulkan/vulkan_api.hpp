@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "klvk/integral_aliases.hpp"
-#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/vulkan/detail/settings.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
