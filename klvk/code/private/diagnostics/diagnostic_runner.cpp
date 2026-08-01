@@ -12,6 +12,7 @@
 #include <set>
 #include <type_traits>
 
+#include "edt/functional/on_scope_leave.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/events/application_events.hpp"
 #include "klvk/events/event_listener_method.hpp"
@@ -19,7 +20,6 @@
 #include "klvk/filesystem/filesystem.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/platform/os/os.hpp"
-#include "klvk/template/on_scope_leave.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
@@ -445,7 +445,7 @@ void DiagnosticRunner::ProcessReadback(PendingCapture& capture)
                 os::GetProcessId(),
                 temporary_sequence.fetch_add(1, std::memory_order_relaxed));
             bool installed = false;
-            auto remove_temporary = OnScopeLeave(
+            auto remove_temporary = edt::OnScopeLeave(
                 [&]
                 {
                     if (installed) return;

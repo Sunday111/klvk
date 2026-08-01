@@ -1,7 +1,6 @@
 #include "fractal_app.hpp"
 
 #include <klvk/error_handling.hpp>
-#include <klvk/template/on_scope_leave.hpp>
 
 #include "clipboard.hpp"
 #include "imgui.h"

@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include "edt/functional/on_scope_leave.hpp"
 #include "klvk/error_handling.hpp"
-#include "klvk/template/on_scope_leave.hpp"
 
 namespace klvk
 {
@@ -843,7 +843,7 @@ u64 TimerManager::Advance(TimerDuration elapsed, u64 frame, u64 callback_budget)
     state_->current_time = elapsed_ns;
     state_->current_frame = frame;
     state_->advancing = true;
-    auto reset_advancing = OnScopeLeave([this] { state_->advancing = false; });
+    auto reset_advancing = edt::OnScopeLeave([this] { state_->advancing = false; });
 
     State::DueEntry current_entry;
     u64 invocation_count = 0;
