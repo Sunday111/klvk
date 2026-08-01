@@ -15,6 +15,13 @@ void Ensure(bool condition, std::string_view message)
     if (!condition) throw std::runtime_error(std::string(message));
 }
 
+template <typename... Args>
+    requires(sizeof...(Args) > 0)
+void Ensure(bool condition, fmt::format_string<Args...> format, Args&&... args)
+{
+    if (!condition) throw std::runtime_error(fmt::format(format, std::forward<Args>(args)...));
+}
+
 void Write(const std::filesystem::path& path, std::string_view text)
 {
     std::ofstream file(path, std::ios::binary | std::ios::trunc);
@@ -109,10 +116,16 @@ void TestTessellationReflection(const std::filesystem::path& cache)
             VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         Ensure(program.stages == expected_stages, "curve tessellation stage mask is incomplete");
         Ensure(program.push_constants.size() == 1, "curve push constants were not merged");
-        constexpr VkShaderStageFlags push_stages = VK_SHADER_STAGE_VERTEX_BIT |
-                                                   VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
-                                                   VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-        Ensure(program.push_constants.front().stages == push_stages, "curve push-constant stages are incorrect");
+        // Every stage that reads the push constants has to be named here, and the geometry
+        // stage reads them too.
+        constexpr VkShaderStageFlags push_stages =
+            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+            VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_GEOMETRY_BIT;
+        Ensure(
+            program.push_constants.front().stages == push_stages,
+            "curve push-constant stages are incorrect: expected {:#x}, got {:#x}",
+            push_stages,
+            program.push_constants.front().stages);
     }
     {
         klvk::ShaderCacheManager manager(sources, cache);
