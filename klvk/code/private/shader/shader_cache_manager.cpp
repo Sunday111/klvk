@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iomanip>
 #include <limits>
+#include <ranges>
 #include <nlohmann/json.hpp>
 #include <shaderc/shaderc.hpp>
 #include <span>
@@ -571,19 +572,17 @@ ShaderInterface DeserializeInterface(std::string_view text)
     }
     auto parse_variables = [](const nlohmann::json& values)
     {
-        std::vector<ShaderInterfaceVariable> result;
-        for (const auto& value : values)
-        {
-            result.push_back({
-                .name = value.at("name").get<std::string>(),
-                .semantic = value.at("semantic").get<std::string>(),
-                .location = value.at("location").get<u32>(),
-                .location_count = value.at("location_count").get<u32>(),
-                .type = ValueTypeFromJson(value.at("type")),
-                .built_in = value.at("built_in").get<bool>(),
-            });
-        }
-        return result;
+        return values | std::views::transform([](const nlohmann::json& value) {
+                   return ShaderInterfaceVariable{
+                       .name = value.at("name").get<std::string>(),
+                       .semantic = value.at("semantic").get<std::string>(),
+                       .location = value.at("location").get<u32>(),
+                       .location_count = value.at("location_count").get<u32>(),
+                       .type = ValueTypeFromJson(value.at("type")),
+                       .built_in = value.at("built_in").get<bool>(),
+                   };
+               }) |
+               std::ranges::to<std::vector>();
     };
     result.inputs = parse_variables(json.at("inputs"));
     result.outputs = parse_variables(json.at("outputs"));
