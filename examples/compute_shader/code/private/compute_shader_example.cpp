@@ -6,7 +6,7 @@
 #include <string>
 
 #include "edt/functional/on_scope_leave.hpp"
-#include "klvk/math/rotator.hpp"
+#include "edt/math/rotator.hpp"
 #include "klvk/application.hpp"
 #include "klvk/camera/camera_3d.hpp"
 #include "klvk/error_handling.hpp"
@@ -62,9 +62,9 @@ struct Body
 {
     Vec3f orbit_center{};
     float orbit_radius = 5.f;
-    klvk::Rotator initial_rotation{};
-    klvk::Rotator rotation_per_second{};
-    klvk::Rotator rotation{};
+    edt::Rotator initial_rotation{};
+    edt::Rotator rotation_per_second{};
+    edt::Rotator rotation{};
 };
 
 class ComputeShaderApp : public klvk::Application
@@ -332,7 +332,7 @@ class ComputeShaderApp : public klvk::Application
 
         if (ImGui::CollapsingHeader("Bodies"))
         {
-            auto rotator_widget = [](std::string_view title, klvk::Rotator& rotator)
+            auto rotator_widget = [](std::string_view title, edt::Rotator& rotator)
             {
                 if (ImGui::CollapsingHeader(title.data()))
                 {

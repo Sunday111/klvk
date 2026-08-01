@@ -2,6 +2,7 @@
 
 #include <edt/math/math.hpp>
 
+#include "edt/math/transform.hpp"
 #include "klvk/application.hpp"
 #include "klvk/camera/camera_3d.hpp"
 #include "klvk/error_handling.hpp"
@@ -10,7 +11,6 @@
 #include "klvk/events/mouse_events.hpp"
 #include "klvk/filesystem/filesystem.hpp"
 #include "klvk/integral_aliases.hpp"
-#include "klvk/math/transform.hpp"
 #include "klvk/mesh/procedural_mesh_generator.hpp"
 #include "klvk/ui/simple_type_widget.hpp"
 #include "klvk/vulkan/descriptor_sets.hpp"
@@ -95,7 +95,7 @@ class SimpleLitCubeApp : public klvk::Application
             for (int y = -10; y != 11; ++y)
             {
                 cubes_.push_back(
-                    klvk::Transform{
+                    edt::Transform{
                         .translation = edt::Vec3i{x, y, 0}.Cast<float>(),
                         .scale = {0.3f, 0.3f, 0.3f},
                     }
