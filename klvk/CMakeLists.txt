@@ -106,7 +106,6 @@ target_link_libraries(klvk PUBLIC ass
                                   fmt
                                   refl
                                   cpptrace::cpptrace
-                                  expected
                                   magic_enum
                                   unordered_dense
                                   nlohmann_json

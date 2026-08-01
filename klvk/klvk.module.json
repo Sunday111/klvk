@@ -7,7 +7,6 @@
             "fmtlib",
             "refl",
             "cpptrace",
-            "expected",
             "magic_enum",
             "unordered_dense",
             "nlohmann_json",

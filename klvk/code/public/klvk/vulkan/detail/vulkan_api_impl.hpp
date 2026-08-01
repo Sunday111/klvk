@@ -8,6 +8,7 @@
 #include <fmt/format.h>
 // clang-format on
 
+#include <cassert>
 #include <exception>
 #include <limits>
 #include <string_view>
@@ -40,7 +41,7 @@ struct Vulkan::Internal
     }
 
     template <typename T>
-    [[nodiscard]] static tl::expected<T, VulkanError> ValueOrError(
+    [[nodiscard]] static std::expected<T, VulkanError> ValueOrError(
         VkCallResult<T>&& call_result,
         std::string_view function_name) noexcept
     {
@@ -49,7 +50,7 @@ struct Vulkan::Internal
             return std::move(call_result).value;
         }
 
-        return tl::unexpected{MakeError(call_result.result, function_name, cpptrace::generate_raw_trace(1))};
+        return std::unexpected{MakeError(call_result.result, function_name, cpptrace::generate_raw_trace(1))};
     }
 
     [[nodiscard]] static std::optional<VulkanError> ErrorOrNothing(
@@ -64,15 +65,15 @@ struct Vulkan::Internal
         return MakeError(result, function_name, cpptrace::generate_raw_trace(1));
     }
 
-    [[nodiscard]] static tl::unexpected<VulkanError> Unexpected(
+    [[nodiscard]] static std::unexpected<VulkanError> Unexpected(
         VkResult result,
         std::string_view function_name) noexcept
     {
-        return tl::unexpected{MakeError(result, function_name, cpptrace::generate_raw_trace(1))};
+        return std::unexpected{MakeError(result, function_name, cpptrace::generate_raw_trace(1))};
     }
 
     template <typename T>
-    [[nodiscard]] static T TakeValue(tl::expected<T, VulkanError>&& expected)
+    [[nodiscard]] static T TakeValue(std::expected<T, VulkanError>&& expected)
     {
         if (expected.has_value())
         {
@@ -137,7 +138,7 @@ VkCallResult<u32> Vulkan::AcquireNextImageKHRNE(
     return {.result = result, .value = image_index};
 }
 
-tl::expected<AcquireNextImageOutcome, VulkanError> Vulkan::AcquireNextImageKHRCE(
+std::expected<AcquireNextImageOutcome, VulkanError> Vulkan::AcquireNextImageKHRCE(
     VkDevice device,
     VkSwapchainKHR swapchain,
     u64 timeout,
@@ -187,7 +188,7 @@ VkCallResult<std::vector<VkCommandBuffer>> Vulkan::AllocateCommandBuffersNE(
     return {.result = result, .value = std::move(command_buffers)};
 }
 
-tl::expected<std::vector<VkCommandBuffer>, VulkanError> Vulkan::AllocateCommandBuffersCE(
+std::expected<std::vector<VkCommandBuffer>, VulkanError> Vulkan::AllocateCommandBuffersCE(
     VkDevice device,
     const VkCommandBufferAllocateInfo& allocate_info) noexcept
 {
@@ -210,7 +211,7 @@ VkCallResult<std::vector<VkDescriptorSet>> Vulkan::AllocateDescriptorSetsNE(
     return {.result = result, .value = std::move(descriptor_sets)};
 }
 
-tl::expected<std::vector<VkDescriptorSet>, VulkanError> Vulkan::AllocateDescriptorSetsCE(
+std::expected<std::vector<VkDescriptorSet>, VulkanError> Vulkan::AllocateDescriptorSetsCE(
     VkDevice device,
     const VkDescriptorSetAllocateInfo& allocate_info) noexcept
 {
@@ -254,7 +255,7 @@ void Vulkan::BeginCommandBuffer(VkCommandBuffer command_buffer, const VkCommandB
         return {.result = result, .value = handle};                                                  \
     }                                                                                                \
                                                                                                      \
-    tl::expected<HandleType, VulkanError> Vulkan::Name##CE(                                          \
+    std::expected<HandleType, VulkanError> Vulkan::Name##CE(                                          \
         ParentType parent_name,                                                                      \
         const InfoType& create_info,                                                                 \
         const VkAllocationCallbacks* allocator) noexcept                                             \
@@ -342,7 +343,7 @@ VkCallResult<VkInstance> Vulkan::CreateInstanceNE(
     return {.result = result, .value = instance};
 }
 
-tl::expected<VkInstance, VulkanError> Vulkan::CreateInstanceCE(
+std::expected<VkInstance, VulkanError> Vulkan::CreateInstanceCE(
     const VkInstanceCreateInfo& create_info,
     const VkAllocationCallbacks* allocator) noexcept
 {
@@ -371,7 +372,7 @@ VkCallResult<std::vector<VkPipeline>> Vulkan::CreateGraphicsPipelinesNE(
     return {.result = result, .value = std::move(pipelines)};
 }
 
-tl::expected<std::vector<VkPipeline>, VulkanError> Vulkan::CreateGraphicsPipelinesCE(
+std::expected<std::vector<VkPipeline>, VulkanError> Vulkan::CreateGraphicsPipelinesCE(
     VkDevice device,
     VkPipelineCache pipeline_cache,
     std::span<const VkGraphicsPipelineCreateInfo> create_infos,
@@ -419,7 +420,7 @@ VkCallResult<std::vector<VkPipeline>> Vulkan::CreateComputePipelinesNE(
     return {.result = result, .value = std::move(pipelines)};
 }
 
-tl::expected<std::vector<VkPipeline>, VulkanError> Vulkan::CreateComputePipelinesCE(
+std::expected<std::vector<VkPipeline>, VulkanError> Vulkan::CreateComputePipelinesCE(
     VkDevice device,
     VkPipelineCache pipeline_cache,
     std::span<const VkComputePipelineCreateInfo> create_infos,
@@ -478,7 +479,7 @@ VkCallResult<std::vector<VkExtensionProperties>> Vulkan::EnumerateDeviceExtensio
         { return vkEnumerateDeviceExtensionProperties(physical_device, layer_name, &count, properties); });
 }
 
-tl::expected<std::vector<VkExtensionProperties>, VulkanError> Vulkan::EnumerateDeviceExtensionPropertiesCE(
+std::expected<std::vector<VkExtensionProperties>, VulkanError> Vulkan::EnumerateDeviceExtensionPropertiesCE(
     VkPhysicalDevice physical_device,
     const char* layer_name) noexcept
 {
@@ -500,7 +501,7 @@ VkCallResult<std::vector<VkLayerProperties>> Vulkan::EnumerateInstanceLayerPrope
                                                   { return vkEnumerateInstanceLayerProperties(&count, properties); });
 }
 
-tl::expected<std::vector<VkLayerProperties>, VulkanError> Vulkan::EnumerateInstanceLayerPropertiesCE() noexcept
+std::expected<std::vector<VkLayerProperties>, VulkanError> Vulkan::EnumerateInstanceLayerPropertiesCE() noexcept
 {
     return Internal::ValueOrError(EnumerateInstanceLayerPropertiesNE(), "vkEnumerateInstanceLayerProperties");
 }
@@ -516,7 +517,7 @@ VkCallResult<std::vector<VkPhysicalDevice>> Vulkan::EnumeratePhysicalDevicesNE(V
                                                  { return vkEnumeratePhysicalDevices(instance, &count, devices); });
 }
 
-tl::expected<std::vector<VkPhysicalDevice>, VulkanError> Vulkan::EnumeratePhysicalDevicesCE(
+std::expected<std::vector<VkPhysicalDevice>, VulkanError> Vulkan::EnumeratePhysicalDevicesCE(
     VkInstance instance) noexcept
 {
     return Internal::ValueOrError(EnumeratePhysicalDevicesNE(instance), "vkEnumeratePhysicalDevices");
@@ -536,7 +537,7 @@ VkCallResult<VkSurfaceCapabilitiesKHR> Vulkan::GetPhysicalDeviceSurfaceCapabilit
     return {.result = result, .value = capabilities};
 }
 
-tl::expected<VkSurfaceCapabilitiesKHR, VulkanError> Vulkan::GetPhysicalDeviceSurfaceCapabilitiesKHRCE(
+std::expected<VkSurfaceCapabilitiesKHR, VulkanError> Vulkan::GetPhysicalDeviceSurfaceCapabilitiesKHRCE(
     VkPhysicalDevice physical_device,
     VkSurfaceKHR surface) noexcept
 {
@@ -561,7 +562,7 @@ VkCallResult<std::vector<VkSurfaceFormatKHR>> Vulkan::GetPhysicalDeviceSurfaceFo
         { return vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &count, formats); });
 }
 
-tl::expected<std::vector<VkSurfaceFormatKHR>, VulkanError> Vulkan::GetPhysicalDeviceSurfaceFormatsKHRCE(
+std::expected<std::vector<VkSurfaceFormatKHR>, VulkanError> Vulkan::GetPhysicalDeviceSurfaceFormatsKHRCE(
     VkPhysicalDevice physical_device,
     VkSurfaceKHR surface) noexcept
 {
@@ -586,7 +587,7 @@ VkCallResult<std::vector<VkPresentModeKHR>> Vulkan::GetPhysicalDeviceSurfacePres
         { return vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &count, modes); });
 }
 
-tl::expected<std::vector<VkPresentModeKHR>, VulkanError> Vulkan::GetPhysicalDeviceSurfacePresentModesKHRCE(
+std::expected<std::vector<VkPresentModeKHR>, VulkanError> Vulkan::GetPhysicalDeviceSurfacePresentModesKHRCE(
     VkPhysicalDevice physical_device,
     VkSurfaceKHR surface) noexcept
 {
@@ -613,7 +614,7 @@ VkCallResult<bool> Vulkan::GetPhysicalDeviceSurfaceSupportKHRNE(
     return {.result = result, .value = supported == VK_TRUE};
 }
 
-tl::expected<bool, VulkanError> Vulkan::GetPhysicalDeviceSurfaceSupportKHRCE(
+std::expected<bool, VulkanError> Vulkan::GetPhysicalDeviceSurfaceSupportKHRCE(
     VkPhysicalDevice physical_device,
     u32 queue_family_index,
     VkSurfaceKHR surface) noexcept
@@ -637,7 +638,7 @@ VkCallResult<std::vector<VkImage>> Vulkan::GetSwapchainImagesKHRNE(VkDevice devi
                                         { return vkGetSwapchainImagesKHR(device, swapchain, &count, images); });
 }
 
-tl::expected<std::vector<VkImage>, VulkanError> Vulkan::GetSwapchainImagesKHRCE(
+std::expected<std::vector<VkImage>, VulkanError> Vulkan::GetSwapchainImagesKHRCE(
     VkDevice device,
     VkSwapchainKHR swapchain) noexcept
 {
@@ -654,7 +655,7 @@ VkResult Vulkan::QueuePresentKHRNE(VkQueue queue, const VkPresentInfoKHR& presen
     return vkQueuePresentKHR(queue, &present_info);
 }
 
-tl::expected<PresentStatus, VulkanError> Vulkan::QueuePresentKHRCE(
+std::expected<PresentStatus, VulkanError> Vulkan::QueuePresentKHRCE(
     VkQueue queue,
     const VkPresentInfoKHR& present_info) noexcept
 {
@@ -749,7 +750,7 @@ VkResult Vulkan::WaitForFencesNE(VkDevice device, std::span<const VkFence> fence
         timeout);
 }
 
-tl::expected<WaitStatus, VulkanError>
+std::expected<WaitStatus, VulkanError>
 Vulkan::WaitForFencesCE(VkDevice device, std::span<const VkFence> fences, bool wait_all, u64 timeout) noexcept
 {
     const VkResult result = WaitForFencesNE(device, fences, wait_all, timeout);
