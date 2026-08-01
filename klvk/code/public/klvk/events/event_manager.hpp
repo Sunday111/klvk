@@ -54,12 +54,12 @@ private:
     {
         using is_transparent = void;  // enable heterogeneous overloads
 
-        [[nodiscard]] auto operator()(const std::unique_ptr<IEventListener>& ptr) const noexcept -> u64
+        [[nodiscard]] static auto operator()(const std::unique_ptr<IEventListener>& ptr) noexcept -> u64
         {
-            return (*this)(ptr.get());
+            return operator()(ptr.get());
         }
 
-        [[nodiscard]] auto operator()(const IEventListener* ptr) const noexcept -> u64
+        [[nodiscard]] static auto operator()(const IEventListener* ptr) noexcept -> u64
         {
             return ankerl::unordered_dense::hash<size_t>{}(std::bit_cast<size_t>(ptr));
         }
@@ -69,20 +69,19 @@ private:
     {
         using is_transparent = void;  // enable heterogeneous overloads
 
-        bool operator()(const std::unique_ptr<IEventListener>& a, const std::unique_ptr<IEventListener>& b)
-            const noexcept
+        static bool operator()(const std::unique_ptr<IEventListener>& a, const std::unique_ptr<IEventListener>& b) noexcept
         {
             return a == b;
         }
 
-        bool operator()(const IEventListener* a, const IEventListener* b) const noexcept { return a == b; }
+        static bool operator()(const IEventListener* a, const IEventListener* b) noexcept { return a == b; }
 
-        bool operator()(const std::unique_ptr<IEventListener>& a, const IEventListener* b) const noexcept
+        static bool operator()(const std::unique_ptr<IEventListener>& a, const IEventListener* b) noexcept
         {
             return a.get() == b;
         }
 
-        bool operator()(const IEventListener* a, const std::unique_ptr<IEventListener>& b) const noexcept
+        static bool operator()(const IEventListener* a, const std::unique_ptr<IEventListener>& b) noexcept
         {
             return a == b.get();
         }

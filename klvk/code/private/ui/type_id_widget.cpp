@@ -213,7 +213,7 @@ template <typename Map>
 template <int rot1, int rot2>
 struct GUIDHasher
 {
-    [[nodiscard]] constexpr size_t operator()(const edt::GUID& guid) const
+    [[nodiscard]] static constexpr size_t operator()(const edt::GUID& guid)
     {
         size_t a = guid.part1;
         size_t b = guid.part2;

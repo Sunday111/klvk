@@ -77,7 +77,7 @@ void TestPureValidation()
     catch (const std::exception& error)
     {
         Ensure(
-            std::string_view(error.what()).find("descriptor conflict") != std::string_view::npos,
+            std::string_view(error.what()).contains("descriptor conflict"),
             "descriptor conflict produced an unclear error");
     }
 }
@@ -287,7 +287,7 @@ void Run()
         catch (const std::exception& error)
         {
             Ensure(
-                std::string_view(error.what()).find("imports and includes are unsupported") != std::string_view::npos,
+                std::string_view(error.what()).contains("imports and includes are unsupported"),
                 "dependency-bearing Slang shader did not report the cache restriction");
         }
     }
