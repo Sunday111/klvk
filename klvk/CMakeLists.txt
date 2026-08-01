@@ -13,7 +13,6 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/input_recorder.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/events/event_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/filesystem/filesystem.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/math/transform.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/mesh/procedural_mesh_generator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.hpp
@@ -30,6 +29,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/texture/procedural_texture_generator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/timing/timer_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/simple_imgui_combo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/transform_widget.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/type_id_widget.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/descriptor_sets.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/device_context.cpp
@@ -58,11 +58,10 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/mouse_events.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/window_events.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/filesystem/filesystem.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/float_aliases.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/input.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/integral_aliases.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/macro/ensure_enum_size.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/math/rotator.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/math/transform.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/mesh/procedural_mesh_generator.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/platform/os/os.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/reflection/matrix_reflect.hpp
@@ -75,20 +74,15 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/shader_interface.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/shader_module.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/shader_stages.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/signed_integral_aliases.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/class_member_traits.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/constexpr_string_hash.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/get_enum_underlying.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/member_offset.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/on_scope_leave.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/tagged_id_hash.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/tuple_type_by_index.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/texture/procedural_texture_generator.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/timing/timer_manager.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/imgui_helpers.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/imgui_value_combo.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/simple_imgui_combo.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/simple_type_widget.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/transform_widget.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/type_id_widget_minimal.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/descriptor_sets.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/detail/settings.hpp

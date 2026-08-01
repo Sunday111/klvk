@@ -12,7 +12,6 @@
 #include "klvk/shader/define_handle.hpp"
 #include "klvk/shader/shader_module.hpp"
 #include "klvk/shader/shader_stages.hpp"
-#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk

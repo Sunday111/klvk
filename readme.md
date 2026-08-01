@@ -20,10 +20,13 @@ checksum to `yae-slang`; platform selection remains generic yae functionality.
 
 ## Integral aliases
 
-Public headers use the exact-width aliases from `klvk/integral_aliases.hpp`: `u8`, `u16`, `u32`, and `u64`.
-`klvk/signed_integral_aliases.hpp` additionally provides `i8`, `i16`, `i32`, and `i64`. Include the signed header only for
-domains that can meaningfully be negative, or when matching an explicitly signed external ABI. Sizes, counts,
-dimensions, indices, masks, and identifiers should remain unsigned.
+`klvk/integral_aliases.hpp` brings `u8`-`u64` and `i8`-`i64` into scope, and
+`klvk/float_aliases.hpp` brings `f32` and `f64`. Both hoist the corresponding
+namespace from edt, which is where the aliases are defined.
+
+Sizes, counts, dimensions, indices, masks, and identifiers are unsigned; reach for a signed
+alias only for a domain that can meaningfully be negative, or to match an explicitly signed
+external ABI.
 
 ## Timers
 

@@ -1,9 +1,9 @@
 #include "fractal_settings.hpp"
 
 #include <bit>
+#include <edt/functional/on_scope_leave.hpp>
 #include <klvk/error_handling.hpp>
 #include <klvk/integral_aliases.hpp>
-#include <klvk/template/on_scope_leave.hpp>
 #include <klvk/ui/simple_type_widget.hpp>
 #include <optional>
 #include <random>
@@ -191,7 +191,7 @@ void FractalSettings::DrawGUI()
                 ImGuiColorEditFlags_DefaultOptions_ | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel;
             auto& color = colors[color_index];
             ImGui::PushID(&color);
-            auto pop_on_exit = klvk::OnScopeLeave(&ImGui::PopID);
+            auto pop_on_exit = edt::OnScopeLeave(&ImGui::PopID);
             changed |= ImGui::ColorEdit3("Color", color.data(), color_edit_flags);
 
             if (color_index != 0)

@@ -10,9 +10,9 @@
 #include "klvk/events/mouse_events.hpp"
 #include "klvk/filesystem/filesystem.hpp"
 #include "klvk/integral_aliases.hpp"
-#include "klvk/math/transform.hpp"
 #include "klvk/mesh/procedural_mesh_generator.hpp"
 #include "klvk/ui/simple_type_widget.hpp"
+#include "klvk/ui/transform_widget.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
@@ -118,7 +118,7 @@ class CubeApp : public klvk::Application
             camera_.Widget();
             ImGui::Separator();
             klvk::SimpleTypeWidget("move_speed", move_speed_);
-            if (ImGui::CollapsingHeader("cube")) cube_transform_.Widget();
+            if (ImGui::CollapsingHeader("cube")) klvk::TransformWidget(cube_transform_);
         }
         ImGui::End();
     }
@@ -162,7 +162,7 @@ private:
     klvk::VkObject<VkPipeline> pipeline_;
     u32 index_count_ = 0;
     float move_speed_ = 5.f;
-    klvk::Transform cube_transform_{.translation = {6, 6, 0}};
+    edt::Transform cube_transform_{.translation = {6, 6, 0}};
     klvk::Camera3d camera_{Vec3f{3, 3, 4}, {.yaw = 45, .pitch = 45}};
 };
 

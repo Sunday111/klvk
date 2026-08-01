@@ -1,6 +1,6 @@
 #pragma once
 
-#include "edt/int_aliases.hpp"
+#include "edt/float_aliases.hpp"
 
 // NOLINTNEXTLINE(google-build-using-namespace, google-global-names-in-headers): what the namespace is for
-using namespace edt::int_aliases;
+using namespace edt::float_aliases;

@@ -4,7 +4,7 @@
 #include <optional>
 
 #include "edt/math/math.hpp"
-#include "klvk/math/rotator.hpp"
+#include "edt/math/rotator.hpp"
 
 namespace klvk
 {
@@ -54,12 +54,12 @@ public:
     constexpr Camera3d(Camera3d&&) noexcept = default;
     constexpr Camera3d& operator=(const Camera3d&) noexcept = default;
     constexpr Camera3d& operator=(Camera3d&&) noexcept = default;
-    constexpr Camera3d(const Vec3f& eye, const Rotator& rotation) noexcept : rotation_(rotation), eye_(eye) {}
+    constexpr Camera3d(const Vec3f& eye, const edt::Rotator& rotation) noexcept : rotation_(rotation), eye_(eye) {}
 
     bool Widget();
 
-    [[nodiscard]] const Rotator& GetRotation() const noexcept { return rotation_; }
-    void SetRotation(const Rotator& rotator) noexcept
+    [[nodiscard]] const edt::Rotator& GetRotation() const noexcept { return rotation_; }
+    void SetRotation(const edt::Rotator& rotator) noexcept
     {
         rotation_ = rotator;
         view_cache_.reset();
@@ -117,7 +117,7 @@ private:
     float near_ = 0.1f;
     float far_ = 100.f;
     float fov_ = 45.f;
-    Rotator rotation_;
+    edt::Rotator rotation_;
     Vec3f eye_;
 };
 

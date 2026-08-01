@@ -34,8 +34,8 @@ extern "C"
 #include "klvk/diagnostics/diagnostic_run_config.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/filesystem/filesystem.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/platform/os/os.hpp"
-#include "klvk/signed_integral_aliases.hpp"
 
 namespace klvk
 {

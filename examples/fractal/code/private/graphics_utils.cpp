@@ -1,7 +1,7 @@
 #include "graphics_utils.hpp"
 
 #include "fractal_settings.hpp"
-#include "klvk/signed_integral_aliases.hpp"
+#include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
 

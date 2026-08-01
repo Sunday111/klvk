@@ -1,9 +1,9 @@
 #include <fmt/format.h>
 #include <imgui.h>
 
+#include <ass/fixed_bitset.hpp>
 #include <edt/math/math.hpp>
 #include <edt/template/tagged_identifier.hpp>
-#include <ass/fixed_bitset.hpp>
 #include <set>
 #include <string>
 
@@ -15,7 +15,6 @@
 #include "klvk/events/mouse_events.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/rendering/instanced_sprite_renderer_2d.hpp"
-#include "klvk/signed_integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/texture.hpp"
 #include "klvk/window.hpp"
