@@ -11,7 +11,7 @@ struct TaggedIdentifierHash
 {
     using is_avalanching = void;
 
-    auto operator()(const Identifier& x) const noexcept -> u64
+    static auto operator()(const Identifier& x) noexcept -> u64
     {
         return ankerl::unordered_dense::detail::wyhash::hash(&x.GetValue(), sizeof(typename Identifier::Repr));
     }

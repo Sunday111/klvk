@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ranges>
 #include <vector>
 
 #include "edt/math/matrix.hpp"
@@ -19,8 +20,8 @@ public:
     [[nodiscard]] static constexpr auto PixelIndices(const Vec2<size_t>& texture_size)
     {
         return edt::ArrayIndices2d(texture_size.y(), texture_size.x()) |
-               std::views::transform([](std::tuple<size_t, size_t> yx)
-                                     { return Vec2<size_t>{std::get<1>(yx), std::get<0>(yx)}; });
+               std::views::transform([](std::pair<size_t, size_t> yx)
+                                     { return Vec2<size_t>{yx.second, yx.first}; });
     }
 
     // Same as PixelIndices but yields pairs of indices as floats

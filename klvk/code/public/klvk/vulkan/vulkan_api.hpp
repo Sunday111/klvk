@@ -7,7 +7,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
-#include <tl/expected.hpp>
+#include <expected>
 #include <vector>
 
 #include "klvk/integral_aliases.hpp"
@@ -70,7 +70,7 @@ public:
         u64 timeout,
         VkSemaphore semaphore = VK_NULL_HANDLE,
         VkFence fence = VK_NULL_HANDLE) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<AcquireNextImageOutcome, VulkanError> AcquireNextImageKHRCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<AcquireNextImageOutcome, VulkanError> AcquireNextImageKHRCE(
         VkDevice device,
         VkSwapchainKHR swapchain,
         u64 timeout,
@@ -86,7 +86,7 @@ public:
     [[nodiscard]] KLVK_VK_INLINE static VkCallResult<std::vector<VkCommandBuffer>> AllocateCommandBuffersNE(
         VkDevice device,
         const VkCommandBufferAllocateInfo& allocate_info) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<std::vector<VkCommandBuffer>, VulkanError>
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<std::vector<VkCommandBuffer>, VulkanError>
     AllocateCommandBuffersCE(VkDevice device, const VkCommandBufferAllocateInfo& allocate_info) noexcept;
     [[nodiscard]] KLVK_VK_INLINE static std::vector<VkCommandBuffer> AllocateCommandBuffers(
         VkDevice device,
@@ -95,7 +95,7 @@ public:
     [[nodiscard]] KLVK_VK_INLINE static VkCallResult<std::vector<VkDescriptorSet>> AllocateDescriptorSetsNE(
         VkDevice device,
         const VkDescriptorSetAllocateInfo& allocate_info) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<std::vector<VkDescriptorSet>, VulkanError>
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<std::vector<VkDescriptorSet>, VulkanError>
     AllocateDescriptorSetsCE(VkDevice device, const VkDescriptorSetAllocateInfo& allocate_info) noexcept;
     [[nodiscard]] KLVK_VK_INLINE static std::vector<VkDescriptorSet> AllocateDescriptorSets(
         VkDevice device,
@@ -115,7 +115,7 @@ public:
         VkDevice device,
         const VkCommandPoolCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<VkCommandPool, VulkanError> CreateCommandPoolCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<VkCommandPool, VulkanError> CreateCommandPoolCE(
         VkDevice device,
         const VkCommandPoolCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
@@ -128,7 +128,7 @@ public:
         VkInstance instance,
         const VkDebugUtilsMessengerCreateInfoEXT& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<VkDebugUtilsMessengerEXT, VulkanError>
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<VkDebugUtilsMessengerEXT, VulkanError>
     CreateDebugUtilsMessengerEXTCE(
         VkInstance instance,
         const VkDebugUtilsMessengerCreateInfoEXT& create_info,
@@ -142,7 +142,7 @@ public:
         VkDevice device,
         const VkDescriptorPoolCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<VkDescriptorPool, VulkanError> CreateDescriptorPoolCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<VkDescriptorPool, VulkanError> CreateDescriptorPoolCE(
         VkDevice device,
         const VkDescriptorPoolCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
@@ -155,7 +155,7 @@ public:
         VkDevice device,
         const VkDescriptorSetLayoutCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<VkDescriptorSetLayout, VulkanError> CreateDescriptorSetLayoutCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<VkDescriptorSetLayout, VulkanError> CreateDescriptorSetLayoutCE(
         VkDevice device,
         const VkDescriptorSetLayoutCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
@@ -168,7 +168,7 @@ public:
         VkPhysicalDevice physical_device,
         const VkDeviceCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<VkDevice, VulkanError> CreateDeviceCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<VkDevice, VulkanError> CreateDeviceCE(
         VkPhysicalDevice physical_device,
         const VkDeviceCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
@@ -181,7 +181,7 @@ public:
         VkDevice device,
         const VkFenceCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<VkFence, VulkanError> CreateFenceCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<VkFence, VulkanError> CreateFenceCE(
         VkDevice device,
         const VkFenceCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
@@ -195,7 +195,7 @@ public:
         VkPipelineCache pipeline_cache,
         std::span<const VkGraphicsPipelineCreateInfo> create_infos,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<std::vector<VkPipeline>, VulkanError> CreateGraphicsPipelinesCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<std::vector<VkPipeline>, VulkanError> CreateGraphicsPipelinesCE(
         VkDevice device,
         VkPipelineCache pipeline_cache,
         std::span<const VkGraphicsPipelineCreateInfo> create_infos,
@@ -211,7 +211,7 @@ public:
         VkPipelineCache pipeline_cache,
         std::span<const VkComputePipelineCreateInfo> create_infos,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<std::vector<VkPipeline>, VulkanError> CreateComputePipelinesCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<std::vector<VkPipeline>, VulkanError> CreateComputePipelinesCE(
         VkDevice device,
         VkPipelineCache pipeline_cache,
         std::span<const VkComputePipelineCreateInfo> create_infos,
@@ -226,7 +226,7 @@ public:
         VkDevice device,
         const VkImageViewCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<VkImageView, VulkanError> CreateImageViewCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<VkImageView, VulkanError> CreateImageViewCE(
         VkDevice device,
         const VkImageViewCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
@@ -238,7 +238,7 @@ public:
     [[nodiscard]] KLVK_VK_INLINE static VkCallResult<VkInstance> CreateInstanceNE(
         const VkInstanceCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<VkInstance, VulkanError> CreateInstanceCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<VkInstance, VulkanError> CreateInstanceCE(
         const VkInstanceCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
     [[nodiscard]] KLVK_VK_INLINE static VkInstance CreateInstance(
@@ -249,7 +249,7 @@ public:
         VkDevice device,
         const VkPipelineLayoutCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<VkPipelineLayout, VulkanError> CreatePipelineLayoutCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<VkPipelineLayout, VulkanError> CreatePipelineLayoutCE(
         VkDevice device,
         const VkPipelineLayoutCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
@@ -262,7 +262,7 @@ public:
         VkDevice device,
         const VkSamplerCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<VkSampler, VulkanError> CreateSamplerCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<VkSampler, VulkanError> CreateSamplerCE(
         VkDevice device,
         const VkSamplerCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
@@ -275,7 +275,7 @@ public:
         VkDevice device,
         const VkSemaphoreCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<VkSemaphore, VulkanError> CreateSemaphoreCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<VkSemaphore, VulkanError> CreateSemaphoreCE(
         VkDevice device,
         const VkSemaphoreCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
@@ -288,7 +288,7 @@ public:
         VkDevice device,
         const VkShaderModuleCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<VkShaderModule, VulkanError> CreateShaderModuleCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<VkShaderModule, VulkanError> CreateShaderModuleCE(
         VkDevice device,
         const VkShaderModuleCreateInfo& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
@@ -301,7 +301,7 @@ public:
         VkDevice device,
         const VkSwapchainCreateInfoKHR& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<VkSwapchainKHR, VulkanError> CreateSwapchainKHRCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<VkSwapchainKHR, VulkanError> CreateSwapchainKHRCE(
         VkDevice device,
         const VkSwapchainCreateInfoKHR& create_info,
         const VkAllocationCallbacks* allocator = nullptr) noexcept;
@@ -321,7 +321,7 @@ public:
 
     [[nodiscard]] KLVK_VK_INLINE static VkCallResult<std::vector<VkExtensionProperties>>
     EnumerateDeviceExtensionPropertiesNE(VkPhysicalDevice physical_device, const char* layer_name = nullptr) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<std::vector<VkExtensionProperties>, VulkanError>
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<std::vector<VkExtensionProperties>, VulkanError>
     EnumerateDeviceExtensionPropertiesCE(VkPhysicalDevice physical_device, const char* layer_name = nullptr) noexcept;
     [[nodiscard]] KLVK_VK_INLINE static std::vector<VkExtensionProperties> EnumerateDeviceExtensionProperties(
         VkPhysicalDevice physical_device,
@@ -329,19 +329,19 @@ public:
 
     [[nodiscard]] KLVK_VK_INLINE static VkCallResult<std::vector<VkLayerProperties>>
     EnumerateInstanceLayerPropertiesNE() noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<std::vector<VkLayerProperties>, VulkanError>
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<std::vector<VkLayerProperties>, VulkanError>
     EnumerateInstanceLayerPropertiesCE() noexcept;
     [[nodiscard]] KLVK_VK_INLINE static std::vector<VkLayerProperties> EnumerateInstanceLayerProperties();
 
     [[nodiscard]] KLVK_VK_INLINE static VkCallResult<std::vector<VkPhysicalDevice>> EnumeratePhysicalDevicesNE(
         VkInstance instance) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<std::vector<VkPhysicalDevice>, VulkanError>
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<std::vector<VkPhysicalDevice>, VulkanError>
     EnumeratePhysicalDevicesCE(VkInstance instance) noexcept;
     [[nodiscard]] KLVK_VK_INLINE static std::vector<VkPhysicalDevice> EnumeratePhysicalDevices(VkInstance instance);
 
     [[nodiscard]] KLVK_VK_INLINE static VkCallResult<VkSurfaceCapabilitiesKHR>
     GetPhysicalDeviceSurfaceCapabilitiesKHRNE(VkPhysicalDevice physical_device, VkSurfaceKHR surface) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<VkSurfaceCapabilitiesKHR, VulkanError>
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<VkSurfaceCapabilitiesKHR, VulkanError>
     GetPhysicalDeviceSurfaceCapabilitiesKHRCE(VkPhysicalDevice physical_device, VkSurfaceKHR surface) noexcept;
     [[nodiscard]] KLVK_VK_INLINE static VkSurfaceCapabilitiesKHR GetPhysicalDeviceSurfaceCapabilitiesKHR(
         VkPhysicalDevice physical_device,
@@ -349,7 +349,7 @@ public:
 
     [[nodiscard]] KLVK_VK_INLINE static VkCallResult<std::vector<VkSurfaceFormatKHR>>
     GetPhysicalDeviceSurfaceFormatsKHRNE(VkPhysicalDevice physical_device, VkSurfaceKHR surface) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<std::vector<VkSurfaceFormatKHR>, VulkanError>
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<std::vector<VkSurfaceFormatKHR>, VulkanError>
     GetPhysicalDeviceSurfaceFormatsKHRCE(VkPhysicalDevice physical_device, VkSurfaceKHR surface) noexcept;
     [[nodiscard]] KLVK_VK_INLINE static std::vector<VkSurfaceFormatKHR> GetPhysicalDeviceSurfaceFormatsKHR(
         VkPhysicalDevice physical_device,
@@ -357,7 +357,7 @@ public:
 
     [[nodiscard]] KLVK_VK_INLINE static VkCallResult<std::vector<VkPresentModeKHR>>
     GetPhysicalDeviceSurfacePresentModesKHRNE(VkPhysicalDevice physical_device, VkSurfaceKHR surface) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<std::vector<VkPresentModeKHR>, VulkanError>
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<std::vector<VkPresentModeKHR>, VulkanError>
     GetPhysicalDeviceSurfacePresentModesKHRCE(VkPhysicalDevice physical_device, VkSurfaceKHR surface) noexcept;
     [[nodiscard]] KLVK_VK_INLINE static std::vector<VkPresentModeKHR> GetPhysicalDeviceSurfacePresentModesKHR(
         VkPhysicalDevice physical_device,
@@ -367,7 +367,7 @@ public:
         VkPhysicalDevice physical_device,
         u32 queue_family_index,
         VkSurfaceKHR surface) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<bool, VulkanError> GetPhysicalDeviceSurfaceSupportKHRCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<bool, VulkanError> GetPhysicalDeviceSurfaceSupportKHRCE(
         VkPhysicalDevice physical_device,
         u32 queue_family_index,
         VkSurfaceKHR surface) noexcept;
@@ -377,7 +377,7 @@ public:
     [[nodiscard]] KLVK_VK_INLINE static VkCallResult<std::vector<VkImage>> GetSwapchainImagesKHRNE(
         VkDevice device,
         VkSwapchainKHR swapchain) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<std::vector<VkImage>, VulkanError> GetSwapchainImagesKHRCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<std::vector<VkImage>, VulkanError> GetSwapchainImagesKHRCE(
         VkDevice device,
         VkSwapchainKHR swapchain) noexcept;
     [[nodiscard]] KLVK_VK_INLINE static std::vector<VkImage> GetSwapchainImagesKHR(
@@ -387,7 +387,7 @@ public:
     [[nodiscard]] KLVK_VK_INLINE static VkResult QueuePresentKHRNE(
         VkQueue queue,
         const VkPresentInfoKHR& present_info) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<PresentStatus, VulkanError> QueuePresentKHRCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<PresentStatus, VulkanError> QueuePresentKHRCE(
         VkQueue queue,
         const VkPresentInfoKHR& present_info) noexcept;
     [[nodiscard]] KLVK_VK_INLINE static PresentStatus QueuePresentKHR(
@@ -425,7 +425,7 @@ public:
         std::span<const VkFence> fences,
         bool wait_all,
         u64 timeout = std::numeric_limits<u64>::max()) noexcept;
-    [[nodiscard]] KLVK_VK_INLINE static tl::expected<WaitStatus, VulkanError> WaitForFencesCE(
+    [[nodiscard]] KLVK_VK_INLINE static std::expected<WaitStatus, VulkanError> WaitForFencesCE(
         VkDevice device,
         std::span<const VkFence> fences,
         bool wait_all,

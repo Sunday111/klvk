@@ -4,6 +4,7 @@
 
 #include <cassert>
 #include <concepts>
+#include <iterator>
 #include <limits>
 
 #include "edt/concepts/callable.hpp"
@@ -55,8 +56,7 @@ public:
             }
             else
             {
-                assert(false);
-                return nullptr;
+                static_assert(false, "No ImGui slider for this type");
             }
         }();
 
