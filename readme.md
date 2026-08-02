@@ -28,6 +28,25 @@ Sizes, counts, dimensions, indices, masks, and identifiers are unsigned; reach f
 alias only for a domain that can meaningfully be negative, or to match an explicitly signed
 external ABI.
 
+## Depth and stencil
+
+The depth-stencil format is chosen at runtime from what the device supports as an optimally tiled attachment,
+preferring a combined format (`D32_SFLOAT_S8_UINT`, then `D24_UNORM_S8_UINT`, then depth-only `D32_SFLOAT`).
+`RenderTarget::GetDepthStencilFormat` reports the choice and `Application::GetDepthFormat` forwards it;
+`klvk/vulkan/depth_stencil_format.hpp` answers whether a format carries a stencil plane and which aspects a view
+of it must name.
+
+Depth and stencil are enabled independently. `Application::SetStencilBufferEnabled` attaches the stencil plane and
+clears it to zero each frame without turning on depth testing, which is what a stencil-only technique wants.
+`GraphicsPipelineBuilder::StencilTest` takes the front and back `VkStencilOpState` and declares the stencil
+attachment format on its own, `DynamicStencilMasks` moves compare mask, write mask and reference to the command
+buffer so one pipeline covers every combination, and `ColorWriteMask(0)` gives a pass that accumulates coverage
+without touching color.
+
+`examples/stencil` draws a self-intersecting star twice with stencil-then-cover: a winding pass fans the outline
+into the stencil, then a cover pass paints and resets the marked pixels. The two stars differ only in the stencil
+ops and the write mask, and come out solid under the non-zero rule and hollow under even-odd.
+
 ## Timers
 
 `klvk/timing/timer_manager.hpp` provides render-thread scheduling in elapsed-time and frame domains. It uses indexed

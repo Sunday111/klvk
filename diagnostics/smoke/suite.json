@@ -52,6 +52,11 @@
       "config": "configs/rendering.json"
     },
     {
+      "name": "stencil",
+      "target": "klvk_stencil_example",
+      "config": "configs/rendering.json"
+    },
+    {
       "name": "textured_quad",
       "target": "klvk_textured_quad_example",
       "config": "configs/rendering.json"

@@ -13,6 +13,7 @@ public:
     virtual ~RenderTarget() = default;
 
     [[nodiscard]] virtual VkFormat GetFormat() const noexcept = 0;
+    [[nodiscard]] virtual VkFormat GetDepthStencilFormat() const noexcept = 0;
     [[nodiscard]] virtual VkExtent2D GetExtent() const noexcept = 0;
     [[nodiscard]] virtual size_t GetImageCount() const noexcept = 0;
     [[nodiscard]] virtual VkImage GetImage(size_t index) const = 0;

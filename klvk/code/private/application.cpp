@@ -26,6 +26,7 @@
 #include "klvk/platform/os/os.hpp"
 #include "klvk/reflection/register_types.hpp"
 #include "klvk/timing/timer_manager.hpp"
+#include "klvk/vulkan/depth_stencil_format.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/offscreen_render_target.hpp"
 #include "klvk/vulkan/render_target.hpp"
@@ -76,6 +77,7 @@ struct Application::State
     u32 image_index_ = 0;
     bool frame_active_ = false;
     bool depth_buffer_enabled_ = false;
+    bool stencil_buffer_enabled_ = false;
     bool imgui_context_created_ = false;
     bool imgui_glfw_initialized_ = false;
     bool imgui_vulkan_initialized_ = false;
@@ -88,6 +90,12 @@ struct Application::State
     std::optional<std::filesystem::path> input_record_path_;
     std::optional<std::filesystem::path> write_checkpoints_path_;
     std::unique_ptr<DiagnosticInputRecorder> input_recorder_;
+
+    // Depth and stencil share one image, so either one being enabled binds it.
+    [[nodiscard]] bool DepthStencilAttachmentEnabled() const
+    {
+        return depth_buffer_enabled_ || stencil_buffer_enabled_;
+    }
 
     // The fixed step is exact nanoseconds, so logical time is an integer product
     // rather than an accumulated float and a replayed run lands on precisely the
@@ -722,7 +730,8 @@ void Application::PreTick()
         Vulkan::CmdPipelineBarrier2(frame.command_buffer, dependency);
     }
 
-    if (state_->depth_buffer_enabled_)
+    const VkFormat depth_stencil_format = state_->render_target_->GetDepthStencilFormat();
+    if (state_->DepthStencilAttachmentEnabled())
     {
         const std::array barriers{VkImageMemoryBarrier2{
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -732,11 +741,12 @@ void Application::PreTick()
             .dstAccessMask =
                 VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = state_->render_target_->GetDepthImage(state_->image_index_),
-            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT, .levelCount = 1, .layerCount = 1},
+            .subresourceRange =
+                {.aspectMask = DepthStencilAspectMask(depth_stencil_format), .levelCount = 1, .layerCount = 1},
         }};
         const VkDependencyInfo dependency{
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
@@ -756,15 +766,26 @@ void Application::PreTick()
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue = {.color = {.float32 = {c.x(), c.y(), c.z(), c.w()}}},
     }};
-    // Single object behind pDepthAttachment - no count field, so no array.
+    // Single objects behind pDepthAttachment / pStencilAttachment - no count field,
+    // so no arrays. Both name the same view: the planes live in one image.
+    const VkImageView depth_stencil_view = state_->DepthStencilAttachmentEnabled()
+                                               ? state_->render_target_->GetDepthImageView(state_->image_index_)
+                                               : VK_NULL_HANDLE;
     const VkRenderingAttachmentInfo depth_attachment{
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .imageView = state_->depth_buffer_enabled_ ? state_->render_target_->GetDepthImageView(state_->image_index_)
-                                                   : VK_NULL_HANDLE,
-        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .imageView = depth_stencil_view,
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
         .clearValue = {.depthStencil = {.depth = 1.f}},
+    };
+    const VkRenderingAttachmentInfo stencil_attachment{
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = depth_stencil_view,
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .clearValue = {.depthStencil = {.stencil = 0}},
     };
     const VkRenderingInfo rendering_info{
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
@@ -773,6 +794,7 @@ void Application::PreTick()
         .colorAttachmentCount = color_attachments.size(),
         .pColorAttachments = color_attachments.data(),
         .pDepthAttachment = state_->depth_buffer_enabled_ ? &depth_attachment : nullptr,
+        .pStencilAttachment = state_->stencil_buffer_enabled_ ? &stencil_attachment : nullptr,
     };
     Vulkan::CmdBeginRendering(frame.command_buffer, rendering_info);
 
@@ -825,7 +847,7 @@ void Application::PostTick()
     // ImGui's pipeline is color-only. End an application's depth-enabled pass and
     // resume rendering the same color image without a depth attachment for the UI.
     // A capture that excludes UI uses the same split point.
-    if (state_->depth_buffer_enabled_ || capture_without_ui)
+    if (state_->DepthStencilAttachmentEnabled() || capture_without_ui)
     {
         Vulkan::CmdEndRendering(frame.command_buffer);
         if (capture_without_ui)
@@ -1057,6 +1079,14 @@ void Application::SetDepthBufferEnabled(bool enabled)
     state_->depth_buffer_enabled_ = enabled;
 }
 
+void Application::SetStencilBufferEnabled(bool enabled)
+{
+    ErrorHandling::Ensure(
+        !enabled || FormatHasStencil(state_->render_target_->GetDepthStencilFormat()),
+        "The selected depth-stencil format has no stencil plane");
+    state_->stencil_buffer_enabled_ = enabled;
+}
+
 DeviceContext& Application::GetDeviceContext()
 {
     return *state_->device_context_;
@@ -1069,7 +1099,7 @@ VkFormat Application::GetSwapchainFormat() const
 
 VkFormat Application::GetDepthFormat() const
 {
-    return Swapchain::kDepthFormat;
+    return state_->render_target_->GetDepthStencilFormat();
 }
 
 VkCommandBuffer Application::GetCurrentCommandBuffer() const

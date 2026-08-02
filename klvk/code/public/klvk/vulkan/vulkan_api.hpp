@@ -3,11 +3,11 @@
 #include <volk.h>  // IWYU pragma: export
 
 #include <cstddef>
+#include <expected>
 #include <limits>
 #include <optional>
 #include <span>
 #include <string_view>
-#include <expected>
 #include <vector>
 
 #include "klvk/integral_aliases.hpp"
@@ -614,6 +614,21 @@ public:
     KLVK_VK_INLINE static void
     CmdSetScissor(VkCommandBuffer command_buffer, u32 first_scissor, std::span<const VkRect2D> scissors) noexcept;
 
+    KLVK_VK_INLINE static void
+    CmdSetStencilCompareMaskNE(VkCommandBuffer command_buffer, VkStencilFaceFlags face_mask, u32 compare_mask) noexcept;
+    KLVK_VK_INLINE static void
+    CmdSetStencilCompareMask(VkCommandBuffer command_buffer, VkStencilFaceFlags face_mask, u32 compare_mask) noexcept;
+
+    KLVK_VK_INLINE static void
+    CmdSetStencilReferenceNE(VkCommandBuffer command_buffer, VkStencilFaceFlags face_mask, u32 reference) noexcept;
+    KLVK_VK_INLINE static void
+    CmdSetStencilReference(VkCommandBuffer command_buffer, VkStencilFaceFlags face_mask, u32 reference) noexcept;
+
+    KLVK_VK_INLINE static void
+    CmdSetStencilWriteMaskNE(VkCommandBuffer command_buffer, VkStencilFaceFlags face_mask, u32 write_mask) noexcept;
+    KLVK_VK_INLINE static void
+    CmdSetStencilWriteMask(VkCommandBuffer command_buffer, VkStencilFaceFlags face_mask, u32 write_mask) noexcept;
+
     KLVK_VK_INLINE static void CmdSetViewportNE(
         VkCommandBuffer command_buffer,
         u32 first_viewport,
@@ -758,6 +773,13 @@ public:
     KLVK_VK_INLINE static void GetPhysicalDeviceFeatures2(
         VkPhysicalDevice physical_device,
         VkPhysicalDeviceFeatures2& features) noexcept;
+
+    [[nodiscard]] KLVK_VK_INLINE static VkFormatProperties GetPhysicalDeviceFormatPropertiesNE(
+        VkPhysicalDevice physical_device,
+        VkFormat format) noexcept;
+    [[nodiscard]] KLVK_VK_INLINE static VkFormatProperties GetPhysicalDeviceFormatProperties(
+        VkPhysicalDevice physical_device,
+        VkFormat format) noexcept;
 
     [[nodiscard]] KLVK_VK_INLINE static VkPhysicalDeviceProperties GetPhysicalDevicePropertiesNE(
         VkPhysicalDevice physical_device) noexcept;

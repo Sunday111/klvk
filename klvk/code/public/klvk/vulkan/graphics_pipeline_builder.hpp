@@ -69,6 +69,19 @@ public:
     GraphicsPipelineBuilder& DepthTest(VkCompareOp compare_op = VK_COMPARE_OP_LESS);
     GraphicsPipelineBuilder& DepthFormat(VkFormat format);
 
+    // Enables stencil testing independently of depth: a stencil-only pipeline
+    // leaves depth testing off and still declares the stencil attachment format,
+    // taken from the application unless StencilFormat sets it.
+    GraphicsPipelineBuilder& StencilTest(const VkStencilOpState& front, const VkStencilOpState& back);
+    GraphicsPipelineBuilder& StencilFormat(VkFormat format);
+
+    // Makes compare mask, write mask and reference dynamic, so one pipeline serves
+    // every combination the caller sets on the command buffer.
+    GraphicsPipelineBuilder& DynamicStencilMasks();
+
+    // Defaults to all channels. A stencil-only pass writes none.
+    GraphicsPipelineBuilder& ColorWriteMask(VkColorComponentFlags mask);
+
     // Defaults to the swapchain format. Set explicitly for offscreen targets.
     GraphicsPipelineBuilder& ColorFormat(VkFormat format);
 
@@ -98,8 +111,13 @@ private:
     VkPipelineColorBlendAttachmentState blend_attachment_;
     bool depth_test_ = false;
     VkCompareOp depth_compare_op_ = VK_COMPARE_OP_LESS;
+    bool stencil_test_ = false;
+    bool dynamic_stencil_masks_ = false;
+    VkStencilOpState stencil_front_{};
+    VkStencilOpState stencil_back_{};
     VkFormat color_format_ = VK_FORMAT_UNDEFINED;
     VkFormat depth_format_ = VK_FORMAT_UNDEFINED;
+    VkFormat stencil_format_ = VK_FORMAT_UNDEFINED;
 };
 
 }  // namespace klvk

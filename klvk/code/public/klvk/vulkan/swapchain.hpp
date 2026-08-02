@@ -17,8 +17,6 @@ class DeviceContext;
 class Swapchain final : public RenderTarget
 {
 public:
-    static constexpr VkFormat kDepthFormat = VK_FORMAT_D32_SFLOAT;
-
     Swapchain(DeviceContext& context, edt::Vec2<u32> framebuffer_size, VkImageUsageFlags additional_image_usage = 0);
     Swapchain(const Swapchain&) = delete;
     Swapchain(Swapchain&&) = delete;
@@ -28,6 +26,7 @@ public:
 
     [[nodiscard]] VkSwapchainKHR GetHandle() const noexcept { return swapchain_; }
     [[nodiscard]] VkFormat GetFormat() const noexcept override { return format_.format; }
+    [[nodiscard]] VkFormat GetDepthStencilFormat() const noexcept override { return depth_stencil_format_; }
     [[nodiscard]] VkExtent2D GetExtent() const noexcept override { return extent_; }
     [[nodiscard]] size_t GetImageCount() const noexcept override { return images_.size(); }
     [[nodiscard]] VkImage GetImage(size_t index) const override { return images_[index]; }
@@ -43,6 +42,7 @@ private:
     VkImageUsageFlags additional_image_usage_ = 0;
     VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
     VkSurfaceFormatKHR format_{};
+    VkFormat depth_stencil_format_ = VK_FORMAT_UNDEFINED;
     VkExtent2D extent_{};
     std::vector<VkImage> images_;
     std::vector<VkImageView> image_views_;

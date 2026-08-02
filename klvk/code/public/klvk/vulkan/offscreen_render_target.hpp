@@ -17,7 +17,6 @@ class OffscreenRenderTarget final : public RenderTarget
 {
 public:
     static constexpr VkFormat kColorFormat = VK_FORMAT_R8G8B8A8_UNORM;
-    static constexpr VkFormat kDepthFormat = VK_FORMAT_D32_SFLOAT;
 
     OffscreenRenderTarget(DeviceContext& context, edt::Vec2<u32> size, size_t image_count);
     OffscreenRenderTarget(const OffscreenRenderTarget&) = delete;
@@ -25,6 +24,7 @@ public:
     ~OffscreenRenderTarget() override;
 
     [[nodiscard]] VkFormat GetFormat() const noexcept override { return kColorFormat; }
+    [[nodiscard]] VkFormat GetDepthStencilFormat() const noexcept override { return depth_stencil_format_; }
     [[nodiscard]] VkExtent2D GetExtent() const noexcept override { return extent_; }
     [[nodiscard]] size_t GetImageCount() const noexcept override { return color_images_.size(); }
     [[nodiscard]] VkImage GetImage(size_t index) const override { return color_images_[index]; }
@@ -37,6 +37,7 @@ private:
     void DestroyImages();
 
     DeviceContext* context_ = nullptr;
+    VkFormat depth_stencil_format_ = VK_FORMAT_UNDEFINED;
     VkExtent2D extent_{};
     std::vector<VkImage> color_images_;
     std::vector<VmaAllocation> color_allocations_;

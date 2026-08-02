@@ -31,6 +31,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/simple_imgui_combo.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/transform_widget.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/type_id_widget.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/depth_stencil_format.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/descriptor_sets.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/device_context.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/gpu_buffer.cpp
@@ -84,6 +85,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/simple_type_widget.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/transform_widget.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/type_id_widget_minimal.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/depth_stencil_format.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/descriptor_sets.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/detail/settings.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/detail/vulkan_api_impl.hpp

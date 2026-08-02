@@ -6,6 +6,7 @@
 
 #include "klvk/error_handling.hpp"
 #include "klvk/integral_aliases.hpp"
+#include "klvk/vulkan/depth_stencil_format.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 
@@ -160,6 +161,9 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, VkSwapchainKHR old_swapc
         image_views_.push_back(Vulkan::CreateImageView(context_->GetDevice(), view_info));
     }
 
+    depth_stencil_format_ = SelectDepthStencilFormat(context_->GetPhysicalDevice());
+    const VkImageAspectFlags depth_stencil_aspect = DepthStencilAspectMask(depth_stencil_format_);
+
     depth_images_.resize(images_.size(), VK_NULL_HANDLE);
     depth_allocations_.resize(images_.size(), VK_NULL_HANDLE);
     depth_image_views_.reserve(images_.size());
@@ -168,7 +172,7 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, VkSwapchainKHR old_swapc
         const VkImageCreateInfo image_info{
             .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
             .imageType = VK_IMAGE_TYPE_2D,
-            .format = kDepthFormat,
+            .format = depth_stencil_format_,
             .extent = {.width = extent_.width, .height = extent_.height, .depth = 1},
             .mipLevels = 1,
             .arrayLayers = 1,
@@ -196,8 +200,8 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, VkSwapchainKHR old_swapc
                     .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                     .image = depth_images_[index],
                     .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                    .format = kDepthFormat,
-                    .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT, .levelCount = 1, .layerCount = 1},
+                    .format = depth_stencil_format_,
+                    .subresourceRange = {.aspectMask = depth_stencil_aspect, .levelCount = 1, .layerCount = 1},
                 }));
     }
 }

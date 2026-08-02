@@ -3,6 +3,7 @@
 #include <vk_mem_alloc.h>
 
 #include "klvk/error_handling.hpp"
+#include "klvk/vulkan/depth_stencil_format.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 
@@ -78,6 +79,7 @@ AllocatedImage CreateImage(
 
 OffscreenRenderTarget::OffscreenRenderTarget(DeviceContext& context, edt::Vec2<u32> size, size_t image_count)
     : context_(&context),
+      depth_stencil_format_(SelectDepthStencilFormat(context.GetPhysicalDevice())),
       extent_{.width = size.x(), .height = size.y()}
 {
     ErrorHandling::Ensure(extent_.width != 0 && extent_.height != 0, "Offscreen render target size must be positive");
@@ -115,9 +117,9 @@ void OffscreenRenderTarget::CreateImages(size_t image_count)
             const AllocatedImage depth = CreateImage(
                 *context_,
                 extent_,
-                kDepthFormat,
+                depth_stencil_format_,
                 VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT);
+                DepthStencilAspectMask(depth_stencil_format_));
             depth_images_.push_back(depth.image);
             depth_allocations_.push_back(depth.allocation);
             depth_image_views_.push_back(depth.view);
