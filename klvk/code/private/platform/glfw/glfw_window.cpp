@@ -50,6 +50,27 @@ struct Window::Impl
         }
     }
 
+    // GLFW reports the cursor in window coordinates, while every size klvk hands
+    // out is in framebuffer pixels. The two differ on a scaled display, so the
+    // cursor is converted here rather than at each place that reads it. The ratio
+    // is read per event, so a window moved to a differently scaled monitor keeps
+    // working.
+    static Vec2f WindowToFramebuffer(GLFWwindow* glfw_window, Vec2f point)
+    {
+        int window_width = 0;
+        int window_height = 0;
+        glfwGetWindowSize(glfw_window, &window_width, &window_height);
+        if (window_width <= 0 || window_height <= 0) return point;
+
+        int framebuffer_width = 0;
+        int framebuffer_height = 0;
+        glfwGetFramebufferSize(glfw_window, &framebuffer_width, &framebuffer_height);
+        return {
+            point.x() * static_cast<float>(framebuffer_width) / static_cast<float>(window_width),
+            point.y() * static_cast<float>(framebuffer_height) / static_cast<float>(window_height),
+        };
+    }
+
     static void FramebufferSizeCallback(GLFWwindow* glfw_window, int width, int height)
     {
         CallWindowMethod<&Window::OnResize>(glfw_window, width, height);
@@ -57,7 +78,9 @@ struct Window::Impl
 
     static void MouseCallback(GLFWwindow* glfw_window, double x, double y)
     {
-        CallWindowInputMethod<&Window::OnMouseMove>(glfw_window, Vec2<double>{x, y}.Cast<float>());
+        CallWindowInputMethod<&Window::OnMouseMove>(
+            glfw_window,
+            WindowToFramebuffer(glfw_window, Vec2<double>{x, y}.Cast<float>()));
     }
 
     static void MouseButtonCallback(GLFWwindow* glfw_window, int button, int action, int mods)
@@ -238,7 +261,7 @@ void Window::Create()
     double cursor_x{};
     double cursor_y{};
     glfwGetCursorPos(impl_->window, &cursor_x, &cursor_y);
-    cursor_ = {static_cast<float>(cursor_x), static_cast<float>(cursor_y)};
+    cursor_ = Impl::WindowToFramebuffer(impl_->window, Vec2<double>{cursor_x, cursor_y}.Cast<float>());
 }
 
 void Window::Destroy()

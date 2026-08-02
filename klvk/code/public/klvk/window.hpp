@@ -34,10 +34,14 @@ public:
     [[nodiscard]] Vec2f GetCursorPos() const noexcept { return cursor_; }
     [[nodiscard]] bool IsInInputMode() const noexcept { return input_mode_; }
 
+    // Last known framebuffer size, in pixels. SetSize sizes the framebuffer too,
+    // and the cursor is reported in the same pixels, so screen-space arithmetic
+    // can mix the two freely.
     [[nodiscard]] Vec2<u32> GetSize() const { return {width_, height_}; }
     [[nodiscard]] Vec2f GetSize2f() const { return GetSize().Cast<float>(); }
 
-    // Size of the surface to render to, in pixels. Differs from GetSize on high-dpi displays.
+    // The same size read back from the platform rather than from the last resize
+    // event, for the frame where the two could still disagree.
     [[nodiscard]] Vec2<u32> GetFramebufferSize() const noexcept;
     [[nodiscard]] float GetAspect() const noexcept
     {
