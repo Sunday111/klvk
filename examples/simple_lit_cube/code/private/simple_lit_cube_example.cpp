@@ -21,10 +21,6 @@
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
 
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
-#endif
-
 using namespace edt::lazy_matrix_aliases;  // NOLINT
 
 struct Vertex

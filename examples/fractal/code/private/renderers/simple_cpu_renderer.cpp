@@ -8,12 +8,6 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 
-// Vulkan create-info structs are designed for partial designated initialization;
-// unlisted fields must be zero.
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
-#endif
-
 SimpleCpuRenderer::SimpleCpuRenderer(klvk::Application& app, size_t max_iterations_)
     : app_(&app),
       max_iterations(max_iterations_),

@@ -26,7 +26,8 @@
     "ExtraCMakeFiles": [
         "ffmpeg",
         "shader_cache",
-        "vulkan_api"
+        "vulkan_api",
+        "warnings"
     ],
     "CopyDirectoriesAfterBuild": [
         "content"

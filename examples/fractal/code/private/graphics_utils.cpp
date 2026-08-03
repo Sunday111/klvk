@@ -5,12 +5,6 @@
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
 
-// Vulkan create-info structs are designed for partial designated initialization;
-// unlisted fields must be zero.
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
-#endif
-
 FractalPushConstants MakeFractalPushConstants(const FractalSettings& settings, const edt::Mat3f& screen_to_world)
 {
     FractalPushConstants push_constants{

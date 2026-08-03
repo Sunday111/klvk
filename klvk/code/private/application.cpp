@@ -35,12 +35,6 @@
 #include "klvk/window.hpp"
 #include "platform/glfw/glfw_state.hpp"
 
-// Vulkan create-info structs are designed for partial designated initialization;
-// unlisted fields must be zero.
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
-#endif
-
 namespace klvk
 {
 

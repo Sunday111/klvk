@@ -6,11 +6,6 @@
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 
-// Vulkan create-info structs are designed for partial designated initialization.
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
-#endif
-
 namespace klvk
 {
 
