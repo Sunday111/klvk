@@ -22,6 +22,11 @@ public:
     [[nodiscard]] static std::unique_ptr<Texture>
     CreateR8(DeviceContext& context, edt::Vec2<u32> size, std::span<const u8> pixels);
 
+    // Four channel texture, one byte per channel, in the order the pixels are
+    // given. Not an sRGB format: what is uploaded is what a shader samples.
+    [[nodiscard]] static std::unique_ptr<Texture>
+    CreateRgba8(DeviceContext& context, edt::Vec2<u32> size, std::span<const u8> pixels);
+
     Texture(const Texture&) = delete;
     Texture(Texture&&) = delete;
     ~Texture();
@@ -32,6 +37,13 @@ public:
 
 private:
     Texture() = default;
+
+    [[nodiscard]] static std::unique_ptr<Texture> Create(
+        DeviceContext& context,
+        edt::Vec2<u32> size,
+        std::span<const u8> pixels,
+        VkFormat format,
+        u32 bytes_per_pixel);
 
     DeviceContext* context_ = nullptr;
     VkImage image_ = VK_NULL_HANDLE;

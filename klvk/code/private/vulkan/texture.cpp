@@ -19,18 +19,33 @@ namespace klvk
 
 std::unique_ptr<Texture> Texture::CreateR8(DeviceContext& context, edt::Vec2<u32> size, std::span<const u8> pixels)
 {
+    return Create(context, size, pixels, VK_FORMAT_R8_UNORM, 1);
+}
+
+std::unique_ptr<Texture> Texture::CreateRgba8(DeviceContext& context, edt::Vec2<u32> size, std::span<const u8> pixels)
+{
+    return Create(context, size, pixels, VK_FORMAT_R8G8B8A8_UNORM, 4);
+}
+
+std::unique_ptr<Texture> Texture::Create(
+    DeviceContext& context,
+    edt::Vec2<u32> size,
+    std::span<const u8> pixels,
+    VkFormat format,
+    u32 bytes_per_pixel)
+{
     ErrorHandling::Ensure(
-        pixels.size() == static_cast<size_t>(size.x()) * size.y(),
-        "Pixel count {} does not match texture size {}x{}",
+        pixels.size() == static_cast<size_t>(size.x()) * size.y() * bytes_per_pixel,
+        "Pixel count {} does not match texture size {}x{} at {} bytes per pixel",
         pixels.size(),
         size.x(),
-        size.y());
+        size.y(),
+        bytes_per_pixel);
 
     auto texture = std::unique_ptr<Texture>(new Texture());
     texture->context_ = &context;
     texture->size_ = size;
 
-    constexpr VkFormat format = VK_FORMAT_R8_UNORM;
     const VkImageCreateInfo image_info{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
