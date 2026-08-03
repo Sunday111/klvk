@@ -70,6 +70,12 @@ knows what it will draw should `Add` it up front; anything it did not is packed 
 appears.
 
 `content/fonts` carries DejaVu Sans Mono and its licence so the examples need nothing installed.
+
+`examples/text` is driven by the keyboard: **space** adds a random character at the current size, and
+**enter** starts the line again at the next size. Each size keeps its own atlas for the life of the
+run, so returning to a size finds the glyphs it packed before still resident - only the line being
+displayed is cleared. Six characters are precached and the rest are packed the frame they first
+appear, which is the path worth exercising.
 `examples/text` cycles through three sizes, clearing and rebuilding the atlas at each. It precaches
 only a handful of characters, so most of what it then picks at random arrives a glyph at a time
 through the update path. Its diagnostic config captures every frame, so a change in packing, metrics

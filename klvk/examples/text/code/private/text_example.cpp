@@ -4,6 +4,9 @@
 
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
+#include "klvk/events/event_listener_method.hpp"
+#include "klvk/events/event_manager.hpp"
+#include "klvk/events/keyboard_events.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/text/glyph_atlas.hpp"
 #include "klvk/vulkan/descriptor_sets.hpp"
@@ -34,11 +37,11 @@ constexpr std::u32string_view kAlphabet = U"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij
 // path worth exercising.
 constexpr std::u32string_view kPrecached = U"ABCDEF";
 
-// One pass per size: the screen is cleared, the atlas is rebuilt, and a character
-// is added on each of the frames that follow. Capturing every frame of that walks
-// the atlas from a handful of glyphs to many at each size.
+// Space adds a character at the current size; Enter moves to the next one and
+// starts the line again. Each size keeps its own atlas for the life of the run,
+// so coming back to a size finds the glyphs it packed the first time still
+// there - only the line being displayed is cleared.
 constexpr std::array<u32, 3> kPixelSizes{16, 32, 64};
-constexpr u32 kFramesPerSize = 8;
 
 // Six glyphs to a row, so the fourteen this draws at each size wrap onto three
 // shelves. Small enough to exercise packing, large enough to hold the set - and
@@ -104,36 +107,64 @@ class TextApp : public klvk::Application
         const auto seed = config != nullptr ? config->value("seed", 7u) : 7u;
         random_ = std::mt19937{seed};
 
+        key_listener_ = klvk::events::EventListenerMethodCallbacks<&TextApp::OnKey>::CreatePtr(this);
+        GetEventManager().AddEventListener(*key_listener_);
+
         UseSize(0);
     }
 
-    void UseSize(size_t index)
+    // A key says what to do next; the atlas work itself waits for the point in the
+    // frame where a copy can be recorded.
+    void OnKey(const klvk::events::OnKey& event)
     {
-        size_index_ = index % kPixelSizes.size();
-        atlas_ = std::make_unique<klvk::GlyphAtlas>(
+        if (event.action != klvk::InputAction::Press) return;
+
+        if (event.key == klvk::Key::Space) ++pending_characters_;
+        if (event.key == klvk::Key::Enter) pending_next_size_ = true;
+    }
+
+    // An atlas is built once per size and kept. Nothing it packed is ever thrown
+    // away, which is what the append-only invariant it relies on requires.
+    [[nodiscard]] klvk::GlyphAtlas& AtlasForCurrentSize()
+    {
+        std::unique_ptr<klvk::GlyphAtlas>& atlas = atlases_[size_index_];
+        if (atlas) return *atlas;
+
+        atlas = std::make_unique<klvk::GlyphAtlas>(
             GetDeviceContext(),
             *font_,
             kPixelSizes[size_index_],
             edt::Vec2<u32>{} + (kPixelSizes[size_index_] * kAtlasGlyphsPerRow),
             kFramesInFlight);
-        klvk::ErrorHandling::Ensure(atlas_->Add(kPrecached), "The precached glyphs do not fit the atlas");
+        klvk::ErrorHandling::Ensure(atlas->Add(kPrecached), "The precached glyphs do not fit the atlas");
+        return *atlas;
+    }
 
+    // Only the line being displayed is cleared. The size's atlas keeps whatever it
+    // has packed, so a size that has been visited before starts with those glyphs
+    // already resident.
+    void UseSize(size_t index)
+    {
+        size_index_ = index % kPixelSizes.size();
+        text_.clear();
+
+        const klvk::Texture& texture = AtlasForCurrentSize().GetTexture();
         for (size_t frame = 0; frame != kFramesInFlight; ++frame)
         {
-            descriptor_sets_.WriteImage(frame, 0, atlas_->GetTexture().GetView(), atlas_->GetTexture().GetSampler());
+            descriptor_sets_.WriteImage(frame, 0, texture.GetView(), texture.GetSampler());
         }
-        text_.clear();
     }
 
     // Picks a character and, when the atlas has never seen it, packs it now. That
     // is the path a real caller hits for anything it did not precache.
     void AppendRandomCharacter()
     {
+        klvk::GlyphAtlas& atlas = AtlasForCurrentSize();
         std::uniform_int_distribution<size_t> pick{0, kAlphabet.size() - 1};
         const char32_t codepoint = kAlphabet[pick(random_)];
-        if (!atlas_->Contains(codepoint))
+        if (!atlas.Contains(codepoint))
         {
-            klvk::ErrorHandling::Ensure(atlas_->Add(std::u32string_view{&codepoint, 1}), "The atlas has no room left");
+            klvk::ErrorHandling::Ensure(atlas.Add(std::u32string_view{&codepoint, 1}), "The atlas has no room left");
         }
         text_.push_back(codepoint);
     }
@@ -142,7 +173,8 @@ class TextApp : public klvk::Application
     [[nodiscard]] std::vector<GlyphVertex> BuildVertices() const
     {
         const Vec2f extent = GetWindow().GetFramebufferSize().Cast<float>();
-        const float line_height = atlas_->GetLineHeight();
+        const klvk::GlyphAtlas& atlas = *atlases_[size_index_];
+        const float line_height = atlas.GetLineHeight();
 
         std::vector<GlyphVertex> vertices;
         vertices.reserve(text_.size() * 6);
@@ -150,7 +182,7 @@ class TextApp : public klvk::Application
         Vec2f pen{line_height * 0.5f, line_height};
         for (const char32_t codepoint : text_)
         {
-            const std::optional<klvk::GlyphAtlas::Glyph> glyph = atlas_->Find(codepoint);
+            const std::optional<klvk::GlyphAtlas::Glyph> glyph = atlas.Find(codepoint);
             if (!glyph.has_value()) continue;
 
             if (pen.x() + glyph->advance > extent.x() - (line_height * 0.5f))
@@ -181,17 +213,19 @@ class TextApp : public klvk::Application
     // the one that samples them.
     void BeforeSwapchainRender(VkCommandBuffer command_buffer) override
     {
-        // A new size starts a new pass with a cleared screen.
-        const size_t pass = frame_ / kFramesPerSize;
-        if (pass != pass_)
+        if (pending_next_size_)
         {
-            pass_ = pass;
-            UseSize(pass_);
+            pending_next_size_ = false;
+            UseSize(size_index_ + 1);
         }
-        AppendRandomCharacter();
-        ++frame_;
 
-        atlas_->RecordPendingUploads(command_buffer, GetFrameInFlightIndex());
+        while (pending_characters_ != 0)
+        {
+            --pending_characters_;
+            AppendRandomCharacter();
+        }
+
+        AtlasForCurrentSize().RecordPendingUploads(command_buffer, GetFrameInFlightIndex());
     }
 
     void Tick() override
@@ -258,7 +292,8 @@ public:
 
 private:
     std::unique_ptr<klvk::FontFace> font_;
-    std::unique_ptr<klvk::GlyphAtlas> atlas_;
+    std::array<std::unique_ptr<klvk::GlyphAtlas>, kPixelSizes.size()> atlases_;
+    std::unique_ptr<klvk::events::IEventListener> key_listener_;
     klvk::DescriptorSets descriptor_sets_;
     klvk::PipelineLayout pipeline_layout_;
     klvk::VkObject<VkPipeline> pipeline_;
@@ -267,8 +302,8 @@ private:
     std::mt19937 random_{7};
     std::u32string text_;
     size_t size_index_ = 0;
-    size_t pass_ = 0;
-    u64 frame_ = 0;
+    size_t pending_characters_ = 0;
+    bool pending_next_size_ = false;
 };
 
 void Main(int argc, char** argv)
