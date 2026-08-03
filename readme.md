@@ -53,15 +53,27 @@ ops and the write mask, and come out solid under the non-zero rule and hollow un
 shapes: an outline in font units, which scales to any size and can be filled, stroked or transformed
 like any other geometry, or a coverage bitmap at a chosen pixel size.
 
-`klvk/text/glyph_atlas.hpp` packs the bitmaps of one face at one size into a single coverage texture.
-Glyphs are rasterized by `Add` into a bitmap held on the CPU and the texture is created once by
-`Upload`, because a texture here is filled at creation and never written again - so a different size
-means a different atlas rather than a growing one.
+`klvk/text/glyph_atlas.hpp` packs the bitmaps of one face at one size into a single coverage texture,
+as they are first asked for. `Add` rasterizes and packs; `RecordPendingUploads` records the copies and
+the barrier that makes them visible to sampling, and belongs before the pass that draws the text.
+`Texture::RecordRegionUpdates` is the general form of that.
+
+Packing is **append-only**, and that is what makes it safe to write into the texture while an earlier
+frame is still sampling it: no frame can be reading space that no frame before it knew about. A
+barrier inside one command buffer does not order an earlier frame's reads, so reclaiming space would
+need more than one. Staging is per frame in flight for the same reason.
+
+**When the texture fills up, nothing is evicted and nothing grows.** `Add` returns false and leaves
+that glyph unpacked, so `Find` reports it missing; what to do about it is the caller's to decide -
+raise the size, use a second atlas, or draw without it. Rasterizing costs real time, so a caller that
+knows what it will draw should `Add` it up front; anything it did not is packed the first frame it
+appears.
 
 `content/fonts` carries DejaVu Sans Mono and its licence so the examples need nothing installed.
-`examples/text` cycles through three sizes, clearing and rebuilding the atlas at each, and adds one
-randomly chosen character per frame from a seeded generator. Its diagnostic config captures every one
-of those frames, so a change in packing, metrics or rasterization shows up as a differing image.
+`examples/text` cycles through three sizes, clearing and rebuilding the atlas at each. It precaches
+only a handful of characters, so most of what it then picks at random arrives a glyph at a time
+through the update path. Its diagnostic config captures every frame, so a change in packing, metrics
+or rasterization shows up as a differing image.
 
 ## Timers
 
