@@ -69,9 +69,14 @@ raise the size, use a second atlas, or draw without it. Rasterizing costs real t
 knows what it will draw should `Add` it up front; anything it did not is packed the first frame it
 appears.
 
-`Texture::CreateFromEncoded` decodes a PNG, JPEG or the other formats stb reads and uploads the
-result as four channels. The decoder is a private dependency: a caller hands over the bytes it read
-and gets back a texture, and never links or includes one itself.
+`Texture::CreateFromEncoded` decodes an encoded image and uploads it as four channels. A caller hands
+over the bytes it read and gets back a texture, and never links or includes a decoder itself.
+
+Which decoder that is sits behind one declaration, `DecodeImage` in `klvk/image/image_decoder.hpp`.
+Exactly one translation unit implements it, and that file is the only place in klvk that names a
+decoding library — today stb, which is convenient and not much more than that. Replacing it is
+replacing that file, or dropping it and linking a module that defines the same function; nothing else
+changes, because nothing else knows what the decoder is.
 
 `content/fonts` carries DejaVu Sans Mono and its licence so the examples need nothing installed.
 

@@ -1,9 +1,9 @@
 #include "klvk/vulkan/texture.hpp"
 
-#include <stb_image.h>
 #include <vk_mem_alloc.h>
 
 #include "klvk/error_handling.hpp"
+#include "klvk/image/image_decoder.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
@@ -30,27 +30,9 @@ std::unique_ptr<Texture> Texture::CreateRgba8(DeviceContext& context, edt::Vec2<
 
 std::unique_ptr<Texture> Texture::CreateFromEncoded(DeviceContext& context, std::span<const u8> encoded)
 {
-    // Four channels whatever the file held, so the sampler reads one layout and
-    // nothing downstream branches on what arrived.
-    constexpr int kChannels = 4;
-
-    int width = 0;
-    int height = 0;
-    int channels_in_file = 0;
-    u8* pixels = stbi_load_from_memory(
-        encoded.data(),
-        static_cast<int>(encoded.size()),
-        &width,
-        &height,
-        &channels_in_file,
-        kChannels);
-    if (pixels == nullptr) return nullptr;
-
-    const auto size = edt::Vec2<u32>{static_cast<u32>(width), static_cast<u32>(height)};
-    const auto count = static_cast<size_t>(width) * static_cast<size_t>(height) * kChannels;
-    std::unique_ptr<Texture> texture = CreateRgba8(context, size, std::span{pixels, count});
-    stbi_image_free(pixels);
-    return texture;
+    const std::optional<DecodedImage> image = DecodeImage(encoded);
+    if (!image.has_value()) return nullptr;
+    return CreateRgba8(context, image->size, image->pixels);
 }
 
 std::unique_ptr<Texture> Texture::CreateEmptyR8(DeviceContext& context, edt::Vec2<u32> size)

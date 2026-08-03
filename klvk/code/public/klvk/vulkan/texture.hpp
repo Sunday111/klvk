@@ -33,6 +33,7 @@ public:
     //
     // The decoder is an implementation detail: a caller hands over the bytes it
     // read and gets back a texture, and never links or includes one itself.
+    // Which decoder that is lives behind DecodeImage in klvk/image.
     [[nodiscard]] static std::unique_ptr<Texture> CreateFromEncoded(
         DeviceContext& context,
         std::span<const u8> encoded);
