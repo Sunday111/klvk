@@ -26,6 +26,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_cache_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_interface.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_stages.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/text/font_face.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/text/glyph_atlas.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/texture/procedural_texture_generator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/timing/timer_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/simple_imgui_combo.cpp
@@ -77,6 +79,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/shader_stages.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/constexpr_string_hash.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/tagged_id_hash.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/text/font_face.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/text/glyph_atlas.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/texture/procedural_texture_generator.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/timing/timer_manager.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/imgui_helpers.hpp
@@ -100,7 +104,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vk_object.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan_api.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan_common.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/window.hpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/window.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/text/code/private/text_example.cpp)
 add_library(klvk STATIC ${module_source_files})
 set_generic_compiler_options(klvk PRIVATE)
 target_link_libraries(klvk PUBLIC ass
@@ -117,7 +122,8 @@ target_link_libraries(klvk PUBLIC ass
                                   imgui_vulkan)
 target_link_libraries(klvk PRIVATE glfw
                                    spdlog::spdlog
-                                   slang::slang)
+                                   slang::slang
+                                   freetype)
 target_include_directories(klvk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/code/public)
 target_include_directories(klvk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/code/private)
 include(${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg.cmake)

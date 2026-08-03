@@ -1,0 +1,140 @@
+{
+  "version": 1,
+  "presentation": "offscreen",
+  "framebuffer_size": [
+    320,
+    240
+  ],
+  "clock": {
+    "mode": "fixed",
+    "step_seconds": 0.016666666666666666
+  },
+  "captures": [
+    {
+      "frame": 1,
+      "path": "frame_01.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 2,
+      "path": "frame_02.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 3,
+      "path": "frame_03.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 4,
+      "path": "frame_04.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 5,
+      "path": "frame_05.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 6,
+      "path": "frame_06.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 7,
+      "path": "frame_07.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 8,
+      "path": "frame_08.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 9,
+      "path": "frame_09.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 10,
+      "path": "frame_10.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 11,
+      "path": "frame_11.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 12,
+      "path": "frame_12.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 13,
+      "path": "frame_13.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 14,
+      "path": "frame_14.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 15,
+      "path": "frame_15.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 16,
+      "path": "frame_16.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 17,
+      "path": "frame_17.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 18,
+      "path": "frame_18.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 19,
+      "path": "frame_19.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 20,
+      "path": "frame_20.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 21,
+      "path": "frame_21.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 22,
+      "path": "frame_22.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 23,
+      "path": "frame_23.ppm",
+      "include_ui": false
+    },
+    {
+      "frame": 24,
+      "path": "frame_24.ppm",
+      "include_ui": false
+    }
+  ],
+  "exit": {
+    "after_last_capture": true
+  },
+  "application": {
+    "seed": 7
+  }
+}

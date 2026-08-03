@@ -47,6 +47,22 @@ without touching color.
 into the stencil, then a cover pass paints and resets the marked pixels. The two stars differ only in the stencil
 ops and the write mask, and come out solid under the non-zero rule and hollow under even-odd.
 
+## Text
+
+`klvk/text/font_face.hpp` opens a font through FreeType and hands a glyph over in either of two
+shapes: an outline in font units, which scales to any size and can be filled, stroked or transformed
+like any other geometry, or a coverage bitmap at a chosen pixel size.
+
+`klvk/text/glyph_atlas.hpp` packs the bitmaps of one face at one size into a single coverage texture.
+Glyphs are rasterized by `Add` into a bitmap held on the CPU and the texture is created once by
+`Upload`, because a texture here is filled at creation and never written again - so a different size
+means a different atlas rather than a growing one.
+
+`content/fonts` carries DejaVu Sans Mono and its licence so the examples need nothing installed.
+`examples/text` cycles through three sizes, clearing and rebuilding the atlas at each, and adds one
+randomly chosen character per frame from a seeded generator. Its diagnostic config captures every one
+of those frames, so a change in packing, metrics or rasterization shows up as a differing image.
+
 ## Timers
 
 `klvk/timing/timer_manager.hpp` provides render-thread scheduling in elapsed-time and frame domains. It uses indexed

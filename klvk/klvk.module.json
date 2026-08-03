@@ -18,7 +18,8 @@
         "Private": [
             "glfw",
             "spdlog",
-            "slang"
+            "slang",
+            "freetype"
         ]
     },
     "ExtraCMakeFiles": [

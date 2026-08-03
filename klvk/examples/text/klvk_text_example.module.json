@@ -1,0 +1,11 @@
+{
+    "ModuleType": "Executable",
+    "CopyDirectoriesAfterBuild": [
+        "content"
+    ],
+    "Dependencies": {
+        "Public": [
+            "klvk"
+        ]
+    }
+}
