@@ -19,7 +19,8 @@
             "glfw",
             "spdlog",
             "slang",
-            "freetype"
+            "freetype",
+            "stb"
         ]
     },
     "ExtraCMakeFiles": [

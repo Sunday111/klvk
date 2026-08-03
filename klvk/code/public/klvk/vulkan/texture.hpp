@@ -27,6 +27,16 @@ public:
     [[nodiscard]] static std::unique_ptr<Texture>
     CreateRgba8(DeviceContext& context, edt::Vec2<u32> size, std::span<const u8> pixels);
 
+    // Decodes an encoded image - PNG, JPEG, BMP, TGA, GIF, PSD, HDR, PIC or PNM -
+    // and uploads it as four channels, whatever the file held. Null when the bytes
+    // are not an image this can read, which a truncated or unrecognized file is.
+    //
+    // The decoder is an implementation detail: a caller hands over the bytes it
+    // read and gets back a texture, and never links or includes one itself.
+    [[nodiscard]] static std::unique_ptr<Texture> CreateFromEncoded(
+        DeviceContext& context,
+        std::span<const u8> encoded);
+
     // Zeroed single channel texture, for one that is filled in later by
     // RecordRegionUpdates rather than all at once.
     [[nodiscard]] static std::unique_ptr<Texture> CreateEmptyR8(DeviceContext& context, edt::Vec2<u32> size);

@@ -69,6 +69,10 @@ raise the size, use a second atlas, or draw without it. Rasterizing costs real t
 knows what it will draw should `Add` it up front; anything it did not is packed the first frame it
 appears.
 
+`Texture::CreateFromEncoded` decodes a PNG, JPEG or the other formats stb reads and uploads the
+result as four channels. The decoder is a private dependency: a caller hands over the bytes it read
+and gets back a texture, and never links or includes one itself.
+
 `content/fonts` carries DejaVu Sans Mono and its licence so the examples need nothing installed.
 
 `examples/text` is driven by the keyboard: **space** adds a random character at the current size, and
