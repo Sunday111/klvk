@@ -13,12 +13,6 @@
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
 
-// Vulkan create-info structs are designed for partial designated initialization;
-// unlisted fields must be zero.
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
-#endif
-
 // Matches the push constant block in two_textures_2d.vert.
 struct PushConstants
 {

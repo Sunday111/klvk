@@ -27,13 +27,13 @@
       "config": "configs/rendering.json"
     },
     {
-      "name": "minimal_quad",
-      "target": "klvk_minimal_quad_example",
+      "name": "minimal_cube",
+      "target": "klvk_minimal_cube_example",
       "config": "configs/rendering.json"
     },
     {
-      "name": "minimal_cube",
-      "target": "klvk_minimal_cube_example",
+      "name": "minimal_quad",
+      "target": "klvk_minimal_quad_example",
       "config": "configs/rendering.json"
     },
     {
@@ -50,6 +50,16 @@
       "name": "simple_lit_cube",
       "target": "klvk_simple_lit_cube_example",
       "config": "configs/rendering.json"
+    },
+    {
+      "name": "stencil",
+      "target": "klvk_stencil_example",
+      "config": "configs/rendering.json"
+    },
+    {
+      "name": "text",
+      "target": "klvk_text_example",
+      "config": "configs/text.json"
     },
     {
       "name": "textured_quad",

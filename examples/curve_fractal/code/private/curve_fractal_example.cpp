@@ -5,9 +5,9 @@
 #include <imgui.h>
 #include <vk_mem_alloc.h>
 
-#include <edt/math/math.hpp>
 #include <bit>
 #include <condition_variable>
+#include <edt/math/math.hpp>
 #include <mutex>
 #include <random>
 #include <thread>
@@ -27,10 +27,6 @@
 #include "klvk/vulkan/vk_object.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
-
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
-#endif
 
 namespace
 {
@@ -181,7 +177,11 @@ class CurveFractalApp : public klvk::Application
         renderers_.reserve(kMaxCurvesPerFrame);
         for (size_t i = 0; i != kMaxCurvesPerFrame; ++i)
         {
-            renderers_.emplace_back(std::make_unique<klvk::CurveRenderer2d>(*this, kOffscreenFormat, klvk::CurveRenderer2d::CompositeMode::Accumulate));
+            renderers_.emplace_back(
+                std::make_unique<klvk::CurveRenderer2d>(
+                    *this,
+                    kOffscreenFormat,
+                    klvk::CurveRenderer2d::CompositeMode::Accumulate));
         }
         draw_batch_.resize(kMaxCurvesPerFrame);
 

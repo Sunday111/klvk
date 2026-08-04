@@ -6,14 +6,9 @@
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/integral_aliases.hpp"
+#include "klvk/vulkan/depth_stencil_format.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
-
-// Vulkan create-info structs are designed for partial designated initialization;
-// unlisted fields must be zero.
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
-#endif
 
 namespace klvk
 {
@@ -302,6 +297,34 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::DepthFormat(VkFormat format)
     return *this;
 }
 
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::StencilTest(
+    const VkStencilOpState& front,
+    const VkStencilOpState& back)
+{
+    stencil_test_ = true;
+    stencil_front_ = front;
+    stencil_back_ = back;
+    return *this;
+}
+
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::StencilFormat(VkFormat format)
+{
+    stencil_format_ = format;
+    return *this;
+}
+
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::DynamicStencilMasks()
+{
+    dynamic_stencil_masks_ = true;
+    return *this;
+}
+
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::ColorWriteMask(VkColorComponentFlags mask)
+{
+    blend_attachment_.colorWriteMask = mask;
+    return *this;
+}
+
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::ColorFormat(VkFormat format)
 {
     color_format_ = format;
@@ -426,6 +449,9 @@ VkPipeline GraphicsPipelineBuilder::Build()
         .depthTestEnable = depth_test_ ? VK_TRUE : VK_FALSE,
         .depthWriteEnable = depth_test_ ? VK_TRUE : VK_FALSE,
         .depthCompareOp = depth_compare_op_,
+        .stencilTestEnable = stencil_test_ ? VK_TRUE : VK_FALSE,
+        .front = stencil_front_,
+        .back = stencil_back_,
     };
     const std::array blend_attachments{blend_attachment_};
     const VkPipelineColorBlendStateCreateInfo color_blend{
@@ -433,7 +459,13 @@ VkPipeline GraphicsPipelineBuilder::Build()
         .attachmentCount = blend_attachments.size(),
         .pAttachments = blend_attachments.data(),
     };
-    const std::array dynamic_states{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    std::vector dynamic_states{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    if (dynamic_stencil_masks_)
+    {
+        dynamic_states.push_back(VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK);
+        dynamic_states.push_back(VK_DYNAMIC_STATE_STENCIL_WRITE_MASK);
+        dynamic_states.push_back(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
+    }
     const VkPipelineDynamicStateCreateInfo dynamic_state{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         .dynamicStateCount = static_cast<u32>(dynamic_states.size()),
@@ -460,11 +492,27 @@ VkPipeline GraphicsPipelineBuilder::Build()
             depth_format = app_->GetDepthFormat();
         }
     }
+    VkFormat stencil_format = VK_FORMAT_UNDEFINED;
+    if (stencil_test_)
+    {
+        stencil_format = stencil_format_;
+        if (stencil_format == VK_FORMAT_UNDEFINED)
+        {
+            ErrorHandling::Ensure(
+                app_ != nullptr,
+                "GraphicsPipelineBuilder: stencil test enabled without a stencil format or application");
+            stencil_format = app_->GetDepthFormat();
+        }
+        ErrorHandling::Ensure(
+            FormatHasStencil(stencil_format),
+            "GraphicsPipelineBuilder: stencil test enabled with a format that has no stencil plane");
+    }
     const VkPipelineRenderingCreateInfo rendering_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .colorAttachmentCount = color_formats.size(),
         .pColorAttachmentFormats = color_formats.data(),
         .depthAttachmentFormat = depth_format,
+        .stencilAttachmentFormat = stencil_format,
     };
 
     const std::array pipeline_infos{VkGraphicsPipelineCreateInfo{

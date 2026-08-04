@@ -17,10 +17,6 @@
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
 
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
-#endif
-
 struct ColorPushConstants
 {
     std::array<edt::Vec4f, 3> transform_columns{};

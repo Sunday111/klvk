@@ -10,10 +10,6 @@
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
 
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
-#endif
-
 namespace klvk
 {
 namespace

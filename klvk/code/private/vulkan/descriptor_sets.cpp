@@ -8,12 +8,6 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 
-// Vulkan create-info structs are designed for partial designated initialization;
-// unlisted fields must be zero.
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
-#endif
-
 namespace klvk
 {
 
@@ -164,13 +158,15 @@ void DescriptorSets::WriteImage(
     u32 binding,
     VkImageView view,
     VkSampler sampler,
-    VkImageLayout layout)
+    VkImageLayout layout,
+    u32 array_element)
 {
     const std::array image_info{VkDescriptorImageInfo{.sampler = sampler, .imageView = view, .imageLayout = layout}};
     const std::array write{VkWriteDescriptorSet{
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .dstSet = sets_.at(set_index),
         .dstBinding = binding,
+        .dstArrayElement = array_element,
         .descriptorCount = image_info.size(),
         .descriptorType = TypeOfBinding(binding),
         .pImageInfo = image_info.data(),

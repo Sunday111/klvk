@@ -3,34 +3,109 @@
 #include <vk_mem_alloc.h>
 
 #include "klvk/error_handling.hpp"
+#include "klvk/image/image_decoder.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
-
-// Vulkan create-info structs are designed for partial designated initialization;
-// unlisted fields must be zero.
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
-#endif
 
 namespace klvk
 {
 
 std::unique_ptr<Texture> Texture::CreateR8(DeviceContext& context, edt::Vec2<u32> size, std::span<const u8> pixels)
 {
+    return Create(context, size, pixels, VK_FORMAT_R8_UNORM, 1);
+}
+
+std::unique_ptr<Texture> Texture::CreateRgba8(DeviceContext& context, edt::Vec2<u32> size, std::span<const u8> pixels)
+{
+    return Create(context, size, pixels, VK_FORMAT_R8G8B8A8_UNORM, 4);
+}
+
+std::unique_ptr<Texture> Texture::CreateFromEncoded(DeviceContext& context, std::span<const u8> encoded)
+{
+    const std::optional<DecodedImage> image = DecodeImage(encoded);
+    if (!image.has_value()) return nullptr;
+    return CreateRgba8(context, image->size, image->pixels);
+}
+
+std::unique_ptr<Texture> Texture::CreateEmptyR8(DeviceContext& context, edt::Vec2<u32> size)
+{
+    // Zeroed rather than left undefined: the padding between packed regions is
+    // sampled at their edges, and undefined memory there would show as fringing.
+    const std::vector<u8> zeros(static_cast<size_t>(size.x()) * size.y(), 0);
+    return Create(context, size, zeros, VK_FORMAT_R8_UNORM, 1);
+}
+
+void Texture::RecordRegionUpdates(
+    VkCommandBuffer command_buffer,
+    VkBuffer staging,
+    std::span<const RegionUpdate> regions)
+{
+    if (regions.empty()) return;
+
+    std::array barriers{VkImageMemoryBarrier2{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+        .srcAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+        .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = image_,
+        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
+    }};
+    VkDependencyInfo dependency{
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = barriers.size(),
+        .pImageMemoryBarriers = barriers.data(),
+    };
+    Vulkan::CmdPipelineBarrier2(command_buffer, dependency);
+
+    std::vector<VkBufferImageCopy> copies;
+    copies.reserve(regions.size());
+    for (const RegionUpdate& region : regions)
+    {
+        copies.push_back({
+            .bufferOffset = region.buffer_offset,
+            .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1},
+            .imageOffset = {.x = static_cast<i32>(region.offset.x()), .y = static_cast<i32>(region.offset.y())},
+            .imageExtent = {.width = region.size.x(), .height = region.size.y(), .depth = 1},
+        });
+    }
+    Vulkan::CmdCopyBufferToImage(command_buffer, staging, image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, copies);
+
+    // Back to being sampled, and not before the copies have landed.
+    barriers[0].srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+    barriers[0].srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    barriers[0].dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    barriers[0].dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+    barriers[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barriers[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    Vulkan::CmdPipelineBarrier2(command_buffer, dependency);
+}
+
+std::unique_ptr<Texture> Texture::Create(
+    DeviceContext& context,
+    edt::Vec2<u32> size,
+    std::span<const u8> pixels,
+    VkFormat format,
+    u32 bytes_per_pixel)
+{
     ErrorHandling::Ensure(
-        pixels.size() == static_cast<size_t>(size.x()) * size.y(),
-        "Pixel count {} does not match texture size {}x{}",
+        pixels.size() == static_cast<size_t>(size.x()) * size.y() * bytes_per_pixel,
+        "Pixel count {} does not match texture size {}x{} at {} bytes per pixel",
         pixels.size(),
         size.x(),
-        size.y());
+        size.y(),
+        bytes_per_pixel);
 
     auto texture = std::unique_ptr<Texture>(new Texture());
     texture->context_ = &context;
     texture->size_ = size;
 
-    constexpr VkFormat format = VK_FORMAT_R8_UNORM;
     const VkImageCreateInfo image_info{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,

@@ -13,6 +13,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/input_recorder.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/events/event_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/filesystem/filesystem.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/image/image_decoder_stb.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/mesh/procedural_mesh_generator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.hpp
@@ -26,11 +27,14 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_cache_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_interface.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_stages.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/text/font_face.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/text/glyph_atlas.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/texture/procedural_texture_generator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/timing/timer_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/simple_imgui_combo.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/transform_widget.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/type_id_widget.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/depth_stencil_format.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/descriptor_sets.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/device_context.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/gpu_buffer.cpp
@@ -59,6 +63,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/window_events.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/filesystem/filesystem.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/float_aliases.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/image/image_decoder.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/input.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/integral_aliases.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/macro/ensure_enum_size.hpp
@@ -76,6 +81,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/shader/shader_stages.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/constexpr_string_hash.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/template/tagged_id_hash.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/text/font_face.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/text/glyph_atlas.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/texture/procedural_texture_generator.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/timing/timer_manager.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/imgui_helpers.hpp
@@ -84,6 +91,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/simple_type_widget.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/transform_widget.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/type_id_widget_minimal.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/depth_stencil_format.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/descriptor_sets.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/detail/settings.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/detail/vulkan_api_impl.hpp
@@ -98,7 +106,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vk_object.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan_api.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan_common.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/window.hpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/window.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/text/code/private/text_example.cpp)
 add_library(klvk STATIC ${module_source_files})
 set_generic_compiler_options(klvk PRIVATE)
 target_link_libraries(klvk PUBLIC ass
@@ -115,12 +124,15 @@ target_link_libraries(klvk PUBLIC ass
                                   imgui_vulkan)
 target_link_libraries(klvk PRIVATE glfw
                                    spdlog::spdlog
-                                   slang::slang)
+                                   slang::slang
+                                   freetype
+                                   stb)
 target_include_directories(klvk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/code/public)
 target_include_directories(klvk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/code/private)
 include(${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/shader_cache.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/vulkan_api.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/warnings.cmake)
 add_custom_target(klvk_copy_files ALL
     COMMAND ${Python3_EXECUTABLE} "${YAE_SUPPORT_ROOT}/scripts/stage_directories.py"
             --destination "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/content"

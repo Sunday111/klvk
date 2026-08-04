@@ -18,13 +18,16 @@
         "Private": [
             "glfw",
             "spdlog",
-            "slang"
+            "slang",
+            "freetype",
+            "stb"
         ]
     },
     "ExtraCMakeFiles": [
         "ffmpeg",
         "shader_cache",
-        "vulkan_api"
+        "vulkan_api",
+        "warnings"
     ],
     "CopyDirectoriesAfterBuild": [
         "content"

@@ -4,12 +4,6 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 
-// Vulkan create-info structs are designed for partial designated initialization;
-// unlisted fields must be zero.
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
-#endif
-
 InterpolationWidget::InterpolationWidget(klvk::Application& app, size_t num_colors)
     : app_(&app),
       num_colors_(num_colors),

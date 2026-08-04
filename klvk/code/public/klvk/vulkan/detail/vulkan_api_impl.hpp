@@ -255,7 +255,7 @@ void Vulkan::BeginCommandBuffer(VkCommandBuffer command_buffer, const VkCommandB
         return {.result = result, .value = handle};                                                  \
     }                                                                                                \
                                                                                                      \
-    std::expected<HandleType, VulkanError> Vulkan::Name##CE(                                          \
+    std::expected<HandleType, VulkanError> Vulkan::Name##CE(                                         \
         ParentType parent_name,                                                                      \
         const InfoType& create_info,                                                                 \
         const VkAllocationCallbacks* allocator) noexcept                                             \
@@ -1056,6 +1056,54 @@ void Vulkan::CmdSetScissor(
     CmdSetScissorNE(command_buffer, first_scissor, scissors);
 }
 
+void Vulkan::CmdSetStencilCompareMaskNE(
+    VkCommandBuffer command_buffer,
+    VkStencilFaceFlags face_mask,
+    u32 compare_mask) noexcept
+{
+    vkCmdSetStencilCompareMask(command_buffer, face_mask, compare_mask);
+}
+
+void Vulkan::CmdSetStencilCompareMask(
+    VkCommandBuffer command_buffer,
+    VkStencilFaceFlags face_mask,
+    u32 compare_mask) noexcept
+{
+    CmdSetStencilCompareMaskNE(command_buffer, face_mask, compare_mask);
+}
+
+void Vulkan::CmdSetStencilReferenceNE(
+    VkCommandBuffer command_buffer,
+    VkStencilFaceFlags face_mask,
+    u32 reference) noexcept
+{
+    vkCmdSetStencilReference(command_buffer, face_mask, reference);
+}
+
+void Vulkan::CmdSetStencilReference(
+    VkCommandBuffer command_buffer,
+    VkStencilFaceFlags face_mask,
+    u32 reference) noexcept
+{
+    CmdSetStencilReferenceNE(command_buffer, face_mask, reference);
+}
+
+void Vulkan::CmdSetStencilWriteMaskNE(
+    VkCommandBuffer command_buffer,
+    VkStencilFaceFlags face_mask,
+    u32 write_mask) noexcept
+{
+    vkCmdSetStencilWriteMask(command_buffer, face_mask, write_mask);
+}
+
+void Vulkan::CmdSetStencilWriteMask(
+    VkCommandBuffer command_buffer,
+    VkStencilFaceFlags face_mask,
+    u32 write_mask) noexcept
+{
+    CmdSetStencilWriteMaskNE(command_buffer, face_mask, write_mask);
+}
+
 void Vulkan::CmdSetViewportNE(
     VkCommandBuffer command_buffer,
     u32 first_viewport,
@@ -1190,6 +1238,20 @@ void Vulkan::GetPhysicalDeviceFeatures2NE(
 void Vulkan::GetPhysicalDeviceFeatures2(VkPhysicalDevice physical_device, VkPhysicalDeviceFeatures2& features) noexcept
 {
     GetPhysicalDeviceFeatures2NE(physical_device, features);
+}
+
+VkFormatProperties Vulkan::GetPhysicalDeviceFormatPropertiesNE(
+    VkPhysicalDevice physical_device,
+    VkFormat format) noexcept
+{
+    VkFormatProperties properties{};
+    vkGetPhysicalDeviceFormatProperties(physical_device, format, &properties);
+    return properties;
+}
+
+VkFormatProperties Vulkan::GetPhysicalDeviceFormatProperties(VkPhysicalDevice physical_device, VkFormat format) noexcept
+{
+    return GetPhysicalDeviceFormatPropertiesNE(physical_device, format);
 }
 
 VkPhysicalDeviceProperties Vulkan::GetPhysicalDevicePropertiesNE(VkPhysicalDevice physical_device) noexcept

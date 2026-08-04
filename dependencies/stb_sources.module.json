@@ -1,0 +1,13 @@
+{
+    "ModuleType": "GitClone",
+    "GitUrl": "https://github.com/nothings/stb",
+    "GitTag": "master",
+    "TargetName": "stb_sources",
+    "LocalPath": "nothings/stb",
+    "CMakeAddSubdirectory": false,
+    "CMakeOptions": {},
+    "Dependencies": {
+        "Public": [],
+        "Private": []
+    }
+}

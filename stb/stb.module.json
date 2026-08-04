@@ -1,0 +1,10 @@
+{
+    "ModuleType": "Library",
+    "GenerateCMakeFile": false,
+    "Dependencies": {
+        "Public": [
+            "stb_sources"
+        ],
+        "Private": []
+    }
+}

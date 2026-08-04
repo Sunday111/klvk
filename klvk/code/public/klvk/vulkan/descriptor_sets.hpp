@@ -59,12 +59,15 @@ public:
     void WriteBuffer(size_t set_index, u32 binding, VkBuffer buffer, VkDeviceSize range, VkDeviceSize offset = 0);
 
     // Points a combined-image-sampler binding of the given set at an image view.
+    // `array_element` selects the slot when the binding was declared with a count
+    // above one. Without it an array binding could only ever hold its first image.
     void WriteImage(
         size_t set_index,
         u32 binding,
         VkImageView view,
         VkSampler sampler,
-        VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        u32 array_element = 0);
 
 private:
     DescriptorSets(

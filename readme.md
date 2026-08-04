@@ -28,6 +28,68 @@ Sizes, counts, dimensions, indices, masks, and identifiers are unsigned; reach f
 alias only for a domain that can meaningfully be negative, or to match an explicitly signed
 external ABI.
 
+## Depth and stencil
+
+The depth-stencil format is chosen at runtime from what the device supports as an optimally tiled attachment,
+preferring a combined format (`D32_SFLOAT_S8_UINT`, then `D24_UNORM_S8_UINT`, then depth-only `D32_SFLOAT`).
+`RenderTarget::GetDepthStencilFormat` reports the choice and `Application::GetDepthFormat` forwards it;
+`klvk/vulkan/depth_stencil_format.hpp` answers whether a format carries a stencil plane and which aspects a view
+of it must name.
+
+Depth and stencil are enabled independently. `Application::SetStencilBufferEnabled` attaches the stencil plane and
+clears it to zero each frame without turning on depth testing, which is what a stencil-only technique wants.
+`GraphicsPipelineBuilder::StencilTest` takes the front and back `VkStencilOpState` and declares the stencil
+attachment format on its own, `DynamicStencilMasks` moves compare mask, write mask and reference to the command
+buffer so one pipeline covers every combination, and `ColorWriteMask(0)` gives a pass that accumulates coverage
+without touching color.
+
+`examples/stencil` draws a self-intersecting star twice with stencil-then-cover: a winding pass fans the outline
+into the stencil, then a cover pass paints and resets the marked pixels. The two stars differ only in the stencil
+ops and the write mask, and come out solid under the non-zero rule and hollow under even-odd.
+
+## Text
+
+`klvk/text/font_face.hpp` opens a font through FreeType and hands a glyph over in either of two
+shapes: an outline in font units, which scales to any size and can be filled, stroked or transformed
+like any other geometry, or a coverage bitmap at a chosen pixel size.
+
+`klvk/text/glyph_atlas.hpp` packs the bitmaps of one face at one size into a single coverage texture,
+as they are first asked for. `Add` rasterizes and packs; `RecordPendingUploads` records the copies and
+the barrier that makes them visible to sampling, and belongs before the pass that draws the text.
+`Texture::RecordRegionUpdates` is the general form of that.
+
+Packing is **append-only**, and that is what makes it safe to write into the texture while an earlier
+frame is still sampling it: no frame can be reading space that no frame before it knew about. A
+barrier inside one command buffer does not order an earlier frame's reads, so reclaiming space would
+need more than one. Staging is per frame in flight for the same reason.
+
+**When the texture fills up, nothing is evicted and nothing grows.** `Add` returns false and leaves
+that glyph unpacked, so `Find` reports it missing; what to do about it is the caller's to decide -
+raise the size, use a second atlas, or draw without it. Rasterizing costs real time, so a caller that
+knows what it will draw should `Add` it up front; anything it did not is packed the first frame it
+appears.
+
+`Texture::CreateFromEncoded` decodes an encoded image and uploads it as four channels. A caller hands
+over the bytes it read and gets back a texture, and never links or includes a decoder itself.
+
+Which decoder that is sits behind one declaration, `DecodeImage` in `klvk/image/image_decoder.hpp`.
+Exactly one translation unit implements it, and that file is the only place in klvk that names a
+decoding library — today stb, which is convenient and not much more than that. Replacing it is
+replacing that file, or dropping it and linking a module that defines the same function; nothing else
+changes, because nothing else knows what the decoder is.
+
+`content/fonts` carries DejaVu Sans Mono and its licence so the examples need nothing installed.
+
+`examples/text` is driven by the keyboard: **space** adds a random character at the current size, and
+**enter** starts the line again at the next size. Each size keeps its own atlas for the life of the
+run, so returning to a size finds the glyphs it packed before still resident - only the line being
+displayed is cleared. Six characters are precached and the rest are packed the frame they first
+appear, which is the path worth exercising.
+`examples/text` cycles through three sizes, clearing and rebuilding the atlas at each. It precaches
+only a handful of characters, so most of what it then picks at random arrives a glyph at a time
+through the update path. Its diagnostic config captures every frame, so a change in packing, metrics
+or rasterization shows up as a differing image.
+
 ## Timers
 
 `klvk/timing/timer_manager.hpp` provides render-thread scheduling in elapsed-time and frame domains. It uses indexed

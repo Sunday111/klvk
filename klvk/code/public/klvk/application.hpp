@@ -80,6 +80,10 @@ public:
     void SetClearColor(const edt::Vec4f& color);
     void SetDepthBufferEnabled(bool enabled);
 
+    // Attaches the stencil plane of the depth-stencil image and clears it to zero
+    // every frame. Independent of depth: a stencil-only pass leaves depth testing off.
+    void SetStencilBufferEnabled(bool enabled);
+
     // Vulkan accessors for renderers.
     [[nodiscard]] DeviceContext& GetDeviceContext();
     [[nodiscard]] VkFormat GetSwapchainFormat() const;

@@ -25,10 +25,6 @@
 #include "klvk/window.hpp"
 #include "platform/input_mapping.hpp"
 
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
-#endif
-
 namespace klvk
 {
 namespace

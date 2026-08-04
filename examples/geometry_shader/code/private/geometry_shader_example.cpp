@@ -14,12 +14,6 @@
 #include "klvk/vulkan/vulkan_api.hpp"
 #include "klvk/window.hpp"
 
-// Vulkan create-info structs are designed for partial designated initialization;
-// unlisted fields must be zero.
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
-#endif
-
 // The shader ABI stores this beside u32 padding; shrinking it would break Object's std430 layout.
 enum class ShapeType : u32  // NOLINT(performance-enum-size)
 {
