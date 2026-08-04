@@ -1228,6 +1228,18 @@ VkQueue Vulkan::GetDeviceQueue(VkDevice device, u32 queue_family_index, u32 queu
     return GetDeviceQueueNE(device, queue_family_index, queue_index);
 }
 
+VkPhysicalDeviceFeatures Vulkan::GetPhysicalDeviceFeaturesNE(VkPhysicalDevice physical_device) noexcept
+{
+    VkPhysicalDeviceFeatures features{};
+    vkGetPhysicalDeviceFeatures(physical_device, &features);
+    return features;
+}
+
+VkPhysicalDeviceFeatures Vulkan::GetPhysicalDeviceFeatures(VkPhysicalDevice physical_device) noexcept
+{
+    return GetPhysicalDeviceFeaturesNE(physical_device);
+}
+
 void Vulkan::GetPhysicalDeviceFeatures2NE(
     VkPhysicalDevice physical_device,
     VkPhysicalDeviceFeatures2& features) noexcept

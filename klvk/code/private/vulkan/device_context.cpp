@@ -282,8 +282,7 @@ void DeviceContext::CreateDevice()
 
     // Optional features are enabled when the hardware has them; users query the
     // corresponding accessors before creating pipelines that need them.
-    VkPhysicalDeviceFeatures supported_features{};
-    vkGetPhysicalDeviceFeatures(physical_device_, &supported_features);
+    const VkPhysicalDeviceFeatures supported_features = Vulkan::GetPhysicalDeviceFeatures(physical_device_);
     geometry_shader_enabled_ = supported_features.geometryShader == VK_TRUE;
     tessellation_shader_enabled_ = supported_features.tessellationShader == VK_TRUE;
 

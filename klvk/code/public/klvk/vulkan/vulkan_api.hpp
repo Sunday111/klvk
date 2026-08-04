@@ -767,6 +767,11 @@ public:
     [[nodiscard]] KLVK_VK_INLINE static VkQueue
     GetDeviceQueue(VkDevice device, u32 queue_family_index, u32 queue_index) noexcept;
 
+    [[nodiscard]] KLVK_VK_INLINE static VkPhysicalDeviceFeatures GetPhysicalDeviceFeaturesNE(
+        VkPhysicalDevice physical_device) noexcept;
+    [[nodiscard]] KLVK_VK_INLINE static VkPhysicalDeviceFeatures GetPhysicalDeviceFeatures(
+        VkPhysicalDevice physical_device) noexcept;
+
     KLVK_VK_INLINE static void GetPhysicalDeviceFeatures2NE(
         VkPhysicalDevice physical_device,
         VkPhysicalDeviceFeatures2& features) noexcept;
