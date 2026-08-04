@@ -5,7 +5,7 @@ API (`Application`, `Window`, events, camera) built on Vulkan 1.3 with dynamic r
 
 - Function loading via [volk](https://github.com/zeux/volk).
 - Memory management via [VulkanMemoryAllocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator).
-- GLSL and Slang are staged at build time and compiled to SPIR-V on demand with `shaderc` and Slang, respectively.
+- Slang shaders are staged at build time and compiled to SPIR-V on demand, then cached on disk.
 - Slang shader files must currently be self-contained. Imports and includes fail explicitly until persistent shader
   cache entries track and validate transitive source dependencies.
 - `ShaderCacheManager` coalesces concurrent requests, retains SPIR-V in memory, and periodically persists validated,

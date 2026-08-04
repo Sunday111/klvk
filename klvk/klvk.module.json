@@ -25,7 +25,6 @@
     },
     "ExtraCMakeFiles": [
         "ffmpeg",
-        "shader_cache",
         "vulkan_api",
         "warnings"
     ],

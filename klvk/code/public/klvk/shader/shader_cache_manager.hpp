@@ -77,8 +77,6 @@ private:
     std::filesystem::path source_root_;
     std::filesystem::path cache_root_;
     Settings settings_;
-    u32 compiler_spirv_version_ = 0;
-    u32 compiler_spirv_revision_ = 0;
 
     std::mutex mutex_;
     std::condition_variable condition_;

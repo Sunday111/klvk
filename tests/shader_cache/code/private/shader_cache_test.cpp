@@ -147,7 +147,7 @@ void Run()
     const std::filesystem::path cache = root / "cache";
     std::filesystem::create_directories(sources);
     TestTessellationReflection(root / "tessellation_cache");
-    const std::filesystem::path shader = sources / "test.comp";
+    const std::filesystem::path shader = sources / "coalesce.comp.slang";
     const std::filesystem::path slang_shader = sources / "test.comp.slang";
     const std::filesystem::path reflection_shader = sources / "reflection.comp.slang";
     const std::filesystem::path vertex_shader = sources / "varying.vert.slang";
@@ -155,7 +155,7 @@ void Run()
     const std::filesystem::path fragment_shader = sources / "varying.frag.slang";
     const std::filesystem::path unsupported_patch_shader = sources / "unsupported_patch.domain.slang";
     const std::filesystem::path slang_dependency = sources / "dependency.slang";
-    Write(shader, "#version 450\nlayout(local_size_x=1) in; void main() {}\n");
+    Write(shader, "[shader(\"compute\")] [numthreads(8, 1, 1)] void main() {}\n");
 
     std::shared_ptr<const klvk::CompiledShader> expected;
     std::shared_ptr<const klvk::ShaderInterface> expected_interface;
@@ -172,7 +172,7 @@ void Run()
             Ensure(futures[i].get() == expected, "concurrent requests were not coalesced");
         }
 
-        Write(shader, "#version 450\nthis is not GLSL\n");
+        Write(shader, "this is not Slang\n");
         std::atomic<size_t> failures = 0;
         std::vector<std::future<void>> bad_futures;
         for (size_t i = 0; i != 8; ++i)
@@ -195,7 +195,7 @@ void Run()
         for (auto& future : bad_futures) future.get();
         Ensure(failures == bad_futures.size(), "compile failure was not delivered to every waiter");
 
-        Write(shader, "#version 450\nlayout(local_size_x=2) in; void main() {}\n");
+        Write(shader, "[shader(\"compute\")] [numthreads(2, 1, 1)] void main() {}\n");
         Ensure(manager.GetOrCompile(shader) != nullptr, "cache did not recover after source correction");
 
         Write(slang_shader, "[shader(\"compute\")] [numthreads(1, 1, 1)] void main() {}\n");
