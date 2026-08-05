@@ -11,9 +11,8 @@
 #include <fstream>
 #include <iomanip>
 #include <limits>
-#include <ranges>
 #include <nlohmann/json.hpp>
-#include <shaderc/shaderc.hpp>
+#include <ranges>
 #include <span>
 #include <sstream>
 #include <utility>
@@ -31,7 +30,7 @@ namespace
 
 constexpr u64 kFnvOffset = 14695981039346656037ull;
 constexpr u64 kFnvPrime = 1099511628211ull;
-constexpr u32 kCacheFormatVersion = 2;
+constexpr u32 kCacheFormatVersion = 3;
 constexpr u32 kReflectionMetadataVersion = 4;
 constexpr u32 kSpirvMagic = 0x07230203;
 constexpr size_t kMaximumSpirvBytes = 256 * 1024 * 1024;
@@ -42,8 +41,6 @@ struct CacheHeader
 {
     std::array<char, 8> magic{};
     u32 format_version = 0;
-    u32 spirv_version = 0;
-    u32 spirv_revision = 0;
     u32 reserved = 0;
     u64 key = 0;
     u64 word_count = 0;
@@ -88,22 +85,6 @@ std::filesystem::path CachePath(const std::filesystem::path& root, u64 key)
     return root / name.str();
 }
 
-shaderc_shader_kind ShaderKind(const std::filesystem::path& path)
-{
-    const std::string extension = path.extension().string();
-    if (extension == ".vert") return shaderc_glsl_vertex_shader;
-    if (extension == ".frag") return shaderc_glsl_fragment_shader;
-    if (extension == ".geom") return shaderc_glsl_geometry_shader;
-    if (extension == ".comp") return shaderc_glsl_compute_shader;
-    if (extension == ".tesc") return shaderc_glsl_tess_control_shader;
-    if (extension == ".tese") return shaderc_glsl_tess_evaluation_shader;
-    ErrorHandling::ThrowWithMessage("Unsupported shader stage extension '{}' for {}", extension, path.string());
-    return shaderc_glsl_infer_from_source;
-}
-
-// Distinguishes a Slang cache entry from a GLSL one so identical bytes under the
-// two languages never collide.
-constexpr u32 kSlangLanguageTag = 0x5'1A;
 constexpr std::string_view kSlangTargetProfile = "spirv_1_6";
 constexpr SlangCompileTarget kSlangTargetFormat = SLANG_SPIRV;
 constexpr SlangTargetFlags kSlangTargetFlags = kDefaultTargetFlags;
@@ -116,21 +97,6 @@ constexpr bool kSlangEnableEffectAnnotations = false;
 constexpr bool kSlangAllowGlslSyntax = false;
 constexpr bool kSlangSkipSpirvValidation = false;
 
-u64 MakeKey(std::string_view source, shaderc_shader_kind kind, u32 spirv_version, u32 spirv_revision)
-{
-    u64 hash = HashBytes(kFnvOffset, source.data(), source.size());
-    hash = HashValue(hash, kind);
-    hash = HashValue(hash, spirv_version);
-    hash = HashValue(hash, spirv_revision);
-    hash = HashValue(hash, kCacheFormatVersion);
-#ifdef NDEBUG
-    constexpr bool optimize = true;
-#else
-    constexpr bool optimize = false;
-#endif
-    return HashValue(hash, optimize);
-}
-
 // Slang cache entries are currently restricted to self-contained source files.
 // Hash every output-affecting target/session option used below as well as the
 // compiler version. Dependency-bearing modules are rejected at the compiler
@@ -138,7 +104,6 @@ u64 MakeKey(std::string_view source, shaderc_shader_kind kind, u32 spirv_version
 u64 MakeSlangKey(std::string_view source)
 {
     u64 hash = HashBytes(kFnvOffset, source.data(), source.size());
-    hash = HashValue(hash, kSlangLanguageTag);
     constexpr std::string_view toolchain = SLANG_TAG_VERSION;
     hash = HashBytes(hash, toolchain.data(), toolchain.size());
     hash = HashValue(hash, kSlangTargetFormat);
@@ -572,16 +537,19 @@ ShaderInterface DeserializeInterface(std::string_view text)
     }
     auto parse_variables = [](const nlohmann::json& values)
     {
-        return values | std::views::transform([](const nlohmann::json& value) {
-                   return ShaderInterfaceVariable{
-                       .name = value.at("name").get<std::string>(),
-                       .semantic = value.at("semantic").get<std::string>(),
-                       .location = value.at("location").get<u32>(),
-                       .location_count = value.at("location_count").get<u32>(),
-                       .type = ValueTypeFromJson(value.at("type")),
-                       .built_in = value.at("built_in").get<bool>(),
-                   };
-               }) |
+        return values |
+               std::views::transform(
+                   [](const nlohmann::json& value)
+                   {
+                       return ShaderInterfaceVariable{
+                           .name = value.at("name").get<std::string>(),
+                           .semantic = value.at("semantic").get<std::string>(),
+                           .location = value.at("location").get<u32>(),
+                           .location_count = value.at("location_count").get<u32>(),
+                           .type = ValueTypeFromJson(value.at("type")),
+                           .built_in = value.at("built_in").get<bool>(),
+                       };
+                   }) |
                std::ranges::to<std::vector>();
     };
     result.inputs = parse_variables(json.at("inputs"));
@@ -878,7 +846,6 @@ ShaderCacheManager::ShaderCacheManager(
     ErrorHandling::Ensure(settings_.flush_interval.count() > 0, "Shader cache flush interval must be positive");
     if (cache_root_.empty()) cache_root_ = source_root_.parent_path().parent_path() / "shader_cache";
     std::filesystem::create_directories(cache_root_);
-    shaderc_get_spv_version(&compiler_spirv_version_, &compiler_spirv_revision_);
     worker_ = std::thread(&ShaderCacheManager::WorkerMain, this);
 }
 
@@ -904,12 +871,11 @@ std::shared_ptr<const CompiledShader> ShaderCacheManager::GetOrCompile(const std
 
     std::string source;
     Filesystem::ReadFile(canonical_path, source);
-    // A .slang source routes to the Slang compiler; every other extension stays
-    // on shaderc. Both emit SPIR-V, so nothing downstream of the cache changes.
-    const bool is_slang = canonical_path.extension() == ".slang";
-    const u64 key =
-        is_slang ? MakeSlangKey(source)
-                 : MakeKey(source, ShaderKind(canonical_path), compiler_spirv_version_, compiler_spirv_revision_);
+    ErrorHandling::Ensure(
+        canonical_path.extension() == ".slang",
+        "Shader source '{}' is not Slang; it is the only language this compiles",
+        canonical_path.string());
+    const u64 key = MakeSlangKey(source);
 
     std::unique_lock lock(mutex_);
     auto iterator = entries_.find(key);
@@ -975,38 +941,11 @@ void ShaderCacheManager::Compile(const CompileJob& job)
             return;
         }
 
-        std::vector<u32> spirv_words;
-        std::shared_ptr<const ShaderInterface> interface;
-        if (job.source_path.extension() == ".slang")
-        {
-            SlangCompileResult result = CompileSlangToSpirv(job.source, job.source_path);
-            spirv_words = std::move(result.spirv);
-            interface = std::make_shared<const ShaderInterface>(std::move(result.interface));
-        }
-        else
-        {
-            shaderc::Compiler compiler;
-            shaderc::CompileOptions options;
-            options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
-            options.SetTargetSpirv(shaderc_spirv_version_1_6);
-#ifdef NDEBUG
-            options.SetOptimizationLevel(shaderc_optimization_level_performance);
-#else
-            options.SetOptimizationLevel(shaderc_optimization_level_zero);
-            options.SetGenerateDebugInfo();
-#endif
-            const auto result = compiler.CompileGlslToSpv(
-                job.source,
-                ShaderKind(job.source_path),
-                job.source_path.string().c_str(),
-                options);
-            ErrorHandling::Ensure(
-                result.GetCompilationStatus() == shaderc_compilation_status_success,
-                "Failed to compile shader '{}':\n{}",
-                job.source_path.string(),
-                result.GetErrorMessage());
-            spirv_words.assign(result.cbegin(), result.cend());
-        }
+        SlangCompileResult result = CompileSlangToSpirv(job.source, job.source_path);
+        std::vector<u32> spirv_words = std::move(result.spirv);
+        std::shared_ptr<const ShaderInterface> interface =
+            std::make_shared<const ShaderInterface>(std::move(result.interface));
+
         auto words = std::make_shared<const std::vector<u32>>(std::move(spirv_words));
         ErrorHandling::Ensure(!words->empty() && words->front() == kSpirvMagic, "Compiler returned invalid SPIR-V");
         auto shader = std::make_shared<const CompiledShader>(CompiledShader{
@@ -1068,8 +1007,6 @@ void ShaderCacheManager::FlushDirtyEntries()
             const CacheHeader header{
                 .magic = kCacheMagic,
                 .format_version = kCacheFormatVersion,
-                .spirv_version = compiler_spirv_version_,
-                .spirv_revision = compiler_spirv_revision_,
                 .key = snapshot.key,
                 .word_count = snapshot.shader->spirv->size(),
                 .metadata_size = metadata.size(),
@@ -1123,7 +1060,6 @@ std::shared_ptr<const CompiledShader> ShaderCacheManager::TryLoad(u64 key) const
     CacheHeader header{};
     file.read(reinterpret_cast<char*>(&header), sizeof(header));
     if (!file || header.magic != kCacheMagic || header.format_version != kCacheFormatVersion || header.key != key ||
-        header.spirv_version != compiler_spirv_version_ || header.spirv_revision != compiler_spirv_revision_ ||
         header.word_count == 0 || header.word_count > kMaximumSpirvBytes / sizeof(u32) ||
         header.metadata_size > kMaximumMetadataBytes ||
         std::cmp_not_equal(size, sizeof(CacheHeader) + header.word_count * sizeof(u32) + header.metadata_size))
