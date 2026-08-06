@@ -131,6 +131,18 @@ DiagnosticRunner::DiagnosticRunner(
     {
         ScheduleCapture(capture_index, config.exit.after_last_capture);
     }
+    // Resolved up front for the same reason capture paths are: the answer a
+    // replay hands back must not depend on where the process was launched from.
+    dialogs_.reserve(config.dialogs.size());
+    for (auto dialog : config.dialogs)
+    {
+        if (dialog.answer && dialog.answer->is_relative())
+        {
+            dialog.answer = (executable_directory / *dialog.answer).lexically_normal();
+        }
+        dialogs_.push_back(std::move(dialog));
+    }
+
     input_count_ = config.input.size();
     for (const DiagnosticInputConfig& input : config.input) ScheduleInput(input);
     ScheduleQuit(config.exit);
@@ -515,6 +527,18 @@ void DiagnosticRunner::RecordCheckpoint(u64 frame, std::span<const std::byte> pi
     first_divergence_ = checkpoint;
 }
 
+std::optional<std::filesystem::path> DiagnosticRunner::TakeDialogAnswer()
+{
+    ErrorHandling::Ensure(
+        next_dialog_ != dialogs_.size(),
+        "Diagnostic replay opened {} file dialog{} but the recording answered only {}",
+        next_dialog_ + 1,
+        next_dialog_ == 0 ? "" : "s",
+        dialogs_.size());
+
+    return dialogs_[next_dialog_++].answer;
+}
+
 void DiagnosticRunner::EnsureComplete() const
 {
     ErrorHandling::Ensure(
@@ -522,6 +546,11 @@ void DiagnosticRunner::EnsureComplete() const
         "Diagnostic run ended before {} scheduled input event{} could be applied",
         input_count_ - applied_input_count_,
         input_count_ - applied_input_count_ == 1 ? "" : "s");
+    ErrorHandling::Ensure(
+        next_dialog_ == dialogs_.size(),
+        "Diagnostic run ended with {} recorded dialog answer{} unused",
+        dialogs_.size() - next_dialog_,
+        dialogs_.size() - next_dialog_ == 1 ? "" : "s");
     const auto missing =
         static_cast<size_t>(std::ranges::count_if(captures_, [](const Capture& capture) { return !capture.recorded; }));
     ErrorHandling::Ensure(

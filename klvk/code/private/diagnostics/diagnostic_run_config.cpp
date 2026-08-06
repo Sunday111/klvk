@@ -221,6 +221,28 @@ DiagnosticCaptureConfig ParseCapture(const nlohmann::json& value, size_t index)
     return result;
 }
 
+DiagnosticDialogConfig ParseDialog(const nlohmann::json& value, size_t index)
+{
+    const std::string name = "dialogs[" + std::to_string(index) + "]";
+    EnsureKnownKeys(value, name, {"frame", "answer"});
+    DiagnosticDialogConfig result;
+    ErrorHandling::Ensure(value.contains("frame"), "{} must contain 'frame'", name);
+    result.frame = ReadNonNegativeInteger(value.at("frame"), name + ".frame");
+    ErrorHandling::Ensure(result.frame != 0, "{}.frame is one based and cannot be zero", name);
+
+    // A missing answer is the recording of a dismissed dialog, which a replay has
+    // to reproduce just as faithfully as a chosen file.
+    if (value.contains("answer"))
+    {
+        ErrorHandling::Ensure(value.at("answer").is_string(), "{}.answer must be a string", name);
+        std::filesystem::path answer = value.at("answer").get<std::string>();
+        ErrorHandling::Ensure(!answer.empty(), "{}.answer cannot be empty", name);
+        result.answer = std::move(answer);
+    }
+
+    return result;
+}
+
 DiagnosticVideoConfig ParseVideo(const nlohmann::json& value)
 {
     EnsureKnownKeys(
@@ -498,6 +520,7 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
          "clock",
          "input",
          "captures",
+         "dialogs",
          "video",
          "checkpoints",
          "exit",
@@ -553,6 +576,23 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
     ErrorHandling::Ensure(
         result.captures.empty() || result.framebuffer_size.has_value(),
         "Diagnostic captures require an explicit framebuffer_size");
+
+    if (root.contains("dialogs"))
+    {
+        const auto& dialogs = root.at("dialogs");
+        ErrorHandling::Ensure(dialogs.is_array(), "dialogs must be an array");
+        for (size_t index = 0; index != dialogs.size(); ++index)
+        {
+            auto dialog = ParseDialog(dialogs[index], index);
+            // Answers are served in order, so a recording whose frames run
+            // backwards could not have come from a real session.
+            ErrorHandling::Ensure(
+                result.dialogs.empty() || result.dialogs.back().frame <= dialog.frame,
+                "dialogs[{}].frame goes backwards",
+                index);
+            result.dialogs.push_back(std::move(dialog));
+        }
+    }
 
     if (root.contains("video"))
     {
@@ -846,6 +886,19 @@ nlohmann::json DiagnosticRunConfigToJson(const DiagnosticRunConfig& config)
             captures.push_back(std::move(value));
         }
         result["captures"] = std::move(captures);
+    }
+
+    if (!config.dialogs.empty())
+    {
+        nlohmann::json dialogs = nlohmann::json::array();
+        for (const DiagnosticDialogConfig& dialog : config.dialogs)
+        {
+            nlohmann::json value = nlohmann::json::object();
+            value["frame"] = dialog.frame;
+            if (dialog.answer) value["answer"] = dialog.answer->generic_string();
+            dialogs.push_back(std::move(value));
+        }
+        result["dialogs"] = std::move(dialogs);
     }
 
     if (config.video.has_value())

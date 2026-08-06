@@ -62,6 +62,15 @@ public:
     void ProcessAllCompleted();
     void EnsureComplete() const;
 
+    // Whether this run answers file dialogs from its recording instead of letting
+    // one reach the screen.
+    [[nodiscard]] bool AnswersDialogs() const noexcept { return !dialogs_.empty(); }
+
+    // The next recorded answer, absolute. Nothing means the recorded dialog was
+    // dismissed. Running out is a divergence - the replay asked something the
+    // recording never did - so it throws rather than inventing an answer.
+    [[nodiscard]] std::optional<std::filesystem::path> TakeDialogAnswer();
+
 private:
     struct Capture
     {
@@ -95,6 +104,8 @@ private:
     void RecordCheckpoint(u64 frame, std::span<const std::byte> pixels);
 
     std::vector<Capture> captures_;
+    std::vector<DiagnosticDialogConfig> dialogs_;
+    size_t next_dialog_ = 0;
     std::vector<DiagnosticCheckpoint> checkpoints_;
     std::vector<DiagnosticCheckpoint> expected_checkpoints_;
     std::optional<DiagnosticCheckpoint> first_divergence_;

@@ -15,6 +15,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/filesystem/filesystem.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/image/image_decoder_stb.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/mesh/procedural_mesh_generator.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/file_dialog_desktop_helper.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_window.cpp
@@ -68,6 +69,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/integral_aliases.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/macro/ensure_enum_size.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/mesh/procedural_mesh_generator.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/platform/file_dialog.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/platform/os/os.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/reflection/matrix_reflect.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/reflection/register_types.hpp

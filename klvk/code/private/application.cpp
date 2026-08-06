@@ -1038,6 +1038,44 @@ const nlohmann::json* Application::GetDiagnosticApplicationConfig() const noexce
     return state_->diagnostic_config_.has_value() ? &state_->diagnostic_config_->application : nullptr;
 }
 
+std::optional<u64> Application::GetDiagnosticExitFrame() const noexcept
+{
+    if (!state_->diagnostic_config_.has_value()) return std::nullopt;
+    return state_->diagnostic_config_->exit.frame;
+}
+
+std::optional<std::filesystem::path> Application::OpenFileDialog(
+    std::string_view title,
+    std::span<const FileDialogFilter> filters,
+    const std::filesystem::path& default_path)
+{
+    return AnswerFileDialog([&] { return klvk::OpenFileDialog(title, filters, default_path); });
+}
+
+std::optional<std::filesystem::path> Application::SaveFileDialog(
+    std::string_view title,
+    std::span<const FileDialogFilter> filters,
+    const std::filesystem::path& default_path)
+{
+    return AnswerFileDialog([&] { return klvk::SaveFileDialog(title, filters, default_path); });
+}
+
+std::optional<std::filesystem::path> Application::AnswerFileDialog(
+    const std::function<std::optional<std::filesystem::path>()>& ask)
+{
+    // A replay must not put a dialog on screen: it may have no display at all,
+    // and an answer that came from a person is not reproducible anyway.
+    if (state_->diagnostic_runner_ && state_->diagnostic_runner_->AnswersDialogs())
+    {
+        return state_->diagnostic_runner_->TakeDialogAnswer();
+    }
+
+    auto answer = ask();
+    if (state_->input_recorder_) state_->input_recorder_->RecordDialog(answer, GetExecutableDir());
+
+    return answer;
+}
+
 float Application::GetTimeSeconds() const
 {
     return state_->GetRelativeTimeSeconds();

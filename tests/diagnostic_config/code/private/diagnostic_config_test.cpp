@@ -139,6 +139,8 @@ void TestConfigSerializationRoundTrip()
          .time_ns = std::nullopt,
          .event = klvk::DiagnosticKeyInput{.key = klvk::Key::LeftCtrl, .action = klvk::InputAction::Release}}};
     original.captures = {{.frame = 5, .time_ns = std::nullopt, .path = "captures/a.ppm", .include_ui = false}};
+    // A dismissed dialog is a recorded answer too, so both shapes go through.
+    original.dialogs = {{.frame = 3, .answer = "presets/chosen.json"}, {.frame = 9, .answer = std::nullopt}};
     original.video = klvk::DiagnosticVideoConfig{
         .path = "captures/a.mp4",
         .encoding = klvk::DiagnosticVideoEncoding::H264,
@@ -170,6 +172,8 @@ void TestConfigSerializationRoundTrip()
         Ensure(parsed.input[index].time_ns == original.input[index].time_ns, "an input time did not survive");
         Ensure(parsed.input[index].event == original.input[index].event, "an input event did not survive");
     }
+
+    Ensure(parsed.dialogs == original.dialogs, "dialog answers did not survive the round trip");
 
     Ensure(parsed.captures.size() == 1, "capture count did not survive the round trip");
     Ensure(parsed.captures[0].frame == original.captures[0].frame, "a capture frame did not survive");

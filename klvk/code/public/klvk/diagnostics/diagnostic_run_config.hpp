@@ -124,6 +124,20 @@ struct DiagnosticInputConfig
     DiagnosticInputEvent event;
 };
 
+// What the user answered when the application asked for a file. A replay serves
+// these back in the order they were recorded instead of putting a dialog on
+// screen, so a session that opened one still replays headlessly.
+struct DiagnosticDialogConfig
+{
+    u64 frame = 0;
+    // Nothing when the dialog was dismissed. A relative path resolves against the
+    // executable directory, so a recording survives being replayed from another
+    // build tree.
+    std::optional<std::filesystem::path> answer;
+
+    friend bool operator==(const DiagnosticDialogConfig&, const DiagnosticDialogConfig&) = default;
+};
+
 struct DiagnosticExitConfig
 {
     std::optional<u64> frame;
@@ -140,6 +154,7 @@ struct DiagnosticRunConfig
     DiagnosticClockConfig clock;
     std::vector<DiagnosticInputConfig> input;
     std::vector<DiagnosticCaptureConfig> captures;
+    std::vector<DiagnosticDialogConfig> dialogs;
     std::optional<DiagnosticVideoConfig> video;
     std::optional<DiagnosticCheckpointConfig> checkpoints;
     DiagnosticExitConfig exit;
