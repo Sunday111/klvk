@@ -5,6 +5,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/camera/camera_3d.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_events.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_run_config.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_run_config_json.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_run_config_json.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_runner.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_runner.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_video_encoder.cpp
@@ -14,7 +16,9 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/events/event_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/filesystem/filesystem.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/image/image_decoder_stb.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/json/json_reader.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/mesh/procedural_mesh_generator.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/file_dialog_desktop_helper.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_state.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/platform/glfw/glfw_window.cpp
@@ -25,7 +29,11 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/rendering/instanced_sprite_renderer_2d.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_cache_manager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_config.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_config.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_interface.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_interface_json.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_interface_json.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_stages.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/text/font_face.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/text/glyph_atlas.cpp
@@ -68,6 +76,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/integral_aliases.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/macro/ensure_enum_size.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/mesh/procedural_mesh_generator.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/platform/file_dialog.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/platform/os/os.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/reflection/matrix_reflect.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/reflection/register_types.hpp

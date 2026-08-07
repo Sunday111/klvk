@@ -42,6 +42,14 @@ public:
     // Input arriving from now on belongs to this one-based frame.
     void BeginFrame(u64 frame) noexcept;
 
+    // A file dialog the application put in front of the user, and what came back.
+    // Nothing means it was dismissed. The answer is stored relative to the
+    // executable directory when it lies inside it, so a recording of the staged
+    // content replays from a different build tree.
+    void RecordDialog(
+        const std::optional<std::filesystem::path>& answer,
+        const std::filesystem::path& executable_directory);
+
     // Writes the recording. framebuffer_size is enforced on replay, so it must be
     // the size the events were produced against. application is carried through
     // unchanged so a replayed run sees the configuration the recorded one did.
@@ -65,6 +73,7 @@ private:
     events::EventManager& event_manager_;
     std::unique_ptr<events::IEventListener> event_listener_;
     std::vector<DiagnosticInputConfig> input_;
+    std::vector<DiagnosticDialogConfig> dialogs_;
     std::optional<edt::Vec2f> last_recorded_position_;
     u64 current_frame_ = 1;
 };

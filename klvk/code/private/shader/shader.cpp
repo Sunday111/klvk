@@ -5,13 +5,14 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
-#include <nlohmann/json.hpp>
 #include <utility>
 
+#include "klvk/error_handling.hpp"
 #include "klvk/filesystem/filesystem.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/vulkan_api.hpp"
+#include "shader/shader_config.hpp"
 
 namespace klvk
 {
@@ -28,49 +29,58 @@ constexpr std::array<std::pair<std::string_view, VkShaderStageFlagBits>, 6> kSta
     {".tese", VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT},
 }};
 
-u32 OverrideValueBits(const nlohmann::json& value, ShaderScalarType type)
+// A document may spell an integer as signed or unsigned; a constant only cares
+// that it is one.
+std::optional<i64> AsInteger(const ShaderConfig::Value& value)
+{
+    if (const auto* signed_value = std::get_if<i64>(&value)) return *signed_value;
+    if (const auto* unsigned_value = std::get_if<u64>(&value))
+    {
+        return std::in_range<i64>(*unsigned_value) ? std::optional{static_cast<i64>(*unsigned_value)} : std::nullopt;
+    }
+    return std::nullopt;
+}
+
+std::optional<double> AsNumber(const ShaderConfig::Value& value)
+{
+    if (const auto* real = std::get_if<double>(&value)) return *real;
+    if (const auto integer = AsInteger(value)) return static_cast<double>(*integer);
+    return std::nullopt;
+}
+
+u32 OverrideValueBits(const ShaderConfig::Value& value, ShaderScalarType type)
 {
     u32 raw = 0;
     if (type == ShaderScalarType::Float32)
     {
-        ErrorHandling::Ensure(value.is_number(), "A float specialization constant requires a JSON number");
-        const double parsed = value.get<double>();
+        const auto parsed = AsNumber(value);
+        ErrorHandling::Ensure(parsed.has_value(), "A float specialization constant requires a number");
         ErrorHandling::Ensure(
-            std::isfinite(parsed) && std::abs(parsed) <= static_cast<double>(std::numeric_limits<float>::max()),
+            std::isfinite(*parsed) && std::abs(*parsed) <= static_cast<double>(std::numeric_limits<float>::max()),
             "Float specialization constant value is out of range");
-        const auto typed = static_cast<float>(parsed);
+        const auto typed = static_cast<float>(*parsed);
         std::memcpy(&raw, &typed, sizeof(raw));
     }
     else if (type == ShaderScalarType::Int32)
     {
-        ErrorHandling::Ensure(value.is_number_integer(), "An int specialization constant requires a JSON integer");
-        const i64 parsed = value.get<i64>();
-        ErrorHandling::Ensure(
-            parsed >= std::numeric_limits<i32>::min() && parsed <= std::numeric_limits<i32>::max(),
-            "Int specialization constant value is out of range");
-        const i32 typed = static_cast<i32>(parsed);
+        const auto parsed = AsInteger(value);
+        ErrorHandling::Ensure(parsed.has_value(), "An int specialization constant requires an integer");
+        ErrorHandling::Ensure(std::in_range<i32>(*parsed), "Int specialization constant value is out of range");
+        const auto typed = static_cast<i32>(*parsed);
         std::memcpy(&raw, &typed, sizeof(raw));
     }
     else if (type == ShaderScalarType::UInt32)
     {
-        ErrorHandling::Ensure(value.is_number_integer(), "A uint specialization constant requires a JSON integer");
-        if (value.is_number_unsigned())
-        {
-            const u64 parsed = value.get<u64>();
-            ErrorHandling::Ensure(std::in_range<u32>(parsed), "Uint specialization constant value is out of range");
-            raw = static_cast<u32>(parsed);
-        }
-        else
-        {
-            const i64 parsed = value.get<i64>();
-            ErrorHandling::Ensure(std::in_range<u32>(parsed), "Uint specialization constant value is out of range");
-            raw = static_cast<u32>(parsed);
-        }
+        const auto parsed = AsInteger(value);
+        ErrorHandling::Ensure(parsed.has_value(), "A uint specialization constant requires an integer");
+        ErrorHandling::Ensure(std::in_range<u32>(*parsed), "Uint specialization constant value is out of range");
+        raw = static_cast<u32>(*parsed);
     }
     else if (type == ShaderScalarType::Bool)
     {
-        ErrorHandling::Ensure(value.is_boolean(), "A bool specialization constant requires a JSON boolean");
-        raw = value.get<bool>() ? 1 : 0;
+        const auto* parsed = std::get_if<bool>(&value);
+        ErrorHandling::Ensure(parsed != nullptr, "A bool specialization constant requires a boolean");
+        raw = *parsed ? 1 : 0;
     }
     else
     {
@@ -147,22 +157,18 @@ Shader::Shader(DeviceContext& context, std::string_view name) : name_(name)
 
     std::filesystem::path config_path = base;
     config_path += ".shader.json";
-    if (std::filesystem::exists(config_path))
+    if (const auto config = ShaderConfigJson::Load(config_path))
     {
-        std::string config_text;
-        Filesystem::ReadFile(config_path, config_text);
-        const auto config = nlohmann::json::parse(config_text);
-        const auto specialization_constants = config.value("specialization_constants", nlohmann::json::object());
-        for (const auto& [constant_name, value] : specialization_constants.items())
+        for (const ShaderConfig::SpecializationConstant& constant : config->specialization_constants)
         {
-            const auto existing = std::ranges::find(define_names_, constant_name);
+            const auto existing = std::ranges::find(define_names_, constant.name);
             ErrorHandling::Ensure(
                 existing != define_names_.end(),
                 "Shader '{}' config overrides unknown specialization constant '{}'",
                 name_,
-                constant_name);
+                constant.name);
             const size_t index = static_cast<size_t>(existing - define_names_.begin());
-            define_values_[index] = OverrideValueBits(value, define_types_[index]);
+            define_values_[index] = OverrideValueBits(constant.value, define_types_[index]);
             define_overridden_[index] = true;
         }
     }

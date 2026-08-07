@@ -73,6 +73,23 @@ void DiagnosticInputRecorder::OnKey(const events::OnKey& event)
     Append(DiagnosticKeyInput{.key = event.key, .action = event.action});
 }
 
+void DiagnosticInputRecorder::RecordDialog(
+    const std::optional<std::filesystem::path>& answer,
+    const std::filesystem::path& executable_directory)
+{
+    DiagnosticDialogConfig recorded{.frame = current_frame_, .answer = std::nullopt};
+
+    if (answer)
+    {
+        std::error_code error;
+        const auto relative = std::filesystem::relative(*answer, executable_directory, error);
+        const bool inside = !error && !relative.empty() && *relative.begin() != "..";
+        recorded.answer = inside ? relative : *answer;
+    }
+
+    dialogs_.push_back(std::move(recorded));
+}
+
 void DiagnosticInputRecorder::Write(
     edt::Vec2<u32> framebuffer_size,
     u64 fixed_step_ns,
@@ -85,6 +102,7 @@ void DiagnosticInputRecorder::Write(
     config.framebuffer_size = framebuffer_size;
     config.clock.fixed_step_ns = fixed_step_ns;
     config.input = input_;
+    config.dialogs = dialogs_;
     config.application = application;
     // Replay the whole session, not just up to the last event: what a recording
     // is meant to reproduce often appears in the frames after the final input.

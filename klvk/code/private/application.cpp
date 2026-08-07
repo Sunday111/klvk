@@ -549,7 +549,6 @@ void Application::RunImpl()
         state_->completed_frames_ = 0;
         state_->diagnostic_runner_ = std::make_unique<DiagnosticRunner>(
             *state_->diagnostic_config_,
-            state_->executable_dir_,
             kFramesInFlight,
             state_->event_manager_,
             *state_->window_);
@@ -607,7 +606,7 @@ void Application::RunWithArguments(int argc, char** argv)
     const DiagnosticCommandLine command_line = ParseDiagnosticCommandLine(arguments);
     if (command_line.config_path.has_value())
     {
-        state_->diagnostic_config_ = LoadDiagnosticRunConfig(*command_line.config_path);
+        state_->diagnostic_config_ = LoadDiagnosticRunConfig(*command_line.config_path, os::GetExecutableDir());
     }
     if (command_line.presentation.has_value())
     {
@@ -1036,6 +1035,44 @@ std::filesystem::path Application::GetShaderDir() const
 const nlohmann::json* Application::GetDiagnosticApplicationConfig() const noexcept
 {
     return state_->diagnostic_config_.has_value() ? &state_->diagnostic_config_->application : nullptr;
+}
+
+std::optional<u64> Application::GetDiagnosticExitFrame() const noexcept
+{
+    if (!state_->diagnostic_config_.has_value()) return std::nullopt;
+    return state_->diagnostic_config_->exit.frame;
+}
+
+std::optional<std::filesystem::path> Application::OpenFileDialog(
+    std::string_view title,
+    std::span<const FileDialog::Filter> filters,
+    const std::filesystem::path& default_path)
+{
+    return AnswerFileDialog([&] { return FileDialog::Open(title, filters, default_path); });
+}
+
+std::optional<std::filesystem::path> Application::SaveFileDialog(
+    std::string_view title,
+    std::span<const FileDialog::Filter> filters,
+    const std::filesystem::path& default_path)
+{
+    return AnswerFileDialog([&] { return FileDialog::Save(title, filters, default_path); });
+}
+
+std::optional<std::filesystem::path> Application::AnswerFileDialog(
+    const std::function<std::optional<std::filesystem::path>()>& ask)
+{
+    // A replay must not put a dialog on screen: it may have no display at all,
+    // and an answer that came from a person is not reproducible anyway.
+    if (state_->diagnostic_runner_ && state_->diagnostic_runner_->AnswersDialogs())
+    {
+        return state_->diagnostic_runner_->TakeDialogAnswer();
+    }
+
+    auto answer = ask();
+    if (state_->input_recorder_) state_->input_recorder_->RecordDialog(answer, GetExecutableDir());
+
+    return answer;
 }
 
 float Application::GetTimeSeconds() const
