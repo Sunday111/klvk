@@ -668,7 +668,38 @@ DiagnosticRunConfig ParseConfig(const nlohmann::json& root)
 
 }  // namespace
 
-DiagnosticRunConfig LoadDiagnosticRunConfig(const std::filesystem::path& path)
+// Paths in a document are written relative to the executable directory, so a
+// configuration is only usable once they have been resolved against it. Doing it
+// here means everything downstream receives a configuration it can act on
+// without knowing where the process was launched from.
+void ResolvePaths(DiagnosticRunConfig& config, const std::filesystem::path& executable_directory)
+{
+    const auto resolve = [&](std::filesystem::path& value)
+    {
+        if (value.is_relative()) value = executable_directory / value;
+        value = value.lexically_normal();
+    };
+
+    std::set<std::filesystem::path> capture_paths;
+    for (DiagnosticCaptureConfig& capture : config.captures)
+    {
+        resolve(capture.path);
+        ErrorHandling::Ensure(
+            capture_paths.insert(capture.path).second,
+            "Multiple diagnostic captures resolve to output path '{}'",
+            capture.path.string());
+    }
+
+    if (config.video) resolve(config.video->path);
+    for (DiagnosticDialogConfig& dialog : config.dialogs)
+    {
+        if (dialog.answer) resolve(*dialog.answer);
+    }
+}
+
+DiagnosticRunConfig LoadDiagnosticRunConfig(
+    const std::filesystem::path& path,
+    const std::filesystem::path& executable_directory)
 {
     std::ifstream stream(path);
     ErrorHandling::Ensure(stream.is_open(), "Failed to open diagnostic configuration '{}'", path.string());
@@ -696,7 +727,9 @@ DiagnosticRunConfig LoadDiagnosticRunConfig(const std::filesystem::path& path)
     };
     try
     {
-        return ParseConfig(nlohmann::json::parse(stream, callback));
+        DiagnosticRunConfig config = ParseConfig(nlohmann::json::parse(stream, callback));
+        ResolvePaths(config, executable_directory);
+        return config;
     }
     catch (const nlohmann::json::exception& exception)
     {
@@ -785,11 +818,13 @@ DiagnosticCommandLine ParseDiagnosticCommandLine(std::span<const std::string_vie
     return result;
 }
 
-std::optional<DiagnosticRunConfig> LoadDiagnosticRunConfigFromArguments(std::span<const std::string_view> arguments)
+std::optional<DiagnosticRunConfig> LoadDiagnosticRunConfigFromArguments(
+    std::span<const std::string_view> arguments,
+    const std::filesystem::path& executable_directory)
 {
     const DiagnosticCommandLine command_line = ParseDiagnosticCommandLine(arguments);
     if (!command_line.config_path.has_value()) return std::nullopt;
-    return LoadDiagnosticRunConfig(*command_line.config_path);
+    return LoadDiagnosticRunConfig(*command_line.config_path, executable_directory);
 }
 
 namespace

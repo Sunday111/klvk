@@ -161,7 +161,12 @@ struct DiagnosticRunConfig
     nlohmann::json application = nlohmann::json::object();
 };
 
-[[nodiscard]] DiagnosticRunConfig LoadDiagnosticRunConfig(const std::filesystem::path& path);
+// Every path in the result is absolute: those written relative in the document
+// are resolved against the executable directory here, so nothing downstream has
+// to know where the process was launched from.
+[[nodiscard]] DiagnosticRunConfig LoadDiagnosticRunConfig(
+    const std::filesystem::path& path,
+    const std::filesystem::path& executable_directory);
 
 // Inverse of the parser, kept beside it so the two cannot drift apart: the
 // result is a document LoadDiagnosticRunConfig accepts verbatim. Times are
@@ -189,6 +194,7 @@ struct DiagnosticCommandLine
 
 // Convenience over ParseDiagnosticCommandLine for --klvk-diagnostics alone.
 [[nodiscard]] std::optional<DiagnosticRunConfig> LoadDiagnosticRunConfigFromArguments(
-    std::span<const std::string_view> arguments);
+    std::span<const std::string_view> arguments,
+    const std::filesystem::path& executable_directory);
 
 }  // namespace klvk

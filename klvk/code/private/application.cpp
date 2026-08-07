@@ -549,7 +549,6 @@ void Application::RunImpl()
         state_->completed_frames_ = 0;
         state_->diagnostic_runner_ = std::make_unique<DiagnosticRunner>(
             *state_->diagnostic_config_,
-            state_->executable_dir_,
             kFramesInFlight,
             state_->event_manager_,
             *state_->window_);
@@ -607,7 +606,7 @@ void Application::RunWithArguments(int argc, char** argv)
     const DiagnosticCommandLine command_line = ParseDiagnosticCommandLine(arguments);
     if (command_line.config_path.has_value())
     {
-        state_->diagnostic_config_ = LoadDiagnosticRunConfig(*command_line.config_path);
+        state_->diagnostic_config_ = LoadDiagnosticRunConfig(*command_line.config_path, os::GetExecutableDir());
     }
     if (command_line.presentation.has_value())
     {
@@ -1046,18 +1045,18 @@ std::optional<u64> Application::GetDiagnosticExitFrame() const noexcept
 
 std::optional<std::filesystem::path> Application::OpenFileDialog(
     std::string_view title,
-    std::span<const FileDialogFilter> filters,
+    std::span<const FileDialog::Filter> filters,
     const std::filesystem::path& default_path)
 {
-    return AnswerFileDialog([&] { return klvk::OpenFileDialog(title, filters, default_path); });
+    return AnswerFileDialog([&] { return FileDialog::Open(title, filters, default_path); });
 }
 
 std::optional<std::filesystem::path> Application::SaveFileDialog(
     std::string_view title,
-    std::span<const FileDialogFilter> filters,
+    std::span<const FileDialog::Filter> filters,
     const std::filesystem::path& default_path)
 {
-    return AnswerFileDialog([&] { return klvk::SaveFileDialog(title, filters, default_path); });
+    return AnswerFileDialog([&] { return FileDialog::Save(title, filters, default_path); });
 }
 
 std::optional<std::filesystem::path> Application::AnswerFileDialog(

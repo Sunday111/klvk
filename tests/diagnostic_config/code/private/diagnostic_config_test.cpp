@@ -64,7 +64,7 @@ void TestExactNanosecondTimes()
             "captures": [{"time_ns": 250000000, "path": "captures/exact.ppm"}],
             "exit": {"time_ns": 1000000000}
         })");
-    const klvk::DiagnosticRunConfig config = klvk::LoadDiagnosticRunConfig(path);
+    const klvk::DiagnosticRunConfig config = klvk::LoadDiagnosticRunConfig(path, path.parent_path());
     Ensure(config.clock.fixed_step_ns == 16'666'667, "clock.step_ns was not parsed exactly");
     Ensure(config.input.front().time_ns == 1, "a one-nanosecond input trigger was not preserved");
     Ensure(config.captures.front().time_ns == 250'000'000, "capture time_ns was not parsed exactly");
@@ -80,7 +80,7 @@ void TestExactNanosecondTimes()
             "captures": [{"time_seconds": 0.25, "path": "captures/exact.ppm"}],
             "exit": {"after_last_capture": true}
         })");
-    const klvk::DiagnosticRunConfig seconds = klvk::LoadDiagnosticRunConfig(seconds_path);
+    const klvk::DiagnosticRunConfig seconds = klvk::LoadDiagnosticRunConfig(seconds_path, seconds_path.parent_path());
     Ensure(
         seconds.captures.front().time_ns == config.captures.front().time_ns,
         "the seconds and nanosecond spellings disagree");
@@ -107,7 +107,9 @@ void TestExactNanosecondTimes()
     {
         const std::filesystem::path invalid = root / ("invalid_ns_" + std::to_string(index) + ".json");
         Write(invalid, invalid_documents[index]);
-        EnsureThrows([&] { (void)klvk::LoadDiagnosticRunConfig(invalid); }, "invalid nanosecond document was accepted");
+        EnsureThrows(
+            [&] { (void)klvk::LoadDiagnosticRunConfig(invalid, invalid.parent_path()); },
+            "invalid nanosecond document was accepted");
     }
     std::filesystem::remove_all(root);
 }
@@ -157,7 +159,7 @@ void TestConfigSerializationRoundTrip()
 
     const std::filesystem::path path = root / "roundtrip.json";
     Write(path, klvk::DiagnosticRunConfigToJson(original).dump(2));
-    const klvk::DiagnosticRunConfig parsed = klvk::LoadDiagnosticRunConfig(path);
+    const klvk::DiagnosticRunConfig parsed = klvk::LoadDiagnosticRunConfig(path, path.parent_path());
 
     Ensure(parsed.presentation == original.presentation, "presentation did not survive the round trip");
     Ensure(parsed.framebuffer_size == original.framebuffer_size, "framebuffer_size did not survive the round trip");
@@ -173,11 +175,17 @@ void TestConfigSerializationRoundTrip()
         Ensure(parsed.input[index].event == original.input[index].event, "an input event did not survive");
     }
 
-    Ensure(parsed.dialogs == original.dialogs, "dialog answers did not survive the round trip");
+    // The loader resolves every path against the executable directory, so what
+    // comes back is the document's relative path rooted there.
+    Ensure(parsed.dialogs.size() == original.dialogs.size(), "dialog count did not survive the round trip");
+    Ensure(parsed.dialogs[0].frame == original.dialogs[0].frame, "a dialog frame did not survive");
+    Ensure(parsed.dialogs[0].answer == root / *original.dialogs[0].answer, "a dialog answer did not survive");
+    Ensure(parsed.dialogs[1].frame == original.dialogs[1].frame, "a dismissed dialog frame did not survive");
+    Ensure(!parsed.dialogs[1].answer.has_value(), "a dismissed dialog gained an answer");
 
     Ensure(parsed.captures.size() == 1, "capture count did not survive the round trip");
     Ensure(parsed.captures[0].frame == original.captures[0].frame, "a capture frame did not survive");
-    Ensure(parsed.captures[0].path == original.captures[0].path, "a capture path did not survive");
+    Ensure(parsed.captures[0].path == root / original.captures[0].path, "a capture path did not survive");
     Ensure(parsed.captures[0].include_ui == original.captures[0].include_ui, "a capture include_ui did not survive");
 
     Ensure(parsed.checkpoints.has_value(), "checkpoints did not survive the round trip");
@@ -193,7 +201,7 @@ void TestConfigSerializationRoundTrip()
         "a 64-bit checkpoint hash did not survive the round trip exactly");
 
     Ensure(parsed.video.has_value(), "video did not survive the round trip");
-    Ensure(parsed.video->path == original.video->path, "video path did not survive");
+    Ensure(parsed.video->path == root / original.video->path, "video path did not survive");
     Ensure(parsed.video->encoding == original.video->encoding, "video encoding did not survive");
     Ensure(parsed.video->encoding_device == original.video->encoding_device, "video device did not survive");
     Ensure(
@@ -214,7 +222,7 @@ void TestConfigSerializationRoundTrip()
 
     const std::filesystem::path timed_path = root / "timed.json";
     Write(timed_path, klvk::DiagnosticRunConfigToJson(timed).dump(2));
-    const klvk::DiagnosticRunConfig parsed_timed = klvk::LoadDiagnosticRunConfig(timed_path);
+    const klvk::DiagnosticRunConfig parsed_timed = klvk::LoadDiagnosticRunConfig(timed_path, timed_path.parent_path());
     Ensure(parsed_timed.input.size() == 1, "timed input did not survive the round trip");
     Ensure(parsed_timed.input[0].time_ns == 250'000'001, "an exact input nanosecond did not survive");
     Ensure(parsed_timed.exit.time_ns == 1'000'000'001, "an exact exit nanosecond did not survive");
@@ -304,7 +312,7 @@ void Run()
             "exit": {"after_last_capture": true},
             "application": {"seed": 7}
         })");
-    const klvk::DiagnosticRunConfig config = klvk::LoadDiagnosticRunConfig(valid_path);
+    const klvk::DiagnosticRunConfig config = klvk::LoadDiagnosticRunConfig(valid_path, valid_path.parent_path());
     Ensure(config.presentation == klvk::DiagnosticPresentation::Hidden, "presentation was not parsed");
     Ensure(config.framebuffer_size == edt::Vec2<u32>{320, 240}, "framebuffer size was not parsed");
     Ensure(config.clock.fixed_step_ns.has_value(), "fixed clock was not parsed");
@@ -354,10 +362,11 @@ void Run()
             },
             "exit": {"frame": 1}
         })");
-    const klvk::DiagnosticRunConfig offscreen = klvk::LoadDiagnosticRunConfig(offscreen_path);
+    const klvk::DiagnosticRunConfig offscreen =
+        klvk::LoadDiagnosticRunConfig(offscreen_path, offscreen_path.parent_path());
     Ensure(offscreen.presentation == klvk::DiagnosticPresentation::Offscreen, "offscreen presentation was not parsed");
     Ensure(offscreen.video.has_value(), "video capture was not parsed");
-    Ensure(offscreen.video->path == "captures/run.mp4", "video path was not parsed");
+    Ensure(offscreen.video->path == root / "captures/run.mp4", "video path was not resolved");
     Ensure(offscreen.video->encoding == klvk::DiagnosticVideoEncoding::Mpeg4, "video encoding was not parsed");
     Ensure(
         offscreen.video->encoding_device == klvk::DiagnosticVideoEncodingDevice::Cpu,
@@ -370,7 +379,8 @@ void Run()
     Write(
         gpu_video_path,
         R"({"version":1,"presentation":"offscreen","framebuffer_size":[64,48],"clock":{"mode":"fixed","step_seconds":0.02},"video":{"path":"gpu.mp4","encoding":"h264","encoding_device":"gpu"},"exit":{"frame":1}})");
-    const klvk::DiagnosticRunConfig gpu_video = klvk::LoadDiagnosticRunConfig(gpu_video_path);
+    const klvk::DiagnosticRunConfig gpu_video =
+        klvk::LoadDiagnosticRunConfig(gpu_video_path, gpu_video_path.parent_path());
     Ensure(
         gpu_video.video.has_value() && gpu_video.video->encoding == klvk::DiagnosticVideoEncoding::H264,
         "H.264 video encoding was not parsed");
@@ -382,7 +392,8 @@ void Run()
     Write(
         default_video_path,
         R"({"version":1,"presentation":"offscreen","framebuffer_size":[64,48],"clock":{"mode":"fixed","step_seconds":0.02},"video":{"path":"default.mp4"},"exit":{"frame":1}})");
-    const klvk::DiagnosticRunConfig default_video = klvk::LoadDiagnosticRunConfig(default_video_path);
+    const klvk::DiagnosticRunConfig default_video =
+        klvk::LoadDiagnosticRunConfig(default_video_path, default_video_path.parent_path());
     Ensure(
         default_video.video.has_value() && default_video.video->log_ffmpeg,
         "video logging is not enabled by default");
@@ -398,7 +409,8 @@ void Run()
     Write(
         quiet_video_path,
         R"({"version":1,"presentation":"offscreen","framebuffer_size":[64,48],"clock":{"mode":"fixed","step_seconds":0.02},"video":{"path":"quiet.mp4","log_ffmpeg":false},"exit":{"frame":1}})");
-    const klvk::DiagnosticRunConfig quiet_video = klvk::LoadDiagnosticRunConfig(quiet_video_path);
+    const klvk::DiagnosticRunConfig quiet_video =
+        klvk::LoadDiagnosticRunConfig(quiet_video_path, quiet_video_path.parent_path());
     Ensure(quiet_video.video.has_value() && !quiet_video.video->log_ffmpeg, "video logging could not be disabled");
 
     const std::array arguments{
@@ -407,10 +419,10 @@ void Run()
         std::string_view{"--klvk-diagnostics"},
         std::string_view{valid_path.native()}};
     Ensure(
-        klvk::LoadDiagnosticRunConfigFromArguments(arguments).has_value(),
+        klvk::LoadDiagnosticRunConfigFromArguments(arguments, root).has_value(),
         "diagnostic command-line option was not found");
     Ensure(
-        !klvk::LoadDiagnosticRunConfigFromArguments(std::span{arguments}.first(2)).has_value(),
+        !klvk::LoadDiagnosticRunConfigFromArguments(std::span{arguments}.first(2), root).has_value(),
         "application arguments were incorrectly treated as diagnostic arguments");
 
     const std::array invalid_documents{
@@ -458,7 +470,9 @@ void Run()
     {
         const std::filesystem::path path = root / ("invalid_" + std::to_string(index) + ".json");
         Write(path, invalid_documents[index]);
-        EnsureThrows([&] { (void)klvk::LoadDiagnosticRunConfig(path); }, "invalid document was accepted");
+        EnsureThrows(
+            [&] { (void)klvk::LoadDiagnosticRunConfig(path, path.parent_path()); },
+            "invalid document was accepted");
     }
     std::filesystem::remove_all(root);
 }

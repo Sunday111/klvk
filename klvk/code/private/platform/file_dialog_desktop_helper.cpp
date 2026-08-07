@@ -73,7 +73,7 @@ enum class DialogKind : u8
     std::string_view program,
     DialogKind kind,
     std::string_view title,
-    std::span<const FileDialogFilter> filters,
+    std::span<const FileDialog::Filter> filters,
     const std::filesystem::path& default_path)
 {
     std::vector<std::string> arguments{std::string{program}, "--file-selection"};
@@ -97,7 +97,7 @@ enum class DialogKind : u8
 [[nodiscard]] std::vector<std::string> KdialogArguments(
     DialogKind kind,
     std::string_view title,
-    std::span<const FileDialogFilter> filters,
+    std::span<const FileDialog::Filter> filters,
     const std::filesystem::path& default_path)
 {
     std::vector<std::string> arguments{"kdialog", "--title", std::string{title}};
@@ -175,7 +175,7 @@ enum class DialogKind : u8
 [[nodiscard]] std::optional<std::filesystem::path> ShowDialog(
     DialogKind kind,
     std::string_view title,
-    std::span<const FileDialogFilter> filters,
+    std::span<const FileDialog::Filter> filters,
     const std::filesystem::path& default_path)
 {
     for (const std::string_view program : {"zenity", "qarma"})
@@ -197,17 +197,17 @@ enum class DialogKind : u8
 
 }  // namespace
 
-std::optional<std::filesystem::path> OpenFileDialog(
+std::optional<std::filesystem::path> FileDialog::Open(
     std::string_view title,
-    std::span<const FileDialogFilter> filters,
+    std::span<const FileDialog::Filter> filters,
     const std::filesystem::path& default_path)
 {
     return ShowDialog(DialogKind::Open, title, filters, default_path);
 }
 
-std::optional<std::filesystem::path> SaveFileDialog(
+std::optional<std::filesystem::path> FileDialog::Save(
     std::string_view title,
-    std::span<const FileDialogFilter> filters,
+    std::span<const FileDialog::Filter> filters,
     const std::filesystem::path& default_path)
 {
     return ShowDialog(DialogKind::Save, title, filters, default_path);

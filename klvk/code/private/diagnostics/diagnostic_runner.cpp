@@ -68,7 +68,6 @@ u64 HashPixels(std::span<const std::byte> pixels) noexcept
 
 DiagnosticRunner::DiagnosticRunner(
     const DiagnosticRunConfig& config,
-    const std::filesystem::path& executable_directory,
     size_t frames_in_flight,
     events::EventManager& event_manager,
     Window& window)
@@ -81,12 +80,9 @@ DiagnosticRunner::DiagnosticRunner(
         ErrorHandling::Ensure(
             config.framebuffer_size.has_value() && config.clock.fixed_step_ns.has_value(),
             "Diagnostic video configuration was not validated");
-        std::filesystem::path path = config.video->path;
-        if (path.is_relative()) path = executable_directory / path;
-        path = path.lexically_normal();
         const auto size = *config.framebuffer_size;
         video_encoder_ = std::make_unique<DiagnosticVideoEncoder>(
-            path,
+            config.video->path,
             size.x(),
             size.y(),
             *config.clock.fixed_step_ns,
@@ -97,24 +93,10 @@ DiagnosticRunner::DiagnosticRunner(
         video_includes_ui_ = config.video->include_ui;
     }
 
-    std::set<std::filesystem::path> resolved_paths;
     captures_.reserve(config.captures.size());
     queued_without_ui_.reserve(config.captures.size());
     queued_with_ui_.reserve(config.captures.size());
-    for (auto capture : config.captures)
-    {
-        if (capture.path.is_relative()) capture.path = executable_directory / capture.path;
-        capture.path = capture.path.lexically_normal();
-        ErrorHandling::Ensure(
-            capture.path.extension() == ".ppm",
-            "Diagnostic capture '{}' must use the .ppm extension",
-            capture.path.string());
-        ErrorHandling::Ensure(
-            resolved_paths.insert(capture.path).second,
-            "Multiple diagnostic captures resolve to output path '{}'",
-            capture.path.string());
-        captures_.push_back({.config = std::move(capture)});
-    }
+    for (const auto& capture : config.captures) captures_.push_back({.config = capture});
     if (config.checkpoints.has_value())
     {
         ErrorHandling::Ensure(config.exit.frame.has_value(), "Diagnostic checkpoints were not validated");
@@ -131,18 +113,7 @@ DiagnosticRunner::DiagnosticRunner(
     {
         ScheduleCapture(capture_index, config.exit.after_last_capture);
     }
-    // Resolved up front for the same reason capture paths are: the answer a
-    // replay hands back must not depend on where the process was launched from.
-    dialogs_.reserve(config.dialogs.size());
-    for (auto dialog : config.dialogs)
-    {
-        if (dialog.answer && dialog.answer->is_relative())
-        {
-            dialog.answer = (executable_directory / *dialog.answer).lexically_normal();
-        }
-        dialogs_.push_back(std::move(dialog));
-    }
-
+    dialogs_ = config.dialogs;
     input_count_ = config.input.size();
     for (const DiagnosticInputConfig& input : config.input) ScheduleInput(input);
     ScheduleQuit(config.exit);

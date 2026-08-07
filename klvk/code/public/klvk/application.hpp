@@ -67,19 +67,19 @@ public:
     // includes every run that is not a diagnostic one.
     [[nodiscard]] std::optional<u64> GetDiagnosticExitFrame() const noexcept;
 
-    // Ask the user for a file. Prefer these over the free functions in
-    // klvk/platform/file_dialog.hpp: a diagnostic replay answers them from its
+    // Ask the user for a file. Prefer these over FileDialog itself: a diagnostic
+    // replay answers them from its
     // recording without a dialog reaching the screen, and a session started with
     // --klvk-record-input writes the answer into the recording. Only an ordinary
     // run puts a real dialog up, and that one blocks until the user is done.
     [[nodiscard]] std::optional<std::filesystem::path> OpenFileDialog(
         std::string_view title,
-        std::span<const FileDialogFilter> filters = {},
+        std::span<const FileDialog::Filter> filters = {},
         const std::filesystem::path& default_path = {});
 
     [[nodiscard]] std::optional<std::filesystem::path> SaveFileDialog(
         std::string_view title,
-        std::span<const FileDialogFilter> filters = {},
+        std::span<const FileDialog::Filter> filters = {},
         const std::filesystem::path& default_path = {});
 
 private:
