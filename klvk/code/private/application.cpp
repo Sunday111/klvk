@@ -500,12 +500,18 @@ void Application::Initialize()
 
     const edt::Vec2f content_scale =
         state_->offscreen_ ? edt::Vec2f{1.f, 1.f} : state_->glfw_.GetPrimaryMonitorContentScale();
-    ImGui::GetStyle().ScaleAllSizes(2);
+    const edt::Vec2f framebuffer_scale =
+        state_->offscreen_ ? edt::Vec2f{1.f, 1.f} : state_->window_->GetFramebufferScale();
+    const float layout_scale = content_scale.x() / framebuffer_scale.x();
+    ImGui::GetStyle().ScaleAllSizes(layout_scale);
     ImGuiIO& io = ImGui::GetIO();
 
     ImFontConfig font_config{};
     font_config.SizePixels = 13 * content_scale.x();
-    io.Fonts->AddFontDefault(&font_config);
+    const auto font_path = GetContentDir() / "fonts" / "DejaVuSansMono.ttf";
+    ImFont* font = io.Fonts->AddFontFromFileTTF(font_path.string().c_str(), font_config.SizePixels, &font_config);
+    ErrorHandling::Ensure(font != nullptr, "Failed to load ImGui font from {}", font_path.string());
+    font->Scale = layout_scale / content_scale.x();
 
     state_->InitTime();
 }

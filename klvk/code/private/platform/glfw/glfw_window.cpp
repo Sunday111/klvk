@@ -342,6 +342,22 @@ Vec2<u32> Window::GetFramebufferSize() const noexcept
     return Vec2<int>{width, height}.Cast<u32>();
 }
 
+Vec2f Window::GetFramebufferScale() const
+{
+    ErrorHandling::Ensure(impl_->window != nullptr, "Cannot get framebuffer scale without a native window");
+    Vec2i window_size{};
+    glfwGetWindowSize(impl_->window, &window_size.x(), &window_size.y());
+    const Vec2f framebuffer_size = GetSize2f();
+    ErrorHandling::Ensure(
+        window_size.x() > 0 && window_size.y() > 0 && framebuffer_size.x() > 0 && framebuffer_size.y() > 0,
+        "Cannot get framebuffer scale from window {}x{} and framebuffer {}x{}",
+        window_size.x(),
+        window_size.y(),
+        framebuffer_size.x(),
+        framebuffer_size.y());
+    return framebuffer_size / window_size.Cast<float>();
+}
+
 bool Window::IsHovered() const noexcept
 {
     return impl_->window && glfwGetWindowAttrib(impl_->window, GLFW_HOVERED);

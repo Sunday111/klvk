@@ -72,6 +72,7 @@ private:
 
     Window(Application& app, u32 width, u32 height, Backend backend);
     [[nodiscard]] static std::unique_ptr<Window> CreateOffscreen(Application& app, u32 width, u32 height);
+    [[nodiscard]] Vec2f GetFramebufferScale() const;
     void SetFixedFramebufferSize(Vec2<u32> size);
     // While a recorded run is replaying, real cursor and key events must not
     // reach the application: they would change the very run being reproduced.
