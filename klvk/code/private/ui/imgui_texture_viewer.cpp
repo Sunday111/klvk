@@ -1,15 +1,13 @@
 #include "klvk/ui/imgui_texture_viewer.hpp"
 
-#include <backends/imgui_impl_vulkan.h>
-
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <optional>
+#include <utility>
 
 #include "klvk/ui/imgui_helpers.hpp"
 #include "klvk/vulkan/device_context.hpp"
-#include "klvk/vulkan/texture.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
 
 namespace klvk
 {
@@ -18,32 +16,51 @@ namespace
 constexpr float kMinimumZoom = 0.01f;
 constexpr float kMaximumZoom = 16.f;
 constexpr float kWheelZoomStep = 1.2f;
+
+template <typename T, size_t Size>
+bool DrawEnumCombo(const char* label, T& value, const std::array<std::pair<T, const char*>, Size>& choices)
+{
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label);
+    ImGui::TableNextColumn();
+    ImGui::SetNextItemWidth(-1.f);
+
+    const auto selected = std::ranges::find_if(choices, [value](const auto& choice) { return choice.first == value; });
+    const char* preview = selected == choices.end() ? "Custom" : selected->second;
+    bool changed = false;
+    ImGui::PushID(label);
+    if (ImGui::BeginCombo("##Value", preview))
+    {
+        for (const auto& [choice, name] : choices)
+        {
+            const bool is_selected = value == choice;
+            if (ImGui::Selectable(name, is_selected))
+            {
+                value = choice;
+                changed = true;
+            }
+            if (is_selected) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::PopID();
+    return changed;
+}
 }  // namespace
 
-RegisteredImGuiTexture::RegisteredImGuiTexture(DeviceContext& context, const Texture& texture) : context_{&context}
-{
-    const VkSamplerCreateInfo sampler_info{
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .magFilter = VK_FILTER_LINEAR,
-        .minFilter = VK_FILTER_NEAREST,
-        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-    };
-    sampler_ = Vulkan::CreateSampler(context.GetDevice(), sampler_info);
-    descriptor_ = ImGui_ImplVulkan_AddTexture(sampler_, texture.GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-}
+ImGuiTextureViewer::~ImGuiTextureViewer() = default;
 
-RegisteredImGuiTexture::~RegisteredImGuiTexture()
+void ImGuiTextureViewer::Draw(
+    DeviceContext& context,
+    VkImageView image_view,
+    edt::Vec2<u32> size,
+    std::string_view description,
+    bool* open)
 {
-    if (descriptor_ != VK_NULL_HANDLE) ImGui_ImplVulkan_RemoveTexture(descriptor_);
-    if (sampler_ != VK_NULL_HANDLE) Vulkan::DestroySamplerNE(context_->GetDevice(), sampler_);
-}
+    if (registered_context_ != &context || registered_view_ != image_view) RegisterTexture(context, image_view);
 
-void ImGuiTextureViewer::Draw(ImTextureID texture, edt::Vec2<u32> size, std::string_view description, bool* open)
-{
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     const ImVec2 default_size{
         std::min(420.f, viewport->WorkSize.x),
@@ -70,6 +87,8 @@ void ImGuiTextureViewer::Draw(ImTextureID texture, edt::Vec2<u32> size, std::str
         ImGui::SameLine();
     }
     ImGui::Text("%u x %u texture", size.x(), size.y());
+
+    if (DrawSamplerControls()) RegisterTexture(context, image_view);
 
     ImGui::Checkbox("Fit", &fit_);
     ImGui::SameLine();
@@ -142,7 +161,7 @@ void ImGuiTextureViewer::Draw(ImTextureID texture, edt::Vec2<u32> size, std::str
             static_cast<float>(size.x()) * zoom_,
             static_cast<float>(size.y()) * zoom_,
         };
-        ImGui::Image(texture, display_size, {}, {1.f, 1.f});
+        ImGui::Image(registered_texture_->GetId(), display_size, {}, {1.f, 1.f});
 
         if (zoomed_scroll)
         {
@@ -158,6 +177,63 @@ void ImGuiTextureViewer::Draw(ImTextureID texture, edt::Vec2<u32> size, std::str
     }
     ImGui::EndChild();
     ImGui::End();
+}
+
+void ImGuiTextureViewer::RegisterTexture(DeviceContext& context, VkImageView image_view)
+{
+    if (registered_texture_)
+    {
+        registered_context_->WaitIdle();
+        registered_texture_.reset();
+    }
+    registered_texture_ = std::make_unique<RegisteredImGuiTexture>(context, image_view, sampler_info_);
+    registered_context_ = &context;
+    registered_view_ = image_view;
+}
+
+bool ImGuiTextureViewer::DrawSamplerControls()
+{
+    if (!ImGui::CollapsingHeader("Sampler", ImGuiTreeNodeFlags_DefaultOpen)) return false;
+
+    constexpr std::array filter_choices{
+        std::pair{VK_FILTER_NEAREST, "Nearest"},
+        std::pair{VK_FILTER_LINEAR, "Linear"},
+    };
+    constexpr std::array address_choices{
+        std::pair{VK_SAMPLER_ADDRESS_MODE_REPEAT, "Repeat"},
+        std::pair{VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT, "Mirrored repeat"},
+        std::pair{VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, "Clamp to edge"},
+        std::pair{VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER, "Clamp to border"},
+    };
+    constexpr std::array border_choices{
+        std::pair{VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK, "Transparent black"},
+        std::pair{VK_BORDER_COLOR_INT_TRANSPARENT_BLACK, "Transparent black (integer)"},
+        std::pair{VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK, "Opaque black"},
+        std::pair{VK_BORDER_COLOR_INT_OPAQUE_BLACK, "Opaque black (integer)"},
+        std::pair{VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE, "Opaque white"},
+        std::pair{VK_BORDER_COLOR_INT_OPAQUE_WHITE, "Opaque white (integer)"},
+    };
+
+    bool changed = false;
+    if (ImGui::BeginTable("Sampler parameters", 2, ImGuiTableFlags_SizingStretchProp))
+    {
+        ImGui::TableSetupColumn(
+            "Parameter",
+            ImGuiTableColumnFlags_WidthFixed,
+            ImGui::CalcTextSize("Horizontal address").x);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 1.f);
+        changed |= DrawEnumCombo("Magnification", sampler_info_.magFilter, filter_choices);
+        changed |= DrawEnumCombo("Minification", sampler_info_.minFilter, filter_choices);
+        changed |= DrawEnumCombo("Horizontal address", sampler_info_.addressModeU, address_choices);
+        changed |= DrawEnumCombo("Vertical address", sampler_info_.addressModeV, address_choices);
+        if (sampler_info_.addressModeU == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER ||
+            sampler_info_.addressModeV == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER)
+        {
+            changed |= DrawEnumCombo("Border color", sampler_info_.borderColor, border_choices);
+        }
+        ImGui::EndTable();
+    }
+    return changed;
 }
 
 }  // namespace klvk

@@ -1,46 +1,45 @@
 #pragma once
 
-#include <imgui.h>
-
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
 
 #include "edt/math/matrix.hpp"
 #include "klvk/integral_aliases.hpp"
-#include "klvk/vulkan/vulkan_common.hpp"
+#include "klvk/ui/registered_imgui_texture.hpp"
 
 namespace klvk
 {
 
-class DeviceContext;
-class Texture;
-
-class RegisteredImGuiTexture
-{
-public:
-    RegisteredImGuiTexture(DeviceContext& context, const Texture& texture);
-    RegisteredImGuiTexture(const RegisteredImGuiTexture&) = delete;
-    RegisteredImGuiTexture(RegisteredImGuiTexture&&) = delete;
-    ~RegisteredImGuiTexture();
-
-    [[nodiscard]] ImTextureID GetId() const noexcept { return reinterpret_cast<ImTextureID>(descriptor_); }
-
-private:
-    DeviceContext* context_ = nullptr;
-    VkSampler sampler_ = VK_NULL_HANDLE;
-    VkDescriptorSet descriptor_ = VK_NULL_HANDLE;
-};
-
 class ImGuiTextureViewer
 {
 public:
-    explicit ImGuiTextureViewer(std::string title) : title_{std::move(title)} {}
+    explicit ImGuiTextureViewer(
+        std::string title,
+        VkSamplerCreateInfo sampler_info = RegisteredImGuiTexture::DefaultSamplerCreateInfo())
+        : title_{std::move(title)},
+          sampler_info_{sampler_info}
+    {
+    }
+    ~ImGuiTextureViewer();
 
-    void Draw(ImTextureID texture, edt::Vec2<u32> size, std::string_view description = {}, bool* open = nullptr);
+    void Draw(
+        DeviceContext& context,
+        VkImageView image_view,
+        edt::Vec2<u32> size,
+        std::string_view description = {},
+        bool* open = nullptr);
 
 private:
+    void RegisterTexture(DeviceContext& context, VkImageView image_view);
+    [[nodiscard]] bool DrawSamplerControls();
+
     std::string title_;
+    VkSamplerCreateInfo sampler_info_{};
+    DeviceContext* registered_context_ = nullptr;
+    VkImageView registered_view_ = VK_NULL_HANDLE;
+    std::unique_ptr<RegisteredImGuiTexture> registered_texture_;
     float zoom_ = 1.f;
     bool fit_ = true;
 };

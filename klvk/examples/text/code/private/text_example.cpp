@@ -136,9 +136,6 @@ class TextApp : public klvk::Application
             edt::Vec2<u32>{} + (kPixelSizes[size_index_] * kAtlasGlyphsPerRow),
             kFramesInFlight);
         klvk::ErrorHandling::Ensure(atlas->Add(kPrecached), "The precached glyphs do not fit the atlas");
-        const klvk::Texture& texture = atlas->GetTexture();
-        atlas_imgui_textures_[size_index_] =
-            std::make_unique<klvk::RegisteredImGuiTexture>(GetDeviceContext(), texture);
         return *atlas;
     }
 
@@ -147,7 +144,8 @@ class TextApp : public klvk::Application
         const klvk::GlyphAtlas& atlas = AtlasForCurrentSize();
         const klvk::Texture& texture = atlas.GetTexture();
         atlas_viewer_.Draw(
-            atlas_imgui_textures_[size_index_]->GetId(),
+            GetDeviceContext(),
+            texture.GetView(),
             texture.GetSize(),
             fmt::format("{} px glyphs", atlas.GetPixelSize()));
     }
@@ -306,7 +304,6 @@ public:
 private:
     std::unique_ptr<klvk::FontFace> font_;
     std::array<std::unique_ptr<klvk::GlyphAtlas>, kPixelSizes.size()> atlases_;
-    std::array<std::unique_ptr<klvk::RegisteredImGuiTexture>, kPixelSizes.size()> atlas_imgui_textures_;
     klvk::ImGuiTextureViewer atlas_viewer_{"Glyph atlas"};
     std::unique_ptr<klvk::events::IEventListener> key_listener_;
     klvk::DescriptorSets descriptor_sets_;
