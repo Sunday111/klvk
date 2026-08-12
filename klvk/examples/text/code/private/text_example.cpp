@@ -1,4 +1,8 @@
+#include <fmt/format.h>
+
+#include <algorithm>
 #include <edt/math/matrix.hpp>
+#include <optional>
 #include <random>
 #include <vector>
 
@@ -9,6 +13,7 @@
 #include "klvk/events/keyboard_events.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/text/glyph_atlas.hpp"
+#include "klvk/ui/imgui_texture_viewer.hpp"
 #include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
@@ -134,6 +139,17 @@ class TextApp : public klvk::Application
         return *atlas;
     }
 
+    void DrawAtlasWindow()
+    {
+        const klvk::GlyphAtlas& atlas = AtlasForCurrentSize();
+        const klvk::Texture& texture = atlas.GetTexture();
+        atlas_viewer_.Draw(
+            GetDeviceContext(),
+            texture.GetView(),
+            texture.GetSize(),
+            fmt::format("{} px glyphs", atlas.GetPixelSize()));
+    }
+
     // Only the line being displayed is cleared. The size's atlas keeps whatever it
     // has packed, so a size that has been visited before starts with those glyphs
     // already resident.
@@ -225,6 +241,7 @@ class TextApp : public klvk::Application
     void Tick() override
     {
         klvk::Application::Tick();
+        DrawAtlasWindow();
 
         const std::vector<GlyphVertex> vertices = BuildVertices();
         if (vertices.empty()) return;
@@ -287,6 +304,7 @@ public:
 private:
     std::unique_ptr<klvk::FontFace> font_;
     std::array<std::unique_ptr<klvk::GlyphAtlas>, kPixelSizes.size()> atlases_;
+    klvk::ImGuiTextureViewer atlas_viewer_{"Glyph atlas"};
     std::unique_ptr<klvk::events::IEventListener> key_listener_;
     klvk::DescriptorSets descriptor_sets_;
     klvk::PipelineLayout pipeline_layout_;

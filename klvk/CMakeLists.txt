@@ -39,6 +39,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/text/glyph_atlas.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/texture/procedural_texture_generator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/timing/timer_manager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/imgui_texture_viewer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/registered_imgui_texture.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/simple_imgui_combo.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/transform_widget.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/type_id_widget.cpp
@@ -94,8 +96,11 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/text/glyph_atlas.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/texture/procedural_texture_generator.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/timing/timer_manager.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/imgui_enum_combo.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/imgui_helpers.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/imgui_texture_viewer.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/imgui_value_combo.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/registered_imgui_texture.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/simple_imgui_combo.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/simple_type_widget.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/transform_widget.hpp
@@ -104,12 +109,16 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/descriptor_sets.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/detail/settings.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/detail/vulkan_api_impl.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/detail/vulkan_enum_converter.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/device_context.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/gpu_buffer.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/graphics_pipeline_builder.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/offscreen_render_target.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/pipeline_layout.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/render_target.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/sampler_address_mode.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/sampler_border_color.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/sampler_filter.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/swapchain.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/texture.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vk_object.hpp
