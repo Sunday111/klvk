@@ -1,13 +1,15 @@
 #include "klvk/ui/imgui_texture_viewer.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <optional>
-#include <utility>
 
+#include "klvk/ui/imgui_enum_combo.hpp"
 #include "klvk/ui/imgui_helpers.hpp"
 #include "klvk/vulkan/device_context.hpp"
+#include "klvk/vulkan/sampler_address_mode.hpp"
+#include "klvk/vulkan/sampler_border_color.hpp"
+#include "klvk/vulkan/sampler_filter.hpp"
 
 namespace klvk
 {
@@ -17,8 +19,8 @@ constexpr float kMinimumZoom = 0.01f;
 constexpr float kMaximumZoom = 16.f;
 constexpr float kWheelZoomStep = 1.2f;
 
-template <typename T, size_t Size>
-bool DrawEnumCombo(const char* label, T& value, const std::array<std::pair<T, const char*>, Size>& choices)
+template <typename KlvkValue, typename VulkanValue>
+bool DrawEnumCombo(const char* label, VulkanValue& value)
 {
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
@@ -27,25 +29,11 @@ bool DrawEnumCombo(const char* label, T& value, const std::array<std::pair<T, co
     ImGui::TableNextColumn();
     ImGui::SetNextItemWidth(-1.f);
 
-    const auto selected = std::ranges::find_if(choices, [value](const auto& choice) { return choice.first == value; });
-    const char* preview = selected == choices.end() ? "Custom" : selected->second;
-    bool changed = false;
+    std::optional<KlvkValue> selected = FromVulkan(value);
     ImGui::PushID(label);
-    if (ImGui::BeginCombo("##Value", preview))
-    {
-        for (const auto& [choice, name] : choices)
-        {
-            const bool is_selected = value == choice;
-            if (ImGui::Selectable(name, is_selected))
-            {
-                value = choice;
-                changed = true;
-            }
-            if (is_selected) ImGui::SetItemDefaultFocus();
-        }
-        ImGui::EndCombo();
-    }
+    const bool changed = ImGuiEnumCombo("##Value", selected, "Custom");
     ImGui::PopID();
+    if (changed) value = ToVulkan(*selected);
     return changed;
 }
 }  // namespace
@@ -195,25 +183,6 @@ bool ImGuiTextureViewer::DrawSamplerControls()
 {
     if (!ImGui::CollapsingHeader("Sampler", ImGuiTreeNodeFlags_DefaultOpen)) return false;
 
-    constexpr std::array filter_choices{
-        std::pair{VK_FILTER_NEAREST, "Nearest"},
-        std::pair{VK_FILTER_LINEAR, "Linear"},
-    };
-    constexpr std::array address_choices{
-        std::pair{VK_SAMPLER_ADDRESS_MODE_REPEAT, "Repeat"},
-        std::pair{VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT, "Mirrored repeat"},
-        std::pair{VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, "Clamp to edge"},
-        std::pair{VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER, "Clamp to border"},
-    };
-    constexpr std::array border_choices{
-        std::pair{VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK, "Transparent black"},
-        std::pair{VK_BORDER_COLOR_INT_TRANSPARENT_BLACK, "Transparent black (integer)"},
-        std::pair{VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK, "Opaque black"},
-        std::pair{VK_BORDER_COLOR_INT_OPAQUE_BLACK, "Opaque black (integer)"},
-        std::pair{VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE, "Opaque white"},
-        std::pair{VK_BORDER_COLOR_INT_OPAQUE_WHITE, "Opaque white (integer)"},
-    };
-
     bool changed = false;
     if (ImGui::BeginTable("Sampler parameters", 2, ImGuiTableFlags_SizingStretchProp))
     {
@@ -222,14 +191,14 @@ bool ImGuiTextureViewer::DrawSamplerControls()
             ImGuiTableColumnFlags_WidthFixed,
             ImGui::CalcTextSize("Horizontal address").x);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 1.f);
-        changed |= DrawEnumCombo("Magnification", sampler_info_.magFilter, filter_choices);
-        changed |= DrawEnumCombo("Minification", sampler_info_.minFilter, filter_choices);
-        changed |= DrawEnumCombo("Horizontal address", sampler_info_.addressModeU, address_choices);
-        changed |= DrawEnumCombo("Vertical address", sampler_info_.addressModeV, address_choices);
+        changed |= DrawEnumCombo<SamplerFilter>("Magnification", sampler_info_.magFilter);
+        changed |= DrawEnumCombo<SamplerFilter>("Minification", sampler_info_.minFilter);
+        changed |= DrawEnumCombo<SamplerAddressMode>("Horizontal address", sampler_info_.addressModeU);
+        changed |= DrawEnumCombo<SamplerAddressMode>("Vertical address", sampler_info_.addressModeV);
         if (sampler_info_.addressModeU == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER ||
             sampler_info_.addressModeV == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER)
         {
-            changed |= DrawEnumCombo("Border color", sampler_info_.borderColor, border_choices);
+            changed |= DrawEnumCombo<SamplerBorderColor>("Border color", sampler_info_.borderColor);
         }
         ImGui::EndTable();
     }
