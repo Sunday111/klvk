@@ -1,7 +1,7 @@
 #include "klvk/timing/timer_manager.hpp"
 
+#include <algorithm>
 #include <atomic>
-#include <cmath>
 #include <exception>
 #include <limits>
 #include <span>
@@ -78,31 +78,6 @@ void ValidateMissedTickPolicy(TimerMissedTickPolicy policy)
 }
 
 }  // namespace
-
-TimerDuration TimerDurationFromSeconds(double seconds)
-{
-    constexpr double kNanosecondsPerSecond = 1'000'000'000.0;
-    constexpr double kExclusiveNanosecondLimit = 18'446'744'073'709'551'616.0;
-
-    ErrorHandling::Ensure(
-        std::isfinite(seconds) && seconds >= 0.0,
-        "Timer duration must be a finite non-negative number of seconds");
-    const double nanoseconds = std::round(seconds * kNanosecondsPerSecond);
-    ErrorHandling::Ensure(
-        nanoseconds < kExclusiveNanosecondLimit,
-        "Timer duration exceeds the representable nanosecond range");
-    const auto result = static_cast<u64>(nanoseconds);
-    ErrorHandling::Ensure(
-        seconds == 0.0 || result != 0,
-        "Timer duration must be zero or round to at least one nanosecond");
-    return TimerDuration{result};
-}
-
-float TimerDurationToSeconds(TimerDuration value) noexcept
-{
-    constexpr float kNanosecondsPerSecond = 1'000'000'000.f;
-    return static_cast<float>(value.count()) / kNanosecondsPerSecond;
-}
 
 struct TimerManager::State
 {
@@ -384,45 +359,26 @@ struct TimerManager::State
         return left.timer_sequence < right.timer_sequence;
     }
 
-    void SiftDownDue(std::vector<DueEntry>& heap, size_t index, TimerDomain domain) const
-    {
-        for (;;)
-        {
-            const size_t left = index * 2 + 1;
-            if (left >= heap.size()) return;
-            const size_t right = left + 1;
-            const size_t first = right < heap.size() && DueComesBefore(heap[right], heap[left], domain) ? right : left;
-            if (!DueComesBefore(heap[first], heap[index], domain)) return;
-            std::swap(heap[index], heap[first]);
-            index = first;
-        }
-    }
-
     void PushDue(std::vector<DueEntry>& heap, DueEntry entry, TimerDomain domain)
     {
         heap.push_back(entry);
-        size_t index = heap.size() - 1;
-        while (index != 0)
+        const auto later = [this, domain](const DueEntry& left, const DueEntry& right)
         {
-            const size_t parent = (index - 1) / 2;
-            if (!DueComesBefore(heap[index], heap[parent], domain)) break;
-            std::swap(heap[index], heap[parent]);
-            index = parent;
-        }
+            return DueComesBefore(right, left, domain);
+        };
+        std::ranges::push_heap(heap, later);
     }
 
     [[nodiscard]] DueEntry PopDue(std::vector<DueEntry>& heap, TimerDomain domain)
     {
         ErrorHandling::Ensure(!heap.empty(), "Cannot pop an empty due-timer heap");
-        DueEntry result = heap.front();
-        if (heap.size() == 1)
+        const auto later = [this, domain](const DueEntry& left, const DueEntry& right)
         {
-            heap.pop_back();
-            return result;
-        }
-        heap.front() = heap.back();
+            return DueComesBefore(right, left, domain);
+        };
+        std::ranges::pop_heap(heap, later);
+        DueEntry result = heap.back();
         heap.pop_back();
-        SiftDownDue(heap, 0, domain);
         return result;
     }
 

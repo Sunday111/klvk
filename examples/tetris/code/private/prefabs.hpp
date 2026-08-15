@@ -7,18 +7,7 @@
 
 #include "edt/math/matrix.hpp"
 #include "klvk/error_handling.hpp"
-
-template <std::integral T>
-[[nodiscard]] constexpr auto Make2dCoords(edt::Vec2<T> size)
-{
-    return std::views::join(
-        std::views::iota(T{0}, size.y()) |
-        std::views::transform(
-            [width = size.x()](T y)
-            {
-                return std::views::iota(T{0}, width) | std::views::transform([y](T x) { return edt::Vec2<T>{x, y}; });
-            }));
-}
+#include "klvk/ranges/vector_indices_2d.hpp"
 
 [[nodiscard]] constexpr size_t Coord2dToIndex(edt::Vec2<size_t> coordinate, size_t width)
 {
@@ -30,7 +19,7 @@ class BlockPrefab
 public:
     [[nodiscard]] constexpr auto AllCoords() const
     {
-        return Make2dCoords(size) | std::views::filter(std::bind_front(&BlockPrefab::GetCell, this));
+        return klvk::VectorIndices2d(size) | std::views::filter(std::bind_front(&BlockPrefab::GetCell, this));
     }
     [[nodiscard]] constexpr bool GetCell(edt::Vec2<size_t> coordinate) const
     {
