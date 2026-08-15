@@ -78,7 +78,7 @@ class ComputeShaderApp : public klvk::Application
         GetWindow().SetTitle("Painter 2d");
         SetTargetFramerate(60.f);
         listener_ = klvk::events::EventListenerMethodCallbacks<&ComputeShaderApp::OnMouseMove>::CreatePtr(this);
-        GetEventManager().AddEventListener(*listener_);
+        listener_subscription_ = GetEventManager().AddEventListener(*listener_);
 
         auto& context = GetDeviceContext();
         descriptor_sets_ = klvk::DescriptorSets::Builder(context)
@@ -254,6 +254,21 @@ class ComputeShaderApp : public klvk::Application
         const vk::DescriptorSet set = descriptor_sets_.Get(0);
         const vk::CommandBuffer command_buffer = GetCurrentCommandBuffer();
         std::array<Vec4f, 2> bodies{};
+        if (time_steps_per_frame_ != 0)
+        {
+            const vk::BufferMemoryBarrier2 barrier =
+                vk::BufferMemoryBarrier2{}
+                    .setSrcStageMask(vk::PipelineStageFlagBits2::eVertexShader)
+                    .setSrcAccessMask(vk::AccessFlagBits2::eShaderStorageRead)
+                    .setDstStageMask(vk::PipelineStageFlagBits2::eComputeShader)
+                    .setDstAccessMask(
+                        vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite)
+                    .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+                    .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+                    .setBuffer(buffer_.GetHandle())
+                    .setSize(vk::WholeSize);
+            command_buffer.pipelineBarrier2(vk::DependencyInfo{}.setBufferMemoryBarriers(barrier));
+        }
         command_buffer.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline_.get());
         command_buffer.bindDescriptorSets(
             vk::PipelineBindPoint::eCompute,
@@ -410,6 +425,7 @@ private:
     vk::UniquePipeline bodies_pipeline_;
     klvk::GpuBuffer buffer_;
     std::unique_ptr<klvk::events::IEventListener> listener_;
+    klvk::events::EventSubscription listener_subscription_;
     klvk::Camera3d camera_{Vec3f{0.f, 15.f, 0.f}, {.yaw = -90.f}};
     std::array<Body, 2> bodies_{
         Body{

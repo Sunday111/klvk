@@ -31,6 +31,7 @@ public:
     {
         std::string app_name = "klvk";
         bool enable_validation = kDebugBuild;
+        bool enable_synchronization_validation = kDebugBuild;
     };
 
     explicit DeviceContext(Window* presentation_window);
@@ -58,6 +59,7 @@ public:
     [[nodiscard]] bool IsExternalMemoryFdEnabled() const noexcept { return external_memory_fd_enabled_; }
 
     void WaitIdle() const;
+    void WaitIdleNoexcept() const noexcept;
 
     // Records commands into a temporary command buffer, submits it to the graphics queue and waits for completion.
     template <typename F>

@@ -83,10 +83,7 @@ DeviceContext::DeviceContext(Window* presentation_window, const Settings& settin
 DeviceContext::~DeviceContext()
 {
     shader_cache_.reset();
-    if (device_)
-    {
-        (void)VULKAN_HPP_DEFAULT_DISPATCHER.vkDeviceWaitIdle(static_cast<VkDevice>(GetDevice()));
-    }
+    WaitIdleNoexcept();
     one_time_pool_.reset();
     if (allocator_) vmaDestroyAllocator(allocator_);
     allocator_ = nullptr;
@@ -158,9 +155,14 @@ void DeviceContext::CreateInstance(const Settings& settings, const Window* prese
     {
         layers.push_back("VK_LAYER_KHRONOS_validation");
         extensions.push_back(vk::EXTDebugUtilsExtensionName);
-        vk::StructureChain<vk::InstanceCreateInfo, vk::DebugUtilsMessengerCreateInfoEXT> chain{
-            create_info,
-            messenger_info};
+        const std::array synchronization_validation{vk::ValidationFeatureEnableEXT::eSynchronizationValidation};
+        auto validation_features = vk::ValidationFeaturesEXT{};
+        if (settings.enable_synchronization_validation)
+        {
+            validation_features.setEnabledValidationFeatures(synchronization_validation);
+        }
+        vk::StructureChain<vk::InstanceCreateInfo, vk::DebugUtilsMessengerCreateInfoEXT, vk::ValidationFeaturesEXT>
+            chain{create_info, messenger_info, validation_features};
         chain.get<vk::InstanceCreateInfo>().setPEnabledLayerNames(layers).setPEnabledExtensionNames(extensions);
         instance_ = vk::createInstanceUnique(chain.get<vk::InstanceCreateInfo>());
     }
@@ -304,6 +306,11 @@ void DeviceContext::CreateAllocator()
 void DeviceContext::WaitIdle() const
 {
     GetDevice().waitIdle();
+}
+
+void DeviceContext::WaitIdleNoexcept() const noexcept
+{
+    if (device_) (void)VULKAN_HPP_DEFAULT_DISPATCHER.vkDeviceWaitIdle(static_cast<VkDevice>(GetDevice()));
 }
 
 vk::CommandBuffer DeviceContext::BeginOneTimeCommands() const

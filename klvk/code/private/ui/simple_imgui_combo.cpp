@@ -50,6 +50,17 @@ std::optional<size_t> ImGuiCombo::GetSelected() const noexcept
     return std::optional<size_t>{std::in_place, static_cast<size_t>(selected_)};
 }
 
+void ImGuiCombo::SetSelected(size_t index)
+{
+    klvk::ErrorHandling::Ensure(
+        index < names_.size(),
+        "Failed to select combo item. Index: {}, title: {}, num entries: {}",
+        index,
+        title_,
+        names_.size());
+    selected_ = static_cast<int>(index);
+}
+
 void ImGuiCombo::RemoveItem(size_t index)
 {
     klvk::ErrorHandling::Ensure(

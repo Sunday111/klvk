@@ -12,6 +12,7 @@
 #include "application_imgui.hpp"
 #include "diagnostics/diagnostic_runner.hpp"
 #include "diagnostics/input_recorder.hpp"
+#include "edt/functional/on_scope_leave.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/events/application_events.hpp"
 #include "klvk/events/event_listener_method.hpp"
@@ -62,8 +63,10 @@ struct Application::State
     bool stencil_buffer_enabled_ = false;
     bool offscreen_ = false;
     bool exit_requested_ = false;
+    SwapchainPresentMode present_mode_ = SwapchainPresentMode::PreferLowLatency;
     u64 completed_frames_ = 0;
     events::EventManager event_manager_;
+    events::EventSubscription quit_subscription_;
     std::optional<DiagnosticRunConfig> diagnostic_config_;
     std::unique_ptr<DiagnosticRunner> diagnostic_runner_;
     std::optional<std::filesystem::path> input_record_path_;
@@ -181,7 +184,7 @@ struct Application::State
 
     State()
     {
-        [[maybe_unused]] const events::IEventListener* quit_listener = event_manager_.AddEventListener(
+        quit_subscription_ = event_manager_.AddEventListener(
             events::EventListenerMethodCallbacks<&State::OnApplicationQuitRequested>::CreatePtr(this));
     }
 
@@ -284,7 +287,8 @@ void Application::Initialize()
         auto swapchain = std::make_unique<Swapchain>(
             *state_->device_context_,
             state_->window_->GetFramebufferSize(),
-            diagnostic_usage);
+            diagnostic_usage,
+            state_->present_mode_);
         state_->swapchain_ = swapchain.get();
         state_->render_target_ = std::move(swapchain);
         if (state_->diagnostic_config_.has_value() && state_->diagnostic_config_->framebuffer_size.has_value())
@@ -331,6 +335,15 @@ void Application::Run()
 
 void Application::RunImpl()
 {
+    bool device_needs_emergency_wait = true;
+    auto wait_for_device_on_failure = edt::OnScopeLeave(
+        [this, &device_needs_emergency_wait]
+        {
+            if (device_needs_emergency_wait && state_->device_context_)
+            {
+                state_->device_context_->WaitIdleNoexcept();
+            }
+        });
     Initialize();
     // Recording is independent of replaying: the point is to capture an ordinary
     // interactive session, which has no diagnostic configuration at all.
@@ -377,6 +390,7 @@ void Application::RunImpl()
     if (state_->device_context_)
     {
         state_->device_context_->WaitIdle();
+        device_needs_emergency_wait = false;
         if (state_->diagnostic_runner_)
         {
             state_->diagnostic_runner_->ProcessAllCompleted();
@@ -394,6 +408,10 @@ void Application::RunImpl()
             }
             state_->diagnostic_runner_->EnsureComplete();
         }
+    }
+    else
+    {
+        device_needs_emergency_wait = false;
     }
     if (state_->input_recorder_)
     {
@@ -868,6 +886,14 @@ float Application::GetLastFrameDurationSeconds() const
 void Application::SetTargetFramerate(std::optional<float> framerate)
 {
     state_->frame_clock_.SetTargetFramerate(framerate);
+}
+
+void Application::SetSwapchainPresentMode(SwapchainPresentMode present_mode)
+{
+    ErrorHandling::Ensure(
+        state_->swapchain_ == nullptr,
+        "Swapchain present mode must be selected before initialization");
+    state_->present_mode_ = present_mode;
 }
 
 void Application::SetClearColor(const edt::Vec4f& color)

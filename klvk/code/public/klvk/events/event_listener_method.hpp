@@ -2,9 +2,9 @@
 
 #include <memory>
 
-#include "refl/get_type_info.hpp"
 #include "detail.hpp"
 #include "event_listener_interface.hpp"
+#include "refl/get_type_info.hpp"
 
 namespace klvk::events
 {
@@ -21,7 +21,7 @@ namespace klvk::events
 //     listener = klvk::events::EventListenerMethodCallbacks<
 //          &MyClass::OnEvent1,
 //          &MyClass::OnEvent2>::CreatePtr(this);
-//     event_manager.AddEventListener(*listener_);
+//     subscription = event_manager.AddEventListener(*listener_);
 template <auto... methods>
     requires(detail::ValidMethodEventListeners<methods...>)
 class EventListenerMethodCallbacks : public IEventListener

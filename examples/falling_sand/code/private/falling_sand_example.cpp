@@ -141,7 +141,7 @@ class FallingSandApp : public klvk::Application
     {
         klvk::Application::Initialize();
         listener_ = klvk::events::EventListenerMethodCallbacks<&FallingSandApp::OnMouseScroll>::CreatePtr(this);
-        GetEventManager().AddEventListener(*listener_);
+        listener_subscription_ = GetEventManager().AddEventListener(*listener_);
         SetClearColor({});
         GetWindow().SetSize(1000, 1000);
         GetWindow().SetTitle("Painter 2d");
@@ -229,26 +229,10 @@ class FallingSandApp : public klvk::Application
 
         for (const RegionId& region_id : grid_.order)
         {
-            const auto [begin, end] = RegionRange(region_id);
+            const Vec2i begin = RegionRange(region_id).first;
             const Vec2f region_size = GridRegion::kSize.Cast<float>() * kParticleSize;
             const Vec2f region_center = begin.Cast<float>() * kParticleSize + region_size * 0.5f;
             AddRectOutline(*renderer_, region_center, region_size, 0.01f, kBlue);
-
-            const GridRegion& container = grid_.containers.at(region_id);
-            for (u32 y = 0; y != GridRegion::kSize.y(); ++y)
-            {
-                for (u32 x = 0; x != GridRegion::kSize.x(); ++x)
-                {
-                    if (container.bits[y].Get(x))
-                    {
-                        const Vec2i particle = begin + Vec2u32{x, y}.Cast<int>();
-                        renderer_->Add(
-                            particle.Cast<float>() * kParticleSize,
-                            kRed,
-                            Vec2f{kParticleSize, kParticleSize} * 0.5f);
-                    }
-                }
-            }
         }
 
         for (const auto& [id, data] : grid_.particles)
@@ -332,6 +316,7 @@ private:
     std::unique_ptr<klvk::Texture> texture_;
     std::unique_ptr<klvk::InstancedSpriteRenderer2d> renderer_;
     std::unique_ptr<klvk::events::IEventListener> listener_;
+    klvk::events::EventSubscription listener_subscription_;
     klvk::Camera2d camera_{};
     klvk::RenderTransforms2d transforms_{};
     float move_speed_ = 0.5f;

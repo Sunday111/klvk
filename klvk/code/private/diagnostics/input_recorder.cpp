@@ -22,13 +22,10 @@ DiagnosticInputRecorder::DiagnosticInputRecorder(std::filesystem::path path, eve
         &DiagnosticInputRecorder::OnMouseButton,
         &DiagnosticInputRecorder::OnMouseScroll,
         &DiagnosticInputRecorder::OnKey>::CreatePtr(this);
-    event_manager_.AddEventListener(*event_listener_);
+    event_subscription_ = event_manager_.AddEventListener(*event_listener_);
 }
 
-DiagnosticInputRecorder::~DiagnosticInputRecorder()
-{
-    if (event_listener_) event_manager_.RemoveListener(event_listener_.get());
-}
+DiagnosticInputRecorder::~DiagnosticInputRecorder() {}
 
 void DiagnosticInputRecorder::BeginFrame(u64 frame) noexcept
 {

@@ -119,14 +119,13 @@ DiagnosticRunner::DiagnosticRunner(
     ScheduleQuit(config.exit);
 
     event_listener_ = events::EventListenerMethodCallbacks<&DiagnosticRunner::OnCaptureDue>::CreatePtr(this);
-    event_manager_.AddEventListener(*event_listener_);
+    event_subscription_ = event_manager_.AddEventListener(*event_listener_);
 }
 
 DiagnosticRunner::~DiagnosticRunner()
 {
     timers_.Clear();
     input_timers_.Clear();
-    if (event_listener_) event_manager_.RemoveListener(event_listener_.get());
 }
 
 void DiagnosticRunner::ScheduleInput(const DiagnosticInputConfig& input)

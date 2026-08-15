@@ -4,6 +4,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application_frame_clock.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application_frame_clock.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application_frame_pacing.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application_frame_pacing.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application_imgui.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application_imgui.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/camera/camera_3d.cpp
@@ -121,11 +123,11 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/pipeline_layout.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/render_target.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/swapchain.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/swapchain_present_mode.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/texture.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan_common.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/window.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/examples/text/code/private/text_example.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/window.hpp)
 add_library(klvk STATIC ${module_source_files})
 set_generic_compiler_options(klvk PRIVATE)
 target_link_libraries(klvk PUBLIC ass

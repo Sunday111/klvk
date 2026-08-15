@@ -35,7 +35,7 @@ class CubeApp : public klvk::Application
         klvk::Application::Initialize();
 
         event_listener_ = klvk::events::EventListenerMethodCallbacks<&CubeApp::OnMouseMove>::CreatePtr(this);
-        GetEventManager().AddEventListener(*event_listener_);
+        event_subscription_ = GetEventManager().AddEventListener(*event_listener_);
 
         SetClearColor({});
         GetWindow().SetSize(1000, 1000);
@@ -147,6 +147,7 @@ class CubeApp : public klvk::Application
 
 private:
     std::unique_ptr<klvk::events::IEventListener> event_listener_;
+    klvk::events::EventSubscription event_subscription_;
     klvk::GpuBuffer vertex_buffer_;
     klvk::GpuBuffer index_buffer_;
     klvk::PipelineLayout pipeline_layout_;

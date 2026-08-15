@@ -3,6 +3,7 @@
 #include <vk_mem_alloc.h>
 
 #include <algorithm>
+#include <utility>
 
 #include "klvk/error_handling.hpp"
 #include "klvk/integral_aliases.hpp"
@@ -45,17 +46,39 @@ vk::SurfaceFormatKHR ChooseSurfaceFormat(vk::PhysicalDevice device, vk::SurfaceK
     return formats.front();
 }
 
-vk::PresentModeKHR ChoosePresentMode(vk::PhysicalDevice device, vk::SurfaceKHR surface)
+vk::PresentModeKHR ChoosePresentMode(vk::PhysicalDevice device, vk::SurfaceKHR surface, SwapchainPresentMode preference)
 {
     const std::vector<vk::PresentModeKHR> modes = device.getSurfacePresentModesKHR(surface);
 
-    // Application paces frames itself (SetTargetFramerate), so prefer modes that do not block on vsync
-    // to mirror klgl's glfwSwapInterval(0) behavior.
-    for (const vk::PresentModeKHR preferred : {vk::PresentModeKHR::eMailbox, vk::PresentModeKHR::eImmediate})
+    if (preference == SwapchainPresentMode::PreferLowLatency)
     {
-        if (std::ranges::find(modes, preferred) != modes.end()) return preferred;
+        for (const vk::PresentModeKHR preferred : {vk::PresentModeKHR::eMailbox, vk::PresentModeKHR::eImmediate})
+        {
+            if (std::ranges::find(modes, preferred) != modes.end()) return preferred;
+        }
+        return vk::PresentModeKHR::eFifo;
     }
-    return vk::PresentModeKHR::eFifo;
+
+    const vk::PresentModeKHR requested = [&]
+    {
+        switch (preference)
+        {
+        case SwapchainPresentMode::Fifo:
+            return vk::PresentModeKHR::eFifo;
+        case SwapchainPresentMode::Mailbox:
+            return vk::PresentModeKHR::eMailbox;
+        case SwapchainPresentMode::Immediate:
+            return vk::PresentModeKHR::eImmediate;
+        case SwapchainPresentMode::PreferLowLatency:
+            break;
+        }
+        std::unreachable();
+    }();
+    ErrorHandling::Ensure(
+        std::ranges::find(modes, requested) != modes.end(),
+        "Requested swapchain present mode {} is not supported",
+        vk::to_string(requested));
+    return requested;
 }
 
 }  // namespace
@@ -63,9 +86,11 @@ vk::PresentModeKHR ChoosePresentMode(vk::PhysicalDevice device, vk::SurfaceKHR s
 Swapchain::Swapchain(
     DeviceContext& context,
     edt::Vec2<u32> framebuffer_size,
-    vk::ImageUsageFlags additional_image_usage)
+    vk::ImageUsageFlags additional_image_usage,
+    SwapchainPresentMode present_mode)
     : context_(&context),
-      additional_image_usage_(additional_image_usage)
+      additional_image_usage_(additional_image_usage),
+      present_mode_(present_mode)
 {
     Create(framebuffer_size, nullptr);
 }
@@ -123,20 +148,21 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, vk::SwapchainKHR old_swa
         "Surface does not support required swapchain image usage flags {}",
         vk::to_string(image_usage));
 
-    const vk::SwapchainCreateInfoKHR create_info = vk::SwapchainCreateInfoKHR{}
-                                                       .setSurface(surface)
-                                                       .setMinImageCount(image_count)
-                                                       .setImageFormat(format_.format)
-                                                       .setImageColorSpace(format_.colorSpace)
-                                                       .setImageExtent(extent_)
-                                                       .setImageArrayLayers(1)
-                                                       .setImageUsage(image_usage)
-                                                       .setImageSharingMode(vk::SharingMode::eExclusive)
-                                                       .setPreTransform(capabilities.currentTransform)
-                                                       .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque)
-                                                       .setPresentMode(ChoosePresentMode(physical_device, surface))
-                                                       .setClipped(true)
-                                                       .setOldSwapchain(old_swapchain);
+    const vk::SwapchainCreateInfoKHR create_info =
+        vk::SwapchainCreateInfoKHR{}
+            .setSurface(surface)
+            .setMinImageCount(image_count)
+            .setImageFormat(format_.format)
+            .setImageColorSpace(format_.colorSpace)
+            .setImageExtent(extent_)
+            .setImageArrayLayers(1)
+            .setImageUsage(image_usage)
+            .setImageSharingMode(vk::SharingMode::eExclusive)
+            .setPreTransform(capabilities.currentTransform)
+            .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque)
+            .setPresentMode(ChoosePresentMode(physical_device, surface, present_mode_))
+            .setClipped(true)
+            .setOldSwapchain(old_swapchain);
 
     swapchain_ = context_->GetDevice().createSwapchainKHRUnique(create_info);
     images_ = context_->GetDevice().getSwapchainImagesKHR(swapchain_.get());

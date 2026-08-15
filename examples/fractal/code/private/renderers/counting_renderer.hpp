@@ -1,5 +1,8 @@
 #pragma once
 
+#include <array>
+#include <vector>
+
 #include "../graphics_utils.hpp"
 #include "fractal_renderer.hpp"
 #include "klvk/camera/camera_2d.hpp"
@@ -18,13 +21,25 @@ public:
     void ApplySettings(const FractalSettings& settings) override;
 
 private:
+    struct FrameResources
+    {
+        klvk::GpuBuffer color_table;
+        klvk::GpuBuffer counters;
+        size_t counters_size = 0;
+        size_t color_version = 0;
+        vk::DescriptorSet compute_set = nullptr;
+        vk::DescriptorSet draw_set = nullptr;
+    };
+
     klvk::Application* app_ = nullptr;
     size_t max_iterations{};
     klvk::RenderTransforms2d render_transforms_;
 
-    klvk::GpuBuffer color_table_;
-    klvk::GpuBuffer counters_;
-    size_t current_counters_size_ = 0;
+    std::array<FrameResources, klvk::Application::kFramesInFlight> frames_;
+    FrameResources* active_frame_ = nullptr;
+    std::vector<edt::Vec4f> colors_;
+    size_t color_version_ = 0;
+    size_t counters_size_ = 0;
 
     klvk::Shader fullscreen_shader_;
     klvk::Shader draw_shader_;
@@ -35,8 +50,6 @@ private:
     vk::UniqueDescriptorSetLayout compute_set_layout_;
     vk::UniqueDescriptorSetLayout draw_set_layout_;
     vk::UniqueDescriptorPool descriptor_pool_;
-    vk::DescriptorSet compute_set_ = nullptr;
-    vk::DescriptorSet draw_set_ = nullptr;
 
     klvk::PipelineLayout compute_pipeline_layout_;
     klvk::PipelineLayout draw_pipeline_layout_;

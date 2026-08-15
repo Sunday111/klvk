@@ -104,7 +104,7 @@ class TextApp : public klvk::Application
         random_ = std::mt19937{seed};
 
         key_listener_ = klvk::events::EventListenerMethodCallbacks<&TextApp::OnKey>::CreatePtr(this);
-        GetEventManager().AddEventListener(*key_listener_);
+        key_subscription_ = GetEventManager().AddEventListener(*key_listener_);
 
         UseSize(0);
     }
@@ -299,6 +299,7 @@ private:
     std::array<std::unique_ptr<klvk::GlyphAtlas>, kPixelSizes.size()> atlases_;
     klvk::ImGuiTextureViewer atlas_viewer_{"Glyph atlas"};
     std::unique_ptr<klvk::events::IEventListener> key_listener_;
+    klvk::events::EventSubscription key_subscription_;
     klvk::DescriptorSets descriptor_sets_;
     klvk::PipelineLayout pipeline_layout_;
     vk::UniquePipeline pipeline_;

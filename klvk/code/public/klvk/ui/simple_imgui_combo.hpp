@@ -14,6 +14,7 @@ public:
     bool Draw() noexcept;
     size_t AddItem(std::string_view name);
     [[nodiscard]] std::optional<size_t> GetSelected() const noexcept;
+    void SetSelected(size_t index);
     [[nodiscard]] std::string_view GetTitle() const noexcept { return title_; }
     [[nodiscard]] size_t GetSize() const noexcept { return names_.size(); }
 

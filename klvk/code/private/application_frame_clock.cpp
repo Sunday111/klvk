@@ -1,12 +1,16 @@
 #include "application_frame_clock.hpp"
 
 #include <algorithm>
-#include <cmath>
+#include <cerrno>
 #include <limits>
 #include <thread>
 #include <utility>
 
 #include "klvk/error_handling.hpp"
+
+#if defined(__linux__)
+#include <time.h>
+#endif
 
 namespace klvk
 {
@@ -15,6 +19,44 @@ namespace
 
 constexpr double kNanosecondsPerSecond = 1'000'000'000.0;
 
+template <typename Duration>
+std::chrono::nanoseconds ToNanoseconds(Duration duration)
+{
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
+}
+
+void SleepUntil(std::chrono::steady_clock::time_point deadline)
+{
+#if defined(__linux__)
+    const auto remaining = std::chrono::ceil<std::chrono::nanoseconds>(deadline - std::chrono::steady_clock::now());
+    if (remaining <= std::chrono::nanoseconds::zero()) return;
+
+    timespec sleep_deadline{};
+    ErrorHandling::Ensure(
+        clock_gettime(CLOCK_MONOTONIC, &sleep_deadline) == 0,
+        "clock_gettime(CLOCK_MONOTONIC) failed with error {}",
+        errno);
+
+    constexpr i64 kNanosecondsPerSecondInteger = 1'000'000'000;
+    sleep_deadline.tv_sec += remaining.count() / kNanosecondsPerSecondInteger;
+    sleep_deadline.tv_nsec += remaining.count() % kNanosecondsPerSecondInteger;
+    if (sleep_deadline.tv_nsec >= kNanosecondsPerSecondInteger)
+    {
+        ++sleep_deadline.tv_sec;
+        sleep_deadline.tv_nsec -= kNanosecondsPerSecondInteger;
+    }
+
+    int result = 0;
+    do
+    {
+        result = clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &sleep_deadline, nullptr);
+    } while (result == EINTR);
+    ErrorHandling::Ensure(result == 0, "clock_nanosleep(CLOCK_MONOTONIC) failed with error {}", result);
+#else
+    std::this_thread::sleep_until(deadline);
+#endif
+}
+
 }  // namespace
 
 void ApplicationFrameClock::Initialize(std::optional<u64> fixed_step_nanoseconds)
@@ -22,6 +64,7 @@ void ApplicationFrameClock::Initialize(std::optional<u64> fixed_step_nanoseconds
     fixed_step_nanoseconds_ = fixed_step_nanoseconds;
     app_start_time_ = Clock::now();
     std::ranges::fill(frame_start_time_history_, app_start_time_);
+    pacing_schedule_.Reset();
 }
 
 void ApplicationFrameClock::RegisterFrameStart()
@@ -47,26 +90,26 @@ void ApplicationFrameClock::RegisterFrameStart()
 
 void ApplicationFrameClock::SetTargetFramerate(std::optional<float> framerate)
 {
-    ErrorHandling::Ensure(
-        !framerate.has_value() || (std::isfinite(*framerate) && *framerate > 0.f),
-        "Target framerate must be finite and positive");
-    target_framerate_ = framerate;
+    pacing_schedule_.SetTargetFramerate(framerate);
 }
 
-void ApplicationFrameClock::AlignWithFramerate(bool pace_fixed_step_to_real_time, u64 completed_frames) const
+void ApplicationFrameClock::AlignWithFramerate(bool pace_fixed_step_to_real_time, u64 completed_frames)
 {
-    if (pace_fixed_step_to_real_time)
+    std::chrono::nanoseconds now{};
+    if (!fixed_step_nanoseconds_.has_value() && pacing_schedule_.HasTargetFramerate())
     {
-        PaceFixedStepToRealTime(completed_frames);
-        return;
+        now = ToNanoseconds(Clock::now().time_since_epoch());
     }
-    if (fixed_step_nanoseconds_.has_value() || !target_framerate_.has_value()) return;
-
-    const float frame_start = GetCurrentFrameStartTime(completed_frames);
-    const float target_frame_duration = (1.f / *target_framerate_) * 0.9995f;
-    while (GetRelativeTimeSeconds(completed_frames) - frame_start < target_frame_duration)
-    {
-    }
+    const std::optional<std::chrono::nanoseconds> deadline = pacing_schedule_.GetDeadline(
+        FramePacingFrame{
+            .fixed_step_nanoseconds = fixed_step_nanoseconds_,
+            .pace_fixed_step_to_real_time = pace_fixed_step_to_real_time,
+            .completed_frames = completed_frames,
+            .application_start = ToNanoseconds(app_start_time_.time_since_epoch()),
+            .frame_start = ToNanoseconds(frame_start_time_history_[current_frame_time_index_].time_since_epoch()),
+            .now = now,
+        });
+    if (deadline.has_value()) SleepUntil(TimePoint{std::chrono::duration_cast<Clock::duration>(*deadline)});
 }
 
 TimerDuration ApplicationFrameClock::GetElapsedTime(u64 completed_frames) const
@@ -112,14 +155,6 @@ std::optional<double> ApplicationFrameClock::GetFixedStepSeconds() const noexcep
 {
     if (!fixed_step_nanoseconds_.has_value()) return std::nullopt;
     return static_cast<double>(*fixed_step_nanoseconds_) / kNanosecondsPerSecond;
-}
-
-void ApplicationFrameClock::PaceFixedStepToRealTime(u64 completed_frames) const
-{
-    const u64 step_nanoseconds = *fixed_step_nanoseconds_;
-    if (completed_frames != 0 && step_nanoseconds > std::numeric_limits<u64>::max() / completed_frames) return;
-    const auto elapsed = std::chrono::nanoseconds{static_cast<i64>(step_nanoseconds * completed_frames)};
-    std::this_thread::sleep_until(app_start_time_ + elapsed);
 }
 
 }  // namespace klvk

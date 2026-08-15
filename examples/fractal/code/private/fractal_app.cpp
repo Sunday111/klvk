@@ -21,7 +21,7 @@ void FractalApp::Initialize()
 {
     klvk::Application::Initialize();
     event_listener_ = klvk::events::EventListenerMethodCallbacks<&FractalApp::OnMouseScroll>::CreatePtr(this);
-    GetEventManager().AddEventListener(*event_listener_);
+    event_subscription_ = GetEventManager().AddEventListener(*event_listener_);
 
     SetClearColor({});
     GetWindow().SetSize(1000, 1000);
@@ -29,7 +29,6 @@ void FractalApp::Initialize()
     SetTargetFramerate(30.f);
 
     klvk::Shader::shaders_dir_ = GetShaderDir();
-    renderer_ = std::make_unique<SimpleGpuRenderer>(*this, kMaxIterations);
     interpolation_widget_ = std::make_unique<InterpolationWidget>(*this, kMaxIterations + 1);
 
     settings_.RandomizeColors();
@@ -38,6 +37,22 @@ void FractalApp::Initialize()
     renderer_combo_.EmplaceItem("Simple GPU", RendererFactoryFn<SimpleGpuRenderer>);
     renderer_combo_.EmplaceItem("Counting", RendererFactoryFn<CountingRenderer>);
     renderer_combo_.EmplaceItem("Simple CPU", RendererFactoryFn<SimpleCpuRenderer>);
+
+    size_t renderer_index = 0;
+    if (const nlohmann::json* config = GetDiagnosticApplicationConfig(); config && config->contains("renderer"))
+    {
+        const auto& renderer = config->at("renderer");
+        klvk::ErrorHandling::Ensure(renderer.is_string(), "Diagnostic application.renderer must be a string");
+        const std::string name = renderer.get<std::string>();
+        if (name == "counting")
+            renderer_index = 1;
+        else if (name == "simple_cpu")
+            renderer_index = 2;
+        else
+            klvk::ErrorHandling::Ensure(name == "simple_gpu", "Unknown diagnostic renderer '{}'", name);
+    }
+    renderer_combo_.SetSelectedIndex(renderer_index);
+    renderer_ = renderer_combo_.GetSelectedItem()(*this, kMaxIterations);
 }
 
 void FractalApp::HandleInput()
