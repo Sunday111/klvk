@@ -5,7 +5,7 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/shader/shader_interface.hpp"
 #include "klvk/vulkan/pipeline_layout.hpp"
-#include "klvk/vulkan/vk_object.hpp"
+#include "klvk/vulkan/vulkan_object.hpp"
 
 namespace klvk
 {
@@ -14,7 +14,7 @@ class DeviceContext;
 
 // One descriptor set layout replicated across N identical sets - the shape every
 // example hand-rolled as layout -> pool -> allocate -> write (~40-60 lines). The
-// layout and pool are owned as VkObjects, so a DescriptorSets member needs no
+// layout and pool are owned as VulkanObject instances, so a DescriptorSets member needs no
 // teardown. Build it once from the bindings, then fill each set with
 // WriteBuffer/WriteImage.
 //
@@ -29,19 +29,19 @@ public:
         explicit Builder(DeviceContext& context) : context_(&context) {}
 
         // Adds a binding to the shared layout. Repeat for multiple bindings.
-        Builder& Binding(u32 binding, VkDescriptorType type, VkShaderStageFlags stages, u32 count = 1);
+        Builder& Binding(u32 binding, vk::DescriptorType type, vk::ShaderStageFlags stages, u32 count = 1);
 
         // Creates the layout and a pool, then allocates set_count identical sets.
         [[nodiscard]] DescriptorSets Build(u32 set_count = 1);
 
     private:
         DeviceContext* context_ = nullptr;
-        std::vector<VkDescriptorSetLayoutBinding> bindings_;
+        std::vector<vk::DescriptorSetLayoutBinding> bindings_;
     };
 
     DescriptorSets() = default;
 
-    [[nodiscard]] VkDescriptorSetLayout GetLayout() const noexcept { return layout_.GetHandle(); }
+    [[nodiscard]] vk::DescriptorSetLayout GetLayout() const noexcept { return layout_.GetHandle(); }
     [[nodiscard]] const DescriptorSetLayoutDescription& GetLayoutDescription() const noexcept
     {
         return layout_description_;
@@ -50,13 +50,13 @@ public:
     {
         return {.handle = GetLayout(), .description = &layout_description_};
     }
-    [[nodiscard]] VkDescriptorSet Get(size_t set_index) const { return sets_.at(set_index); }
+    [[nodiscard]] vk::DescriptorSet Get(size_t set_index) const { return sets_.at(set_index); }
     [[nodiscard]] size_t Count() const noexcept { return sets_.size(); }
     void ValidateAgainst(const ShaderProgramInterface& program, u32 set_index) const;
 
     // Points a binding of the given set at a buffer. The descriptor type comes
     // from the binding declared in the builder (uniform or storage buffer).
-    void WriteBuffer(size_t set_index, u32 binding, VkBuffer buffer, VkDeviceSize range, VkDeviceSize offset = 0);
+    void WriteBuffer(size_t set_index, u32 binding, vk::Buffer buffer, vk::DeviceSize range, vk::DeviceSize offset = 0);
 
     // Points a combined-image-sampler binding of the given set at an image view.
     // `array_element` selects the slot when the binding was declared with a count
@@ -64,25 +64,25 @@ public:
     void WriteImage(
         size_t set_index,
         u32 binding,
-        VkImageView view,
-        VkSampler sampler,
-        VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        vk::ImageView view,
+        vk::Sampler sampler,
+        vk::ImageLayout layout = vk::ImageLayout::eShaderReadOnlyOptimal,
         u32 array_element = 0);
 
 private:
     DescriptorSets(
         DeviceContext& context,
-        VkObject<VkDescriptorSetLayout> layout,
-        VkObject<VkDescriptorPool> pool,
-        std::vector<VkDescriptorSet> sets,
+        VulkanObject<vk::DescriptorSetLayout> layout,
+        VulkanObject<vk::DescriptorPool> pool,
+        std::vector<vk::DescriptorSet> sets,
         DescriptorSetLayoutDescription layout_description);
 
-    [[nodiscard]] VkDescriptorType TypeOfBinding(u32 binding) const;
+    [[nodiscard]] vk::DescriptorType TypeOfBinding(u32 binding) const;
 
     DeviceContext* context_ = nullptr;
-    VkObject<VkDescriptorSetLayout> layout_;
-    VkObject<VkDescriptorPool> pool_;
-    std::vector<VkDescriptorSet> sets_;
+    VulkanObject<vk::DescriptorSetLayout> layout_;
+    VulkanObject<vk::DescriptorPool> pool_;
+    std::vector<vk::DescriptorSet> sets_;
     DescriptorSetLayoutDescription layout_description_;
 };
 

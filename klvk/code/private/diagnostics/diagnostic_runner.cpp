@@ -21,7 +21,7 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/platform/os/os.hpp"
 #include "klvk/vulkan/device_context.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 #include "klvk/window.hpp"
 #include "platform/input_mapping.hpp"
 
@@ -30,17 +30,17 @@ namespace klvk
 namespace
 {
 
-bool IsCaptureFormat(VkFormat format)
+bool IsCaptureFormat(vk::Format format)
 {
-    return format == VK_FORMAT_B8G8R8A8_UNORM || format == VK_FORMAT_B8G8R8A8_SRGB ||
-           format == VK_FORMAT_R8G8B8A8_UNORM || format == VK_FORMAT_R8G8B8A8_SRGB;
+    return format == vk::Format::eB8G8R8A8Unorm || format == vk::Format::eB8G8R8A8Srgb ||
+           format == vk::Format::eR8G8B8A8Unorm || format == vk::Format::eR8G8B8A8Srgb;
 }
 
-size_t CheckedPixelCount(VkExtent2D extent)
+size_t CheckedPixelCount(vk::Extent2D extent)
 {
     const u64 pixel_count = static_cast<u64>(extent.width) * extent.height;
     ErrorHandling::Ensure(
-        pixel_count <= std::numeric_limits<VkDeviceSize>::max() / 4,
+        pixel_count <= std::numeric_limits<vk::DeviceSize>::max() / 4,
         "Diagnostic framebuffer is too large for a Vulkan readback buffer");
     ErrorHandling::Ensure(
         pixel_count <= std::numeric_limits<size_t>::max() / 4,
@@ -273,13 +273,13 @@ bool DiagnosticRunner::NeedsReadback(bool include_ui) const noexcept
 
 bool DiagnosticRunner::RecordReadback(
     DeviceContext& context,
-    VkCommandBuffer command_buffer,
+    vk::CommandBuffer command_buffer,
     size_t frame_in_flight,
     bool include_ui,
-    VkImage image,
-    VkFormat format,
-    VkExtent2D extent,
-    VkImageLayout final_layout)
+    vk::Image image,
+    vk::Format format,
+    vk::Extent2D extent,
+    vk::ImageLayout final_layout)
 {
     static_assert(std::is_nothrow_move_constructible_v<PendingCapture>);
 
@@ -314,22 +314,22 @@ bool DiagnosticRunner::RecordReadback(
         "Diagnostic readback does not support Vulkan format {}",
         static_cast<int>(format));
     const size_t pixel_count = CheckedPixelCount(extent);
-    const VkDeviceSize byte_size = static_cast<VkDeviceSize>(pixel_count) * 4;
+    const vk::DeviceSize byte_size = static_cast<vk::DeviceSize>(pixel_count) * 4;
 
-    VkPipelineStageFlags2 final_stage_mask = 0;
-    VkAccessFlags2 final_access_mask = 0;
-    if (final_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+    vk::PipelineStageFlags2 final_stage_mask{};
+    vk::AccessFlags2 final_access_mask{};
+    if (final_layout == vk::ImageLayout::eColorAttachmentOptimal)
     {
-        final_stage_mask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-        final_access_mask = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+        final_stage_mask = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+        final_access_mask = vk::AccessFlagBits2::eColorAttachmentRead | vk::AccessFlagBits2::eColorAttachmentWrite;
     }
     else
     {
         ErrorHandling::Ensure(
-            final_layout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            final_layout == vk::ImageLayout::ePresentSrcKHR,
             "Unsupported diagnostic capture final image layout");
-        final_stage_mask = VK_PIPELINE_STAGE_2_NONE;
-        final_access_mask = VK_ACCESS_2_NONE;
+        final_stage_mask = vk::PipelineStageFlagBits2::eNone;
+        final_access_mask = vk::AccessFlagBits2::eNone;
     }
 
     auto& pending_frame = pending_[frame_in_flight];
@@ -339,47 +339,43 @@ bool DiagnosticRunner::RecordReadback(
     pending_frame.reserve(pending_frame.size() + 1);
 
     PendingCapture pending{
-        .buffer = GpuBuffer(context, VK_BUFFER_USAGE_TRANSFER_DST_BIT, byte_size, GpuBufferHostAccess::Random),
+        .buffer = GpuBuffer(context, vk::BufferUsageFlagBits::eTransferDst, byte_size, GpuBufferHostAccess::Random),
         .format = format,
         .extent = extent,
         .paths = std::move(paths),
         .video_frame = record_video ? std::optional<u64>{video_frame_count_++} : std::nullopt,
         .checkpoint_frame = checkpoint_frame};
 
-    VkImageMemoryBarrier2 barrier{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-        .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-        .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-        .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
-        .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = image,
-        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1}};
-    VkDependencyInfo dependency{
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .imageMemoryBarrierCount = 1,
-        .pImageMemoryBarriers = &barrier};
-    Vulkan::CmdPipelineBarrier2(command_buffer, dependency);
-    const std::array regions{VkBufferImageCopy{
-        .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1},
-        .imageExtent = {.width = extent.width, .height = extent.height, .depth = 1}}};
-    Vulkan::CmdCopyImageToBuffer(
-        command_buffer,
-        image,
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        pending.buffer.GetHandle(),
-        regions);
+    const auto range =
+        vk::ImageSubresourceRange{}.setAspectMask(vk::ImageAspectFlagBits::eColor).setLevelCount(1).setLayerCount(1);
+    auto barrier = vk::ImageMemoryBarrier2{}
+                       .setSrcStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput)
+                       .setSrcAccessMask(vk::AccessFlagBits2::eColorAttachmentWrite)
+                       .setDstStageMask(vk::PipelineStageFlagBits2::eCopy)
+                       .setDstAccessMask(vk::AccessFlagBits2::eTransferRead)
+                       .setOldLayout(vk::ImageLayout::eColorAttachmentOptimal)
+                       .setNewLayout(vk::ImageLayout::eTransferSrcOptimal)
+                       .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+                       .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+                       .setImage(image)
+                       .setSubresourceRange(range);
+    const auto dependency = [&]
+    {
+        return vk::DependencyInfo{}.setImageMemoryBarrierCount(1).setPImageMemoryBarriers(&barrier);
+    };
+    command_buffer.pipelineBarrier2(dependency());
+    const auto layers = vk::ImageSubresourceLayers{}.setAspectMask(vk::ImageAspectFlagBits::eColor).setLayerCount(1);
+    const std::array regions{
+        vk::BufferImageCopy{}.setImageSubresource(layers).setImageExtent(vk::Extent3D{extent.width, extent.height, 1})};
+    command_buffer.copyImageToBuffer(image, vk::ImageLayout::eTransferSrcOptimal, pending.buffer.GetHandle(), regions);
 
-    barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
-    barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barrier.srcStageMask = vk::PipelineStageFlagBits2::eCopy;
+    barrier.srcAccessMask = vk::AccessFlagBits2::eTransferRead;
+    barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
     barrier.newLayout = final_layout;
     barrier.dstStageMask = final_stage_mask;
     barrier.dstAccessMask = final_access_mask;
-    Vulkan::CmdPipelineBarrier2(command_buffer, dependency);
+    command_buffer.pipelineBarrier2(dependency());
     pending_frame.push_back(std::move(pending));
 
     for (size_t capture_index : queue)
@@ -394,7 +390,7 @@ bool DiagnosticRunner::RecordReadback(
 
 void DiagnosticRunner::ProcessReadback(PendingCapture& capture)
 {
-    const bool bgra = capture.format == VK_FORMAT_B8G8R8A8_UNORM || capture.format == VK_FORMAT_B8G8R8A8_SRGB;
+    const bool bgra = capture.format == vk::Format::eB8G8R8A8Unorm || capture.format == vk::Format::eB8G8R8A8Srgb;
     ErrorHandling::Ensure(IsCaptureFormat(capture.format), "Pending diagnostic capture has an invalid format");
     const size_t pixel_count = CheckedPixelCount(capture.extent);
     std::vector<std::byte> source(pixel_count * 4);

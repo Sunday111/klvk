@@ -2,93 +2,55 @@
 
 #include <fmt/core.h>
 
+VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+
 namespace klvk
 {
-
-std::string_view VkResultToString(VkResult result)
+namespace
 {
-    switch (result)
-    {
-    case VK_SUCCESS:
-        return "VK_SUCCESS";
-    case VK_NOT_READY:
-        return "VK_NOT_READY";
-    case VK_TIMEOUT:
-        return "VK_TIMEOUT";
-    case VK_EVENT_SET:
-        return "VK_EVENT_SET";
-    case VK_EVENT_RESET:
-        return "VK_EVENT_RESET";
-    case VK_INCOMPLETE:
-        return "VK_INCOMPLETE";
-    case VK_ERROR_OUT_OF_HOST_MEMORY:
-        return "VK_ERROR_OUT_OF_HOST_MEMORY";
-    case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-        return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
-    case VK_ERROR_INITIALIZATION_FAILED:
-        return "VK_ERROR_INITIALIZATION_FAILED";
-    case VK_ERROR_DEVICE_LOST:
-        return "VK_ERROR_DEVICE_LOST";
-    case VK_ERROR_MEMORY_MAP_FAILED:
-        return "VK_ERROR_MEMORY_MAP_FAILED";
-    case VK_ERROR_LAYER_NOT_PRESENT:
-        return "VK_ERROR_LAYER_NOT_PRESENT";
-    case VK_ERROR_EXTENSION_NOT_PRESENT:
-        return "VK_ERROR_EXTENSION_NOT_PRESENT";
-    case VK_ERROR_FEATURE_NOT_PRESENT:
-        return "VK_ERROR_FEATURE_NOT_PRESENT";
-    case VK_ERROR_INCOMPATIBLE_DRIVER:
-        return "VK_ERROR_INCOMPATIBLE_DRIVER";
-    case VK_ERROR_TOO_MANY_OBJECTS:
-        return "VK_ERROR_TOO_MANY_OBJECTS";
-    case VK_ERROR_FORMAT_NOT_SUPPORTED:
-        return "VK_ERROR_FORMAT_NOT_SUPPORTED";
-    case VK_ERROR_FRAGMENTED_POOL:
-        return "VK_ERROR_FRAGMENTED_POOL";
-    case VK_ERROR_UNKNOWN:
-        return "VK_ERROR_UNKNOWN";
-    case VK_ERROR_OUT_OF_POOL_MEMORY:
-        return "VK_ERROR_OUT_OF_POOL_MEMORY";
-    case VK_ERROR_INVALID_EXTERNAL_HANDLE:
-        return "VK_ERROR_INVALID_EXTERNAL_HANDLE";
-    case VK_ERROR_FRAGMENTATION:
-        return "VK_ERROR_FRAGMENTATION";
-    case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS:
-        return "VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS";
-    case VK_PIPELINE_COMPILE_REQUIRED:
-        return "VK_PIPELINE_COMPILE_REQUIRED";
-    case VK_ERROR_SURFACE_LOST_KHR:
-        return "VK_ERROR_SURFACE_LOST_KHR";
-    case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR:
-        return "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR";
-    case VK_SUBOPTIMAL_KHR:
-        return "VK_SUBOPTIMAL_KHR";
-    case VK_ERROR_OUT_OF_DATE_KHR:
-        return "VK_ERROR_OUT_OF_DATE_KHR";
-    case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR:
-        return "VK_ERROR_INCOMPATIBLE_DISPLAY_KHR";
-    case VK_ERROR_VALIDATION_FAILED_EXT:
-        return "VK_ERROR_VALIDATION_FAILED_EXT";
-    default:
-        return "VkResult(unknown)";
-    }
+
+vk::detail::DynamicLoader& GetVulkanLoader()
+{
+    static vk::detail::DynamicLoader loader;
+    return loader;
 }
 
-VulkanError::VulkanError(VkResult result, std::string message, cpptrace::raw_trace&& trace)
-    : cpptrace::runtime_error(std::move(message), std::move(trace)),
-      result_(result)
+}  // namespace
+
+VulkanError::VulkanError(vk::Result result, std::string context, cpptrace::raw_trace&& trace)
+    : cpptrace::runtime_error(fmt::format("{} failed: {}", context, vk::to_string(result)), std::move(trace)),
+      result_(result),
+      context_(std::move(context))
 {
 }
 
-void CheckVkResult(VkResult result, std::string_view context)
+void VulkanCheck(vk::Result result, std::string_view context)
 {
-    [[unlikely]] if (result != VK_SUCCESS)
+    if (result != vk::Result::eSuccess) [[unlikely]]
     {
-        throw VulkanError(
-            result,
-            fmt::format("{} failed: {}", context, VkResultToString(result)),
-            cpptrace::generate_raw_trace(1));
+        throw VulkanError(result, std::string{context}, cpptrace::generate_raw_trace(1));
     }
+}
+
+void InitializeVulkanDispatcher()
+{
+    const auto get_instance_proc_addr =
+        GetVulkanLoader().getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
+    if (get_instance_proc_addr == nullptr) [[unlikely]]
+    {
+        throw VulkanError(vk::Result::eErrorInitializationFailed, "vkGetInstanceProcAddr");
+    }
+    VULKAN_HPP_DEFAULT_DISPATCHER.init(get_instance_proc_addr);
+}
+
+void InitializeVulkanDispatcher(vk::Instance instance)
+{
+    VULKAN_HPP_DEFAULT_DISPATCHER.init(instance);
+}
+
+void InitializeVulkanDispatcher(vk::Device device)
+{
+    VULKAN_HPP_DEFAULT_DISPATCHER.init(device);
 }
 
 }  // namespace klvk

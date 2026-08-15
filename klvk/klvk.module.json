@@ -11,7 +11,6 @@
             "unordered_dense",
             "nlohmann_json",
             "vulkan_headers",
-            "volk",
             "vma",
             "imgui_vulkan"
         ],
@@ -25,7 +24,7 @@
     },
     "ExtraCMakeFiles": [
         "ffmpeg",
-        "vulkan_api",
+        "vulkan_hpp",
         "warnings"
     ],
     "CopyDirectoriesAfterBuild": [

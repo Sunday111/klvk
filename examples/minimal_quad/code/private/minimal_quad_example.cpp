@@ -5,8 +5,8 @@
 #include "klvk/filesystem/filesystem.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
-#include "klvk/vulkan/vk_object.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
+#include "klvk/vulkan/vulkan_object.hpp"
 #include "klvk/window.hpp"
 
 // Matches the push constant block in just_color_2d.vert.
@@ -27,17 +27,14 @@ class QuadApp : public klvk::Application
         GetWindow().SetTitle("Quad");
 
         klvk::DeviceContext& context = GetDeviceContext();
-        VkDevice device = context.GetDevice();
+        vk::Device device = context.GetDevice();
 
-        const VkPushConstantRange push_constant_range{
-            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-            .offset = 0,
-            .size = sizeof(PushConstants),
-        };
+        const vk::PushConstantRange push_constant_range =
+            vk::PushConstantRange{}.setStageFlags(vk::ShaderStageFlagBits::eVertex).setSize(sizeof(PushConstants));
         pipeline_layout_ = klvk::PipelineLayout{context, {}, std::span{&push_constant_range, 1}};
 
         const std::filesystem::path shader_dir = GetShaderDir() / "just_color_2d";
-        pipeline_ = klvk::VkObject<VkPipeline>{
+        pipeline_ = klvk::VulkanObject<vk::Pipeline>{
             device,
             klvk::GraphicsPipelineBuilder(*this)
                 .Layout(pipeline_layout_)
@@ -63,20 +60,20 @@ class QuadApp : public klvk::Application
             push_constants.transform_columns[column] = edt::Vec4f{matrix_column, 0.f};
         }
 
-        VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
-        klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-        klvk::Vulkan::CmdPushConstants(
-            command_buffer,
+        vk::CommandBuffer command_buffer = GetCurrentCommandBuffer();
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+        command_buffer.pushConstants(
             pipeline_layout_.GetHandle(),
-            VK_SHADER_STAGE_VERTEX_BIT,
+            vk::ShaderStageFlagBits::eVertex,
             0,
-            push_constants);
-        klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
+            sizeof(push_constants),
+            &push_constants);
+        command_buffer.draw(6, 1, 0, 0);
     }
 
 private:
     klvk::PipelineLayout pipeline_layout_;
-    klvk::VkObject<VkPipeline> pipeline_;
+    klvk::VulkanObject<vk::Pipeline> pipeline_;
 };
 
 void Main(int argc, char** argv)

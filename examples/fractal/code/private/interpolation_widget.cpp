@@ -11,63 +11,47 @@ InterpolationWidget::InterpolationWidget(klvk::Application& app, size_t num_colo
       widget_shader_(app.GetDeviceContext(), "fractal_example/interpolation_widget")
 {
     klvk::DeviceContext& context = app.GetDeviceContext();
-    VkDevice device = context.GetDevice();
+    vk::Device device = context.GetDevice();
 
     widget_shader_.SetDefineValue(widget_shader_.GetDefine("COLORS_COUNT"), static_cast<i32>(num_colors));
 
-    const VkDescriptorSetLayoutBinding binding{
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-    };
+    const vk::DescriptorSetLayoutBinding binding = vk::DescriptorSetLayoutBinding{}
+                                                       .setBinding(0)
+                                                       .setDescriptorType(vk::DescriptorType::eStorageBuffer)
+                                                       .setDescriptorCount(1)
+                                                       .setStageFlags(vk::ShaderStageFlagBits::eFragment);
     set_layout_description_.bindings = {binding};
-    set_layout_ = klvk::Vulkan::CreateDescriptorSetLayout(
-        device,
-        {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            .bindingCount = 1,
-            .pBindings = &binding,
-        });
+    const vk::DescriptorSetLayoutCreateInfo layout_info = vk::DescriptorSetLayoutCreateInfo{}.setBindings(binding);
+    set_layout_ = klvk::VulkanValue(device.createDescriptorSetLayout(layout_info), "vkCreateDescriptorSetLayout");
 
     constexpr auto frames = static_cast<u32>(klvk::Application::kFramesInFlight);
-    const VkDescriptorPoolSize pool_size{.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = frames};
-    descriptor_pool_ = klvk::Vulkan::CreateDescriptorPool(
-        device,
-        {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-            .maxSets = frames,
-            .poolSizeCount = 1,
-            .pPoolSizes = &pool_size,
-        });
+    const vk::DescriptorPoolSize pool_size =
+        vk::DescriptorPoolSize{}.setType(vk::DescriptorType::eStorageBuffer).setDescriptorCount(frames);
+    const vk::DescriptorPoolCreateInfo pool_info =
+        vk::DescriptorPoolCreateInfo{}.setMaxSets(frames).setPoolSizes(pool_size);
+    descriptor_pool_ = klvk::VulkanValue(device.createDescriptorPool(pool_info), "vkCreateDescriptorPool");
 
-    std::array<VkDescriptorSetLayout, klvk::Application::kFramesInFlight> layouts{};
+    std::array<vk::DescriptorSetLayout, klvk::Application::kFramesInFlight> layouts{};
     layouts.fill(set_layout_);
-    const std::vector<VkDescriptorSet> sets = klvk::Vulkan::AllocateDescriptorSets(
-        device,
-        {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .descriptorPool = descriptor_pool_,
-            .descriptorSetCount = frames,
-            .pSetLayouts = layouts.data(),
-        });
+    const vk::DescriptorSetAllocateInfo allocate_info =
+        vk::DescriptorSetAllocateInfo{}.setDescriptorPool(descriptor_pool_).setSetLayouts(layouts);
+    const std::vector<vk::DescriptorSet> sets =
+        klvk::VulkanValue(device.allocateDescriptorSets(allocate_info), "vkAllocateDescriptorSets");
 
     for (size_t index = 0; index != klvk::Application::kFramesInFlight; ++index)
     {
         descriptor_sets_[index] = sets[index];
         color_buffers_[index] =
-            klvk::GpuBuffer(context, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, num_colors_ * sizeof(edt::Vec4f), true);
+            klvk::GpuBuffer(context, vk::BufferUsageFlagBits::eStorageBuffer, num_colors_ * sizeof(edt::Vec4f), true);
 
-        const VkDescriptorBufferInfo buffer_info{.buffer = color_buffers_[index].GetHandle(), .range = VK_WHOLE_SIZE};
-        const VkWriteDescriptorSet write{
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = descriptor_sets_[index],
-            .dstBinding = 0,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            .pBufferInfo = &buffer_info,
-        };
-        klvk::Vulkan::UpdateDescriptorSets(device, std::span{&write, 1});
+        const vk::DescriptorBufferInfo buffer_info =
+            vk::DescriptorBufferInfo{}.setBuffer(color_buffers_[index].GetHandle()).setRange(vk::WholeSize);
+        const vk::WriteDescriptorSet write = vk::WriteDescriptorSet{}
+                                                 .setDstSet(descriptor_sets_[index])
+                                                 .setDstBinding(0)
+                                                 .setDescriptorType(vk::DescriptorType::eStorageBuffer)
+                                                 .setBufferInfo(buffer_info);
+        device.updateDescriptorSets(std::span{&write, 1}, {});
     }
 
     const klvk::DescriptorSetLayoutView set_layout_view{
@@ -85,14 +69,14 @@ InterpolationWidget::~InterpolationWidget() noexcept
 {
     klvk::DeviceContext& context = app_->GetDeviceContext();
     context.WaitIdle();
-    VkDevice device = context.GetDevice();
-    klvk::Vulkan::DestroyPipelineNE(device, pipeline_);
-    klvk::Vulkan::DestroyDescriptorPoolNE(device, descriptor_pool_);
-    klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, set_layout_);
+    vk::Device device = context.GetDevice();
+    device.destroyPipeline(pipeline_);
+    device.destroyDescriptorPool(descriptor_pool_);
+    device.destroyDescriptorSetLayout(set_layout_);
 }
 
 void InterpolationWidget::Render(
-    VkCommandBuffer command_buffer,
+    vk::CommandBuffer command_buffer,
     const klvk::Viewport& viewport,
     const FractalSettings& settings)
 {
@@ -105,12 +89,12 @@ void InterpolationWidget::Render(
     color_buffers_[frame_index].Write(std::as_bytes(std::span{colors}));
 
     CmdSetGlStyleViewport(command_buffer, viewport, app_->GetWindow().GetSize());
-    klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-    klvk::Vulkan::CmdBindDescriptorSets(
-        command_buffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
+    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+    command_buffer.bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics,
         pipeline_layout_.GetHandle(),
         0,
-        std::span{&descriptor_sets_[frame_index], 1});
-    klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
+        std::span{&descriptor_sets_[frame_index], 1},
+        {});
+    command_buffer.draw(6, 1, 0, 0);
 }

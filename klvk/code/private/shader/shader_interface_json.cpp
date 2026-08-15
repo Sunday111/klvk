@@ -11,7 +11,7 @@
 
 #include "klvk/error_handling.hpp"
 #include "klvk/integral_aliases.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk
 {
@@ -24,16 +24,16 @@ std::string BlobText(slang::IBlob* blob)
     return {static_cast<const char*>(blob->getBufferPointer()), blob->getBufferSize()};
 }
 
-VkShaderStageFlagBits ParseStage(std::string_view stage)
+vk::ShaderStageFlagBits ParseStage(std::string_view stage)
 {
-    if (stage == "vertex") return VK_SHADER_STAGE_VERTEX_BIT;
-    if (stage == "fragment") return VK_SHADER_STAGE_FRAGMENT_BIT;
-    if (stage == "geometry") return VK_SHADER_STAGE_GEOMETRY_BIT;
-    if (stage == "hull") return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-    if (stage == "domain") return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-    if (stage == "compute") return VK_SHADER_STAGE_COMPUTE_BIT;
+    if (stage == "vertex") return vk::ShaderStageFlagBits::eVertex;
+    if (stage == "fragment") return vk::ShaderStageFlagBits::eFragment;
+    if (stage == "geometry") return vk::ShaderStageFlagBits::eGeometry;
+    if (stage == "hull") return vk::ShaderStageFlagBits::eTessellationControl;
+    if (stage == "domain") return vk::ShaderStageFlagBits::eTessellationEvaluation;
+    if (stage == "compute") return vk::ShaderStageFlagBits::eCompute;
     ErrorHandling::ThrowWithMessage("Unsupported reflected Slang stage '{}'", stage);
-    return VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+    return {};
 }
 
 ShaderScalarType ParseScalarType(std::string_view type)
@@ -122,7 +122,7 @@ ShaderMemoryMember ParseMemoryMember(const nlohmann::json& field)
 }
 
 ShaderMemoryLayout
-ParseMemoryLayout(std::string name, const nlohmann::json& type, VkShaderStageFlags stages, u64 offset = 0)
+ParseMemoryLayout(std::string name, const nlohmann::json& type, vk::ShaderStageFlags stages, u64 offset = 0)
 {
     const nlohmann::json* element_type = &type;
     const nlohmann::json* element_binding = nullptr;
@@ -150,26 +150,26 @@ ParseMemoryLayout(std::string name, const nlohmann::json& type, VkShaderStageFla
     return result;
 }
 
-VkDescriptorType ParseDescriptorType(const nlohmann::json& type)
+vk::DescriptorType ParseDescriptorType(const nlohmann::json& type)
 {
     const std::string kind = type.value("kind", "");
-    if (kind == "constantBuffer") return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    if (kind == "samplerState") return VK_DESCRIPTOR_TYPE_SAMPLER;
+    if (kind == "constantBuffer") return vk::DescriptorType::eUniformBuffer;
+    if (kind == "samplerState") return vk::DescriptorType::eSampler;
     if (kind == "resource")
     {
         const std::string shape = type.value("baseShape", "");
         if (shape == "structuredBuffer" || shape == "byteAddressBuffer")
         {
-            return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            return vk::DescriptorType::eStorageBuffer;
         }
-        if (shape == "textureBuffer") return VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-        if (shape == "accelerationStructure") return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-        if (type.value("combined", false)) return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        return type.value("access", "") == "readWrite" ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
-                                                       : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        if (shape == "textureBuffer") return vk::DescriptorType::eUniformTexelBuffer;
+        if (shape == "accelerationStructure") return vk::DescriptorType::eAccelerationStructureKHR;
+        if (type.value("combined", false)) return vk::DescriptorType::eCombinedImageSampler;
+        return type.value("access", "") == "readWrite" ? vk::DescriptorType::eStorageImage
+                                                       : vk::DescriptorType::eSampledImage;
     }
     ErrorHandling::ThrowWithMessage("Unsupported reflected Slang descriptor kind '{}'", kind);
-    return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+    return {};
 }
 
 void AppendInterfaceVariables(
@@ -300,7 +300,7 @@ nlohmann::json MemoryLayoutToJson(const ShaderMemoryLayout& layout)
         {"offset", layout.offset},
         {"size", layout.size},
         {"alignment", layout.alignment},
-        {"stages", layout.stages},
+        {"stages", static_cast<vk::ShaderStageFlags::MaskType>(layout.stages)},
         {"members", std::move(members)},
     };
 }
@@ -312,7 +312,7 @@ ShaderMemoryLayout MemoryLayoutFromJson(const nlohmann::json& json)
         .offset = json.at("offset").get<u64>(),
         .size = json.at("size").get<u64>(),
         .alignment = json.at("alignment").get<u64>(),
-        .stages = json.at("stages").get<VkShaderStageFlags>(),
+        .stages = vk::ShaderStageFlags{json.at("stages").get<vk::ShaderStageFlags::MaskType>()},
         .members = {},
     };
     for (const auto& member : json.at("members")) result.members.push_back(MemoryMemberFromJson(member));
@@ -334,7 +334,7 @@ std::string ShaderInterfaceJson::Write(const ShaderInterface& interface)
             {"count", descriptor.count},
             {"unbounded", descriptor.unbounded},
             {"access", static_cast<u32>(descriptor.access)},
-            {"stages", descriptor.stages},
+            {"stages", static_cast<vk::ShaderStageFlags::MaskType>(descriptor.stages)},
             {"memory_layout",
              descriptor.memory_layout ? MemoryLayoutToJson(*descriptor.memory_layout) : nlohmann::json(nullptr)},
         });
@@ -394,7 +394,7 @@ ShaderInterface ReadInterface(std::string_view text)
         "Unsupported shader interface metadata version");
     ShaderInterface result{};
     result.language = static_cast<ShaderSourceLanguage>(json.at("language").get<u32>());
-    result.stage = static_cast<VkShaderStageFlagBits>(json.at("stage").get<u32>());
+    result.stage = static_cast<vk::ShaderStageFlagBits>(json.at("stage").get<u32>());
     result.entry_point = json.at("entry_point").get<std::string>();
     result.workgroup_size = json.at("workgroup_size").get<std::array<u32, 3>>();
     for (const auto& descriptor : json.at("descriptors"))
@@ -403,11 +403,11 @@ ShaderInterface ReadInterface(std::string_view text)
             .name = descriptor.at("name").get<std::string>(),
             .set = descriptor.at("set").get<u32>(),
             .binding = descriptor.at("binding").get<u32>(),
-            .type = static_cast<VkDescriptorType>(descriptor.at("type").get<u32>()),
+            .type = static_cast<vk::DescriptorType>(descriptor.at("type").get<u32>()),
             .count = descriptor.at("count").get<u32>(),
             .unbounded = descriptor.at("unbounded").get<bool>(),
             .access = static_cast<ShaderResourceAccess>(descriptor.at("access").get<u32>()),
-            .stages = descriptor.at("stages").get<VkShaderStageFlags>(),
+            .stages = vk::ShaderStageFlags{descriptor.at("stages").get<vk::ShaderStageFlags::MaskType>()},
             .memory_layout = std::nullopt,
         };
         if (!descriptor.at("memory_layout").is_null())
@@ -516,13 +516,13 @@ ShaderInterface ShaderReflectionJson::Read(slang::ProgramLayout& layout)
             };
             if (descriptor_type->value("kind", "") == "constantBuffer")
             {
-                descriptor.memory_layout = ParseMemoryLayout(descriptor.name, *descriptor_type, 0);
+                descriptor.memory_layout = ParseMemoryLayout(descriptor.name, *descriptor_type, {});
             }
             else if (
                 descriptor_type->value("kind", "") == "resource" &&
                 descriptor_type->value("baseShape", "") == "structuredBuffer")
             {
-                descriptor.memory_layout = ParseMemoryLayout(descriptor.name, descriptor_type->at("resultType"), 0);
+                descriptor.memory_layout = ParseMemoryLayout(descriptor.name, descriptor_type->at("resultType"), {});
             }
             result.descriptors.push_back(std::move(descriptor));
         }
@@ -545,12 +545,13 @@ ShaderInterface ShaderReflectionJson::Read(slang::ProgramLayout& layout)
         // Slang serializes InputPatch/OutputPatch wrapper parameters as an
         // opaque `None` type. Their element varyings are represented by the
         // neighboring tessellation stage's result and cannot be decoded here.
-        const bool is_opaque_patch = (result.stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT ||
-                                      result.stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) &&
+        const bool is_opaque_patch = (result.stage == vk::ShaderStageFlagBits::eTessellationControl ||
+                                      result.stage == vk::ShaderStageFlagBits::eTessellationEvaluation) &&
                                      parameter_type.value("kind", "") == "None" &&
                                      parameter_binding.value("kind", "") == "varyingInput";
         if (is_opaque_patch) continue;
-        if (result.stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT && parameter_type.value("kind", "") == "struct")
+        if (result.stage == vk::ShaderStageFlagBits::eTessellationEvaluation &&
+            parameter_type.value("kind", "") == "struct")
         {
             const auto fields = parameter_type.value("fields", nlohmann::json::array());
             const auto is_tessellation_builtin = [](const auto& field)

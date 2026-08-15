@@ -9,8 +9,8 @@
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
 #include "klvk/vulkan/texture.hpp"
-#include "klvk/vulkan/vk_object.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
+#include "klvk/vulkan/vulkan_object.hpp"
 #include "klvk/window.hpp"
 
 // Matches the push constant block in two_textures_2d.vert.
@@ -57,10 +57,11 @@ class TwoTexturesApp : public klvk::Application
     // the circle with the right triangle and the circle with the left one.
     void PrepareDescriptors()
     {
-        descriptor_sets_ = klvk::DescriptorSets::Builder(GetDeviceContext())
-                               .Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-                               .Binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-                               .Build(2);
+        descriptor_sets_ =
+            klvk::DescriptorSets::Builder(GetDeviceContext())
+                .Binding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
+                .Binding(1, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
+                .Build(2);
         auto write_pair = [&](size_t set, const klvk::Texture& triangle)
         {
             descriptor_sets_.WriteImage(set, 0, circle_texture_->GetView(), circle_texture_->GetSampler());
@@ -73,18 +74,15 @@ class TwoTexturesApp : public klvk::Application
     void PreparePipeline()
     {
         klvk::DeviceContext& context = GetDeviceContext();
-        VkDevice device = context.GetDevice();
+        vk::Device device = context.GetDevice();
 
-        const VkPushConstantRange push_constant_range{
-            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-            .offset = 0,
-            .size = sizeof(PushConstants),
-        };
+        const vk::PushConstantRange push_constant_range =
+            vk::PushConstantRange{}.setStageFlags(vk::ShaderStageFlagBits::eVertex).setSize(sizeof(PushConstants));
         const auto set_layout = descriptor_sets_.GetLayoutView();
         pipeline_layout_ = klvk::PipelineLayout{context, std::span{&set_layout, 1}, std::span{&push_constant_range, 1}};
 
         const std::filesystem::path shader_dir = GetShaderDir() / "two_textures_2d";
-        pipeline_ = klvk::VkObject<VkPipeline>{
+        pipeline_ = klvk::VulkanObject<vk::Pipeline>{
             device,
             klvk::GraphicsPipelineBuilder(*this)
                 .Layout(pipeline_layout_)
@@ -98,29 +96,29 @@ class TwoTexturesApp : public klvk::Application
     {
         klvk::Application::Tick();
 
-        VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
-        klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
+        vk::CommandBuffer command_buffer = GetCurrentCommandBuffer();
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
 
         PushConstants push_constants{
             .color = edt::Math::GetRainbowColorsA(GetTimeSeconds()).Cast<float>() / 255.f,
         };
 
-        auto draw = [&](VkDescriptorSet set, const edt::Vec2f& translation)
+        auto draw = [&](vk::DescriptorSet set, const edt::Vec2f& translation)
         {
             push_constants.translation = translation;
-            klvk::Vulkan::CmdBindDescriptorSets(
-                command_buffer,
-                VK_PIPELINE_BIND_POINT_GRAPHICS,
+            command_buffer.bindDescriptorSets(
+                vk::PipelineBindPoint::eGraphics,
                 pipeline_layout_.GetHandle(),
                 0,
-                std::span{&set, 1});
-            klvk::Vulkan::CmdPushConstants(
-                command_buffer,
+                std::span{&set, 1},
+                {});
+            command_buffer.pushConstants(
                 pipeline_layout_.GetHandle(),
-                VK_SHADER_STAGE_VERTEX_BIT,
+                vk::ShaderStageFlagBits::eVertex,
                 0,
-                push_constants);
-            klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
+                sizeof(push_constants),
+                &push_constants);
+            command_buffer.draw(6, 1, 0, 0);
         };
 
         draw(descriptor_sets_.Get(kRightSet), {0.5f, 0.f});
@@ -136,7 +134,7 @@ private:
     std::unique_ptr<klvk::Texture> left_triangle_texture_;
     klvk::DescriptorSets descriptor_sets_;
     klvk::PipelineLayout pipeline_layout_;
-    klvk::VkObject<VkPipeline> pipeline_;
+    klvk::VulkanObject<vk::Pipeline> pipeline_;
 };
 
 void Main(int argc, char** argv)

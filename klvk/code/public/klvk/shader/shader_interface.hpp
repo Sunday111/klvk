@@ -76,7 +76,7 @@ struct ShaderMemoryLayout
     u64 size = 0;
     // Zero means the compiler did not expose this value.
     u64 alignment = 0;
-    VkShaderStageFlags stages = 0;
+    vk::ShaderStageFlags stages{};
     std::vector<ShaderMemoryMember> members;
 
     bool operator==(const ShaderMemoryLayout&) const = default;
@@ -87,11 +87,11 @@ struct ShaderDescriptorBinding
     std::string name;
     u32 set = 0;
     u32 binding = 0;
-    VkDescriptorType type = VK_DESCRIPTOR_TYPE_MAX_ENUM;
+    vk::DescriptorType type{};
     u32 count = 1;
     bool unbounded = false;
     ShaderResourceAccess access = ShaderResourceAccess::ReadOnly;
-    VkShaderStageFlags stages = 0;
+    vk::ShaderStageFlags stages{};
     std::optional<ShaderMemoryLayout> memory_layout;
 
     bool operator==(const ShaderDescriptorBinding&) const = default;
@@ -123,7 +123,7 @@ struct ShaderSpecializationConstant
 struct ShaderInterface
 {
     ShaderSourceLanguage language = ShaderSourceLanguage::Slang;
-    VkShaderStageFlagBits stage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+    vk::ShaderStageFlagBits stage{};
     std::string entry_point = "main";
     std::vector<ShaderDescriptorBinding> descriptors;
     std::vector<ShaderMemoryLayout> push_constants;
@@ -145,7 +145,7 @@ struct ShaderProgramInterface
 {
     std::vector<ShaderDescriptorBinding> descriptors;
     std::vector<ShaderMemoryLayout> push_constants;
-    VkShaderStageFlags stages = 0;
+    vk::ShaderStageFlags stages{};
 
     bool operator==(const ShaderProgramInterface&) const = default;
 };

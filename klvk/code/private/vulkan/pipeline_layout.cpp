@@ -4,7 +4,7 @@
 
 #include "klvk/error_handling.hpp"
 #include "klvk/vulkan/device_context.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk
 {
@@ -12,17 +12,17 @@ namespace klvk
 PipelineLayout::PipelineLayout(
     DeviceContext& context,
     std::span<const DescriptorSetLayoutView> set_layouts,
-    std::span<const VkPushConstantRange> push_constants)
+    std::span<const vk::PushConstantRange> push_constants)
 {
-    std::vector<VkDescriptorSetLayout> handles;
+    std::vector<vk::DescriptorSetLayout> handles;
     handles.reserve(set_layouts.size());
     description_.sets.reserve(set_layouts.size());
     for (const DescriptorSetLayoutView& set : set_layouts)
     {
         ErrorHandling::Ensure(
-            set.handle != VK_NULL_HANDLE && set.description != nullptr,
+            set.handle != nullptr && set.description != nullptr,
             "PipelineLayout requires a handle and description for every descriptor set");
-        for (const VkDescriptorSetLayoutBinding& binding : set.description->bindings)
+        for (const vk::DescriptorSetLayoutBinding& binding : set.description->bindings)
         {
             ErrorHandling::Ensure(
                 binding.pImmutableSamplers == nullptr,
@@ -32,17 +32,11 @@ PipelineLayout::PipelineLayout(
         description_.sets.push_back(*set.description);
     }
     description_.push_constants.assign(push_constants.begin(), push_constants.end());
-    layout_ = VkObject<VkPipelineLayout>{
+    const auto create_info =
+        vk::PipelineLayoutCreateInfo{}.setSetLayouts(handles).setPushConstantRanges(description_.push_constants);
+    layout_ = VulkanObject<vk::PipelineLayout>{
         context.GetDevice(),
-        Vulkan::CreatePipelineLayout(
-            context.GetDevice(),
-            {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                .setLayoutCount = static_cast<u32>(handles.size()),
-                .pSetLayouts = handles.data(),
-                .pushConstantRangeCount = static_cast<u32>(description_.push_constants.size()),
-                .pPushConstantRanges = description_.push_constants.data(),
-            })};
+        VulkanValue(context.GetDevice().createPipelineLayout(create_info), "vkCreatePipelineLayout")};
 }
 
 ShaderProgramInterface PipelineLayout::Validate(const ShaderStages& stages) const
@@ -60,7 +54,7 @@ ShaderProgramInterface PipelineLayout::Validate(const ShaderStages& stages) cons
             "Shader requires missing descriptor set {}",
             descriptor.set);
         const auto& bindings = description_.sets[descriptor.set].bindings;
-        const auto binding = std::ranges::find(bindings, descriptor.binding, &VkDescriptorSetLayoutBinding::binding);
+        const auto binding = std::ranges::find(bindings, descriptor.binding, &vk::DescriptorSetLayoutBinding::binding);
         ErrorHandling::Ensure(
             binding != bindings.end(),
             "Shader requires missing descriptor set {} binding {}",
@@ -87,16 +81,17 @@ ShaderProgramInterface PipelineLayout::Validate(const ShaderStages& stages) cons
         }
         for (u32 stage_bit = 0; stage_bit != 32; ++stage_bit)
         {
-            const VkShaderStageFlags stage = VkShaderStageFlags{1} << stage_bit;
+            const vk::ShaderStageFlags stage{
+                static_cast<vk::ShaderStageFlags::MaskType>(vk::ShaderStageFlags::MaskType{1} << stage_bit)};
             if (!(reflected.stages & stage)) continue;
             const auto range = std::ranges::find_if(
                 description_.push_constants,
-                [&](const VkPushConstantRange& value)
+                [&](const vk::PushConstantRange& value)
                 {
                     const u64 declared_end = static_cast<u64>(value.offset) + value.size;
                     const u64 reflected_end = reflected.offset + required_size;
                     return value.offset <= reflected.offset && declared_end >= reflected_end &&
-                           (value.stageFlags & stage) != 0;
+                           static_cast<bool>(value.stageFlags & stage);
                 });
             ErrorHandling::Ensure(
                 range != description_.push_constants.end(),
@@ -104,7 +99,7 @@ ShaderProgramInterface PipelineLayout::Validate(const ShaderStages& stages) cons
                 reflected.name,
                 reflected.offset,
                 required_size,
-                stage);
+                static_cast<vk::ShaderStageFlags::MaskType>(stage));
         }
     }
     return program;

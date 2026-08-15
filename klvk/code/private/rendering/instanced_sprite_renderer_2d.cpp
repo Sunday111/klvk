@@ -5,7 +5,7 @@
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
 #include "klvk/vulkan/texture.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk
 {
@@ -24,11 +24,11 @@ struct PushConstants
 InstancedSpriteRenderer2d::InstancedSpriteRenderer2d(Application& app, const Texture& texture) : app_(&app)
 {
     DeviceContext& context = app.GetDeviceContext();
-    VkDevice device = context.GetDevice();
+    vk::Device device = context.GetDevice();
 
     descriptor_sets_ = DescriptorSets::Builder(context)
-                           .Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-                           .Binding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
+                           .Binding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
+                           .Binding(1, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eVertex)
                            .Build(Application::kFramesInFlight);
     for (size_t frame = 0; frame != Application::kFramesInFlight; ++frame)
     {
@@ -36,16 +36,13 @@ InstancedSpriteRenderer2d::InstancedSpriteRenderer2d(Application& app, const Tex
     }
 
     {
-        const std::array push_constant_ranges{VkPushConstantRange{
-            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-            .offset = 0,
-            .size = sizeof(PushConstants),
-        }};
+        const std::array push_constant_ranges{
+            vk::PushConstantRange{vk::ShaderStageFlagBits::eVertex, 0, sizeof(PushConstants)}};
         const std::array set_layouts{descriptor_sets_.GetLayoutView()};
         pipeline_layout_ = PipelineLayout{context, set_layouts, push_constant_ranges};
     }
 
-    pipeline_ = VkObject<VkPipeline>{
+    pipeline_ = VulkanObject<vk::Pipeline>{
         device,
         GraphicsPipelineBuilder(app)
             .Layout(pipeline_layout_)
@@ -57,7 +54,7 @@ InstancedSpriteRenderer2d::InstancedSpriteRenderer2d(Application& app, const Tex
 
 InstancedSpriteRenderer2d::~InstancedSpriteRenderer2d()
 {
-    // The pipeline, layout and descriptor sets are VkObject/DescriptorSets members
+    // The pipeline, layout and descriptor sets are VulkanObject/DescriptorSets members
     // that destroy themselves; wait first in case a runtime destruction races
     // in-flight frames (at shutdown Application::Run has already waited).
     app_->GetDeviceContext().WaitIdle();
@@ -73,8 +70,8 @@ void InstancedSpriteRenderer2d::EnsureFrameBufferCapacity(size_t frame_index, si
 
     // The application waited on this frame slot's fence in PreTick, so the GPU
     // is done with the old buffer and it can be destroyed right away.
-    buffer = GpuBuffer(app_->GetDeviceContext(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, new_size, true);
-    descriptor_sets_.WriteBuffer(frame_index, 1, buffer.GetHandle(), VK_WHOLE_SIZE);
+    buffer = GpuBuffer(app_->GetDeviceContext(), vk::BufferUsageFlagBits::eStorageBuffer, new_size, true);
+    descriptor_sets_.WriteBuffer(frame_index, 1, buffer.GetHandle(), vk::WholeSize);
 }
 
 void InstancedSpriteRenderer2d::Render(const Mat3f& world_to_view)
@@ -82,19 +79,15 @@ void InstancedSpriteRenderer2d::Render(const Mat3f& world_to_view)
     if (instances_.empty()) return;
 
     const size_t frame_index = app_->GetFrameInFlightIndex();
-    VkCommandBuffer command_buffer = app_->GetCurrentCommandBuffer();
+    vk::CommandBuffer command_buffer = app_->GetCurrentCommandBuffer();
 
     EnsureFrameBufferCapacity(frame_index, instances_.size() * sizeof(Instance));
     instance_buffers_[frame_index].Write(std::as_bytes(std::span{instances_}));
 
     const std::array descriptor_sets{descriptor_sets_.Get(frame_index)};
-    Vulkan::CmdBindPipelineNE(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-    Vulkan::CmdBindDescriptorSetsNE(
-        command_buffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        pipeline_layout_.GetHandle(),
-        0,
-        descriptor_sets);
+    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+    command_buffer
+        .bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout_.GetHandle(), 0, descriptor_sets, {});
 
     // The shader constructs the mat3 from columns.
     PushConstants push_constants{};
@@ -103,14 +96,13 @@ void InstancedSpriteRenderer2d::Render(const Mat3f& world_to_view)
         const Vec3f matrix_column = world_to_view.GetColumn(column);
         push_constants.columns[column] = Vec4f{matrix_column, 0.f};
     }
-    Vulkan::CmdPushConstantsNE(
-        command_buffer,
+    command_buffer.pushConstants<PushConstants>(
         pipeline_layout_.GetHandle(),
-        VK_SHADER_STAGE_VERTEX_BIT,
+        vk::ShaderStageFlagBits::eVertex,
         0,
         push_constants);
 
-    Vulkan::CmdDrawNE(command_buffer, 6, static_cast<u32>(instances_.size()), 0, 0);
+    command_buffer.draw(6, static_cast<u32>(instances_.size()), 0, 0);
 }
 
 }  // namespace klvk

@@ -8,6 +8,7 @@
 #include <array>
 #include <chrono>
 #include <concepts>
+#include <cstring>
 #include <limits>
 #include <span>
 #include <string>
@@ -31,12 +32,32 @@
 #include "klvk/vulkan/offscreen_render_target.hpp"
 #include "klvk/vulkan/render_target.hpp"
 #include "klvk/vulkan/swapchain.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 #include "klvk/window.hpp"
 #include "platform/glfw/glfw_state.hpp"
 
 namespace klvk
 {
+namespace
+{
+
+VKAPI_ATTR void VKAPI_CALL UnusedImGuiPresentationFunction() {}
+
+bool IsImGuiPresentationFunction(std::string_view name)
+{
+    constexpr std::array names{
+        "vkCreateSwapchainKHR",
+        "vkDestroySurfaceKHR",
+        "vkDestroySwapchainKHR",
+        "vkGetPhysicalDeviceSurfaceCapabilitiesKHR",
+        "vkGetPhysicalDeviceSurfaceFormatsKHR",
+        "vkGetPhysicalDeviceSurfacePresentModesKHR",
+        "vkGetSwapchainImagesKHR",
+    };
+    return std::ranges::find(names, name) != names.end();
+}
+
+}  // namespace
 
 struct Application::State
 {
@@ -47,10 +68,10 @@ struct Application::State
 
     struct FrameInFlight
     {
-        VkCommandPool command_pool = VK_NULL_HANDLE;
-        VkCommandBuffer command_buffer = VK_NULL_HANDLE;
-        VkSemaphore image_available = VK_NULL_HANDLE;
-        VkFence in_flight = VK_NULL_HANDLE;
+        vk::CommandPool command_pool = nullptr;
+        vk::CommandBuffer command_buffer = nullptr;
+        vk::Semaphore image_available = nullptr;
+        vk::Fence in_flight = nullptr;
     };
 
     GlfwState glfw_;
@@ -60,8 +81,8 @@ struct Application::State
     Swapchain* swapchain_ = nullptr;
     std::array<FrameInFlight, kFramesInFlight> frames_{};
     // One per swapchain image: signaled by the last submit that rendered to the image.
-    std::vector<VkSemaphore> render_finished_;
-    VkDescriptorPool imgui_descriptor_pool_ = VK_NULL_HANDLE;
+    std::vector<vk::Semaphore> render_finished_;
+    vk::DescriptorPool imgui_descriptor_pool_ = nullptr;
 
     std::filesystem::path executable_dir_;
     std::string imgui_ini_filename_;
@@ -211,31 +232,24 @@ struct Application::State
 
     void CreateFrames()
     {
-        VkDevice device = device_context_->GetDevice();
+        vk::Device device = device_context_->GetDevice();
         for (FrameInFlight& frame : frames_)
         {
-            const VkCommandPoolCreateInfo pool_info{
-                .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-                .queueFamilyIndex = device_context_->GetGraphicsQueueFamily(),
-            };
-            frame.command_pool = Vulkan::CreateCommandPool(device, pool_info);
+            const auto pool_info =
+                vk::CommandPoolCreateInfo{}.setQueueFamilyIndex(device_context_->GetGraphicsQueueFamily());
+            frame.command_pool = VulkanValue(device.createCommandPool(pool_info), "vkCreateCommandPool");
 
-            const VkCommandBufferAllocateInfo allocate_info{
-                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-                .commandPool = frame.command_pool,
-                .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-                .commandBufferCount = 1,
-            };
-            frame.command_buffer = Vulkan::AllocateCommandBuffers(device, allocate_info).front();
+            const auto allocate_info = vk::CommandBufferAllocateInfo{}
+                                           .setCommandPool(frame.command_pool)
+                                           .setLevel(vk::CommandBufferLevel::ePrimary)
+                                           .setCommandBufferCount(1);
+            frame.command_buffer =
+                VulkanValue(device.allocateCommandBuffers(allocate_info), "vkAllocateCommandBuffers").front();
 
-            const VkSemaphoreCreateInfo semaphore_info{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-            frame.image_available = Vulkan::CreateSemaphore(device, semaphore_info);
+            frame.image_available = VulkanValue(device.createSemaphore(vk::SemaphoreCreateInfo{}), "vkCreateSemaphore");
 
-            const VkFenceCreateInfo fence_info{
-                .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-                .flags = VK_FENCE_CREATE_SIGNALED_BIT,
-            };
-            frame.in_flight = Vulkan::CreateFence(device, fence_info);
+            const auto fence_info = vk::FenceCreateInfo{}.setFlags(vk::FenceCreateFlagBits::eSignaled);
+            frame.in_flight = VulkanValue(device.createFence(fence_info), "vkCreateFence");
         }
 
         CreateRenderFinishedSemaphores();
@@ -243,34 +257,33 @@ struct Application::State
 
     void CreateRenderFinishedSemaphores()
     {
-        VkDevice device = device_context_->GetDevice();
-        for (VkSemaphore semaphore : render_finished_)
+        vk::Device device = device_context_->GetDevice();
+        for (vk::Semaphore semaphore : render_finished_)
         {
-            Vulkan::DestroySemaphoreNE(device, semaphore);
+            device.destroy(semaphore);
         }
         render_finished_.clear();
         if (!swapchain_) return;
-        render_finished_.assign(render_target_->GetImageCount(), VK_NULL_HANDLE);
-        for (VkSemaphore& semaphore : render_finished_)
+        render_finished_.assign(render_target_->GetImageCount(), nullptr);
+        for (vk::Semaphore& semaphore : render_finished_)
         {
-            const VkSemaphoreCreateInfo semaphore_info{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-            semaphore = Vulkan::CreateSemaphore(device, semaphore_info);
+            semaphore = VulkanValue(device.createSemaphore(vk::SemaphoreCreateInfo{}), "vkCreateSemaphore");
         }
     }
 
     void DestroyFrames()
     {
-        VkDevice device = device_context_->GetDevice();
-        for (VkSemaphore semaphore : render_finished_)
+        vk::Device device = device_context_->GetDevice();
+        for (vk::Semaphore semaphore : render_finished_)
         {
-            Vulkan::DestroySemaphoreNE(device, semaphore);
+            device.destroy(semaphore);
         }
         render_finished_.clear();
         for (FrameInFlight& frame : frames_)
         {
-            if (frame.in_flight) Vulkan::DestroyFenceNE(device, frame.in_flight);
-            if (frame.image_available) Vulkan::DestroySemaphoreNE(device, frame.image_available);
-            if (frame.command_pool) Vulkan::DestroyCommandPoolNE(device, frame.command_pool);
+            if (frame.in_flight) device.destroy(frame.in_flight);
+            if (frame.image_available) device.destroy(frame.image_available);
+            if (frame.command_pool) device.destroy(frame.command_pool);
             frame = {};
         }
     }
@@ -340,7 +353,7 @@ Application::~Application()
     {
         if (state_->imgui_descriptor_pool_)
         {
-            Vulkan::DestroyDescriptorPoolNE(state_->device_context_->GetDevice(), state_->imgui_descriptor_pool_);
+            state_->device_context_->GetDevice().destroy(state_->imgui_descriptor_pool_);
         }
         state_->DestroyFrames();
         state_->swapchain_ = nullptr;
@@ -416,10 +429,10 @@ void Application::Initialize()
     }
     else
     {
-        const VkImageUsageFlags diagnostic_usage =
+        const vk::ImageUsageFlags diagnostic_usage =
             state_->diagnostic_config_.has_value() && !state_->diagnostic_config_->captures.empty()
-                ? VK_IMAGE_USAGE_TRANSFER_SRC_BIT
-                : 0;
+                ? vk::ImageUsageFlagBits::eTransferSrc
+                : vk::ImageUsageFlags{};
         auto swapchain = std::make_unique<Swapchain>(
             *state_->device_context_,
             state_->window_->GetFramebufferSize(),
@@ -429,7 +442,7 @@ void Application::Initialize()
         if (state_->diagnostic_config_.has_value() && state_->diagnostic_config_->framebuffer_size.has_value())
         {
             const auto requested = *state_->diagnostic_config_->framebuffer_size;
-            const VkExtent2D actual = state_->render_target_->GetExtent();
+            const vk::Extent2D actual = state_->render_target_->GetExtent();
             ErrorHandling::Ensure(
                 actual.width == requested.x() && actual.height == requested.y(),
                 "Vulkan surface extent is {}x{}, but diagnostic framebuffer_size requested {}x{}",
@@ -464,34 +477,70 @@ void Application::Initialize()
     }
 
     {
-        VkDevice device = state_->device_context_->GetDevice();
-        const std::array<VkDescriptorPoolSize, 1> pool_sizes{
-            VkDescriptorPoolSize{.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 16},
+        vk::Device device = state_->device_context_->GetDevice();
+        const std::array<vk::DescriptorPoolSize, 1> pool_sizes{
+            vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 16},
         };
-        const VkDescriptorPoolCreateInfo pool_info{
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-            .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
-            .maxSets = 16,
-            .poolSizeCount = static_cast<u32>(pool_sizes.size()),
-            .pPoolSizes = pool_sizes.data(),
-        };
-        state_->imgui_descriptor_pool_ = Vulkan::CreateDescriptorPool(device, pool_info);
+        const auto pool_info = vk::DescriptorPoolCreateInfo{}
+                                   .setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet)
+                                   .setMaxSets(16)
+                                   .setPoolSizes(pool_sizes);
+        state_->imgui_descriptor_pool_ = VulkanValue(device.createDescriptorPool(pool_info), "vkCreateDescriptorPool");
 
-        const std::array color_formats{state_->render_target_->GetFormat()};
+        const std::array<VkFormat, 1> color_formats{static_cast<VkFormat>(state_->render_target_->GetFormat())};
+        struct ImGuiVulkanLoaderContext
+        {
+            VkInstance instance;
+            VkDevice device;
+            bool presentation_enabled;
+        };
+        ImGuiVulkanLoaderContext loader_context{
+            .instance = static_cast<VkInstance>(state_->device_context_->GetInstance()),
+            .device = static_cast<VkDevice>(device),
+            .presentation_enabled = state_->device_context_->GetSurface() != nullptr,
+        };
+        ErrorHandling::Ensure(
+            ImGui_ImplVulkan_LoadFunctions(
+                [](const char* name, void* user_data)
+                {
+                    const auto& context = *static_cast<const ImGuiVulkanLoaderContext*>(user_data);
+                    if (std::strcmp(name, "vkCmdBeginRenderingKHR") == 0)
+                    {
+                        return reinterpret_cast<PFN_vkVoidFunction>(VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdBeginRendering);
+                    }
+                    if (std::strcmp(name, "vkCmdEndRenderingKHR") == 0)
+                    {
+                        return reinterpret_cast<PFN_vkVoidFunction>(VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdEndRendering);
+                    }
+                    if (const PFN_vkVoidFunction function =
+                            VULKAN_HPP_DEFAULT_DISPATCHER.vkGetInstanceProcAddr(context.instance, name))
+                    {
+                        return function;
+                    }
+                    const PFN_vkVoidFunction function =
+                        VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceProcAddr(context.device, name);
+                    if (function == nullptr && !context.presentation_enabled && IsImGuiPresentationFunction(name))
+                    {
+                        return reinterpret_cast<PFN_vkVoidFunction>(UnusedImGuiPresentationFunction);
+                    }
+                    return function;
+                },
+                &loader_context),
+            "Failed to load imgui Vulkan functions");
         ImGui_ImplVulkan_InitInfo init_info{};
-        init_info.Instance = state_->device_context_->GetInstance();
-        init_info.PhysicalDevice = state_->device_context_->GetPhysicalDevice();
-        init_info.Device = device;
+        init_info.Instance = loader_context.instance;
+        init_info.PhysicalDevice = static_cast<VkPhysicalDevice>(state_->device_context_->GetPhysicalDevice());
+        init_info.Device = static_cast<VkDevice>(device);
         init_info.QueueFamily = state_->device_context_->GetGraphicsQueueFamily();
-        init_info.Queue = state_->device_context_->GetGraphicsQueue();
-        init_info.DescriptorPool = state_->imgui_descriptor_pool_;
+        init_info.Queue = static_cast<VkQueue>(state_->device_context_->GetGraphicsQueue());
+        init_info.DescriptorPool = static_cast<VkDescriptorPool>(state_->imgui_descriptor_pool_);
         init_info.MinImageCount = 2;
         init_info.ImageCount = static_cast<u32>(state_->render_target_->GetImageCount());
         init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
         init_info.UseDynamicRendering = true;
         init_info.PipelineRenderingCreateInfo = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
-            .colorAttachmentCount = color_formats.size(),
+            .colorAttachmentCount = static_cast<u32>(color_formats.size()),
             .pColorAttachmentFormats = color_formats.data(),
         };
         ErrorHandling::Ensure(ImGui_ImplVulkan_Init(&init_info), "Failed to initialize imgui vulkan backend");
@@ -537,7 +586,7 @@ void Application::RunImpl()
         {
             state_->window_->SetFramebufferSize(*state_->diagnostic_config_->framebuffer_size);
             const auto framebuffer_size = state_->window_->GetFramebufferSize();
-            const VkExtent2D target_extent = state_->render_target_->GetExtent();
+            const vk::Extent2D target_extent = state_->render_target_->GetExtent();
             if (state_->swapchain_ &&
                 (target_extent.width != framebuffer_size.x() || target_extent.height != framebuffer_size.y()))
             {
@@ -563,7 +612,7 @@ void Application::RunImpl()
 
     // Make the device idle before returning, while the application object - and
     // any Vulkan resources it owns as members - are still alive. This is what
-    // lets applications keep pipelines, layouts and descriptor sets as VkObject /
+    // lets applications keep pipelines, layouts and descriptor sets as VulkanObject and
     // DescriptorSets members and rely on their destructors instead of writing an
     // explicit teardown that waits and destroys each handle by hand.
     if (state_->device_context_)
@@ -635,7 +684,7 @@ void Application::RunWithArguments(int argc, char** argv)
 void Application::PreTick()
 {
     // Recreate the swapchain when the window size changes. Cannot rely on
-    // VK_ERROR_OUT_OF_DATE_KHR alone: on Wayland the compositor silently
+    // vk::Result::eErrorOutOfDateKHR alone: on Wayland the compositor silently
     // stretches the presented image instead of invalidating the swapchain.
     {
         if (state_->diagnostic_config_.has_value() && state_->diagnostic_config_->framebuffer_size.has_value())
@@ -643,7 +692,7 @@ void Application::PreTick()
             state_->window_->SetFramebufferSize(*state_->diagnostic_config_->framebuffer_size);
         }
         const auto framebuffer_size = state_->window_->GetFramebufferSize();
-        const VkExtent2D extent = state_->render_target_->GetExtent();
+        const vk::Extent2D extent = state_->render_target_->GetExtent();
         if (state_->swapchain_ && (framebuffer_size.x() != extent.width || framebuffer_size.y() != extent.height))
         {
             state_->RecreateSwapchain();
@@ -651,11 +700,15 @@ void Application::PreTick()
     }
 
     auto& frame = state_->CurrentFrame();
-    VkDevice device = state_->device_context_->GetDevice();
+    vk::Device device = state_->device_context_->GetDevice();
 
     const std::array fences{frame.in_flight};
-    const WaitStatus wait_status = Vulkan::WaitForFences(device, fences, true, std::numeric_limits<u64>::max());
-    ErrorHandling::Ensure(wait_status == WaitStatus::Complete, "Timed out waiting for the frame fence");
+    const vk::Result wait_result = device.waitForFences(fences, true, std::numeric_limits<u64>::max());
+    if (wait_result == vk::Result::eTimeout)
+    {
+        ErrorHandling::Ensure(false, "Timed out waiting for the frame fence");
+    }
+    VulkanCheck(wait_result, "vkWaitForFences");
     if (state_->diagnostic_runner_) state_->diagnostic_runner_->ProcessCompletedFrame(state_->frame_index_);
 
     // Acquire the next swapchain image. Offscreen images map one-to-one to
@@ -668,147 +721,133 @@ void Application::PreTick()
     {
         for (;;)
         {
-            const AcquireNextImageOutcome outcome = Vulkan::AcquireNextImageKHR(
-                device,
+            const auto outcome = device.acquireNextImageKHR(
                 state_->swapchain_->GetHandle(),
                 std::numeric_limits<u64>::max(),
                 frame.image_available);
-
-            if (outcome.status == AcquireNextImageStatus::Acquired ||
-                outcome.status == AcquireNextImageStatus::Suboptimal)
+            if (outcome.result == vk::Result::eSuccess || outcome.result == vk::Result::eSuboptimalKHR)
             {
-                state_->image_index_ = *outcome.image_index;
+                state_->image_index_ = outcome.value;
                 break;
             }
-            if (outcome.status == AcquireNextImageStatus::OutOfDate)
+            if (outcome.result == vk::Result::eErrorOutOfDateKHR)
             {
                 state_->RecreateSwapchain();
                 continue;
             }
             ErrorHandling::Ensure(
-                outcome.status != AcquireNextImageStatus::NotReady,
+                outcome.result != vk::Result::eNotReady,
                 "No swapchain image was ready despite an infinite acquisition timeout");
             ErrorHandling::Ensure(
-                outcome.status != AcquireNextImageStatus::Timeout,
+                outcome.result != vk::Result::eTimeout,
                 "Timed out acquiring a swapchain image despite an infinite timeout");
+            VulkanCheck(outcome.result, "vkAcquireNextImageKHR");
         }
     }
 
-    Vulkan::ResetFences(device, fences);
-    Vulkan::ResetCommandPool(device, frame.command_pool);
+    VulkanValue(device.resetFences(fences), "vkResetFences");
+    VulkanValue(device.resetCommandPool(frame.command_pool), "vkResetCommandPool");
 
-    const VkCommandBufferBeginInfo begin_info{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-    };
-    Vulkan::BeginCommandBuffer(frame.command_buffer, begin_info);
+    const auto begin_info = vk::CommandBufferBeginInfo{}.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+    VulkanValue(frame.command_buffer.begin(begin_info), "vkBeginCommandBuffer");
     state_->frame_active_ = true;
 
     BeforeSwapchainRender(frame.command_buffer);
 
     // undefined -> color attachment
     {
-        const std::array barriers{VkImageMemoryBarrier2{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            .srcAccessMask = VK_ACCESS_2_NONE,
-            .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = state_->render_target_->GetImage(state_->image_index_),
-            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
-        }};
-        const VkDependencyInfo dependency{
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .imageMemoryBarrierCount = barriers.size(),
-            .pImageMemoryBarriers = barriers.data(),
-        };
-        Vulkan::CmdPipelineBarrier2(frame.command_buffer, dependency);
+        const auto range = vk::ImageSubresourceRange{}
+                               .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                               .setLevelCount(1)
+                               .setLayerCount(1);
+        const std::array barriers{vk::ImageMemoryBarrier2{}
+                                      .setSrcStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput)
+                                      .setSrcAccessMask(vk::AccessFlagBits2::eNone)
+                                      .setDstStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput)
+                                      .setDstAccessMask(vk::AccessFlagBits2::eColorAttachmentWrite)
+                                      .setOldLayout(vk::ImageLayout::eUndefined)
+                                      .setNewLayout(vk::ImageLayout::eColorAttachmentOptimal)
+                                      .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+                                      .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+                                      .setImage(state_->render_target_->GetImage(state_->image_index_))
+                                      .setSubresourceRange(range)};
+        frame.command_buffer.pipelineBarrier2(vk::DependencyInfo{}.setImageMemoryBarriers(barriers));
     }
 
-    const VkFormat depth_stencil_format = state_->render_target_->GetDepthStencilFormat();
+    const vk::Format depth_stencil_format = state_->render_target_->GetDepthStencilFormat();
     if (state_->DepthStencilAttachmentEnabled())
     {
-        const std::array barriers{VkImageMemoryBarrier2{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-            .srcAccessMask = VK_ACCESS_2_NONE,
-            .dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-            .dstAccessMask =
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = state_->render_target_->GetDepthImage(state_->image_index_),
-            .subresourceRange =
-                {.aspectMask = DepthStencilAspectMask(depth_stencil_format), .levelCount = 1, .layerCount = 1},
-        }};
-        const VkDependencyInfo dependency{
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .imageMemoryBarrierCount = barriers.size(),
-            .pImageMemoryBarriers = barriers.data(),
-        };
-        Vulkan::CmdPipelineBarrier2(frame.command_buffer, dependency);
+        const auto range = vk::ImageSubresourceRange{}
+                               .setAspectMask(DepthStencilAspectMask(depth_stencil_format))
+                               .setLevelCount(1)
+                               .setLayerCount(1);
+        const std::array barriers{
+            vk::ImageMemoryBarrier2{}
+                .setSrcStageMask(vk::PipelineStageFlagBits2::eNone)
+                .setSrcAccessMask(vk::AccessFlagBits2::eNone)
+                .setDstStageMask(
+                    vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests)
+                .setDstAccessMask(
+                    vk::AccessFlagBits2::eDepthStencilAttachmentRead |
+                    vk::AccessFlagBits2::eDepthStencilAttachmentWrite)
+                .setOldLayout(vk::ImageLayout::eUndefined)
+                .setNewLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal)
+                .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+                .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+                .setImage(state_->render_target_->GetDepthImage(state_->image_index_))
+                .setSubresourceRange(range)};
+        frame.command_buffer.pipelineBarrier2(vk::DependencyInfo{}.setImageMemoryBarriers(barriers));
     }
 
     const auto extent = state_->render_target_->GetExtent();
     const auto& c = state_->clear_color_;
-    const std::array color_attachments{VkRenderingAttachmentInfo{
-        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .imageView = state_->render_target_->GetImageView(state_->image_index_),
-        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .loadOp = state_->auto_clear_ ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue = {.color = {.float32 = {c.x(), c.y(), c.z(), c.w()}}},
-    }};
+    const vk::ClearValue color_clear{vk::ClearColorValue{std::array{c.x(), c.y(), c.z(), c.w()}}};
+    const std::array color_attachments{
+        vk::RenderingAttachmentInfo{}
+            .setImageView(state_->render_target_->GetImageView(state_->image_index_))
+            .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
+            .setLoadOp(state_->auto_clear_ ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad)
+            .setStoreOp(vk::AttachmentStoreOp::eStore)
+            .setClearValue(color_clear)};
     // Single objects behind pDepthAttachment / pStencilAttachment - no count field,
     // so no arrays. Both name the same view: the planes live in one image.
-    const VkImageView depth_stencil_view = state_->DepthStencilAttachmentEnabled()
-                                               ? state_->render_target_->GetDepthImageView(state_->image_index_)
-                                               : VK_NULL_HANDLE;
-    const VkRenderingAttachmentInfo depth_attachment{
-        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .imageView = depth_stencil_view,
-        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .clearValue = {.depthStencil = {.depth = 1.f}},
-    };
-    const VkRenderingAttachmentInfo stencil_attachment{
-        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .imageView = depth_stencil_view,
-        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .clearValue = {.depthStencil = {.stencil = 0}},
-    };
-    const VkRenderingInfo rendering_info{
-        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .renderArea = {.offset = {.x = 0, .y = 0}, .extent = extent},
-        .layerCount = 1,
-        .colorAttachmentCount = color_attachments.size(),
-        .pColorAttachments = color_attachments.data(),
-        .pDepthAttachment = state_->depth_buffer_enabled_ ? &depth_attachment : nullptr,
-        .pStencilAttachment = state_->stencil_buffer_enabled_ ? &stencil_attachment : nullptr,
-    };
-    Vulkan::CmdBeginRendering(frame.command_buffer, rendering_info);
+    const vk::ImageView depth_stencil_view = state_->DepthStencilAttachmentEnabled()
+                                                 ? state_->render_target_->GetDepthImageView(state_->image_index_)
+                                                 : nullptr;
+    const vk::ClearValue depth_clear{vk::ClearDepthStencilValue{1.f, 0}};
+    const vk::ClearValue stencil_clear{vk::ClearDepthStencilValue{0.f, 0}};
+    const auto depth_attachment = vk::RenderingAttachmentInfo{}
+                                      .setImageView(depth_stencil_view)
+                                      .setImageLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal)
+                                      .setLoadOp(vk::AttachmentLoadOp::eClear)
+                                      .setStoreOp(vk::AttachmentStoreOp::eDontCare)
+                                      .setClearValue(depth_clear);
+    const auto stencil_attachment = vk::RenderingAttachmentInfo{}
+                                        .setImageView(depth_stencil_view)
+                                        .setImageLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal)
+                                        .setLoadOp(vk::AttachmentLoadOp::eClear)
+                                        .setStoreOp(vk::AttachmentStoreOp::eDontCare)
+                                        .setClearValue(stencil_clear);
+    const auto rendering_info =
+        vk::RenderingInfo{}
+            .setRenderArea(vk::Rect2D{{0, 0}, extent})
+            .setLayerCount(1)
+            .setColorAttachments(color_attachments)
+            .setPDepthAttachment(state_->depth_buffer_enabled_ ? &depth_attachment : nullptr)
+            .setPStencilAttachment(state_->stencil_buffer_enabled_ ? &stencil_attachment : nullptr);
+    frame.command_buffer.beginRendering(rendering_info);
 
     // GL-style viewport (y up) so view matrices keep working unchanged after the klgl port.
-    const std::array viewports{VkViewport{
-        .x = 0.f,
-        .y = static_cast<float>(extent.height),
-        .width = static_cast<float>(extent.width),
-        .height = -static_cast<float>(extent.height),
-        .minDepth = 0.f,
-        .maxDepth = 1.f,
-    }};
-    Vulkan::CmdSetViewport(frame.command_buffer, 0, viewports);
-    const std::array scissors{VkRect2D{.offset = {.x = 0, .y = 0}, .extent = extent}};
-    Vulkan::CmdSetScissor(frame.command_buffer, 0, scissors);
+    const std::array viewports{vk::Viewport{
+        0.f,
+        static_cast<float>(extent.height),
+        static_cast<float>(extent.width),
+        -static_cast<float>(extent.height),
+        0.f,
+        1.f}};
+    frame.command_buffer.setViewport(0, viewports);
+    const std::array scissors{vk::Rect2D{{0, 0}, extent}};
+    frame.command_buffer.setScissor(0, scissors);
 
     ImGui_ImplVulkan_NewFrame();
     if (state_->offscreen_)
@@ -832,7 +871,7 @@ void Application::PreTick()
 
 void Application::Tick() {}
 
-void Application::BeforeSwapchainRender([[maybe_unused]] VkCommandBuffer command_buffer) {}
+void Application::BeforeSwapchainRender([[maybe_unused]] vk::CommandBuffer command_buffer) {}
 
 void Application::PostTick()
 {
@@ -848,7 +887,7 @@ void Application::PostTick()
     // A capture that excludes UI uses the same split point.
     if (state_->DepthStencilAttachmentEnabled() || capture_without_ui)
     {
-        Vulkan::CmdEndRendering(frame.command_buffer);
+        frame.command_buffer.endRendering();
         if (capture_without_ui)
         {
             const bool recorded = state_->diagnostic_runner_->RecordReadback(
@@ -859,30 +898,25 @@ void Application::PostTick()
                 state_->render_target_->GetImage(state_->image_index_),
                 state_->render_target_->GetFormat(),
                 state_->render_target_->GetExtent(),
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                vk::ImageLayout::eColorAttachmentOptimal);
             ErrorHandling::Ensure(recorded, "A due pre-UI diagnostic capture was not recorded");
         }
-        const std::array color_attachments{VkRenderingAttachmentInfo{
-            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView = state_->render_target_->GetImageView(state_->image_index_),
-            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        }};
-        const VkRenderingInfo rendering_info{
-            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-            .renderArea = {.offset = {.x = 0, .y = 0}, .extent = state_->render_target_->GetExtent()},
-            .layerCount = 1,
-            .colorAttachmentCount = color_attachments.size(),
-            .pColorAttachments = color_attachments.data(),
-        };
-        Vulkan::CmdBeginRendering(frame.command_buffer, rendering_info);
+        const std::array color_attachments{vk::RenderingAttachmentInfo{}
+                                               .setImageView(state_->render_target_->GetImageView(state_->image_index_))
+                                               .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
+                                               .setLoadOp(vk::AttachmentLoadOp::eLoad)
+                                               .setStoreOp(vk::AttachmentStoreOp::eStore)};
+        const auto rendering_info = vk::RenderingInfo{}
+                                        .setRenderArea(vk::Rect2D{{0, 0}, state_->render_target_->GetExtent()})
+                                        .setLayerCount(1)
+                                        .setColorAttachments(color_attachments);
+        frame.command_buffer.beginRendering(rendering_info);
     }
 
     ImGui::Render();
-    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), frame.command_buffer);
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), static_cast<VkCommandBuffer>(frame.command_buffer));
 
-    Vulkan::CmdEndRendering(frame.command_buffer);
+    frame.command_buffer.endRendering();
 
     const bool captured_with_ui =
         state_->diagnostic_runner_ &&
@@ -894,72 +928,57 @@ void Application::PostTick()
             state_->render_target_->GetImage(state_->image_index_),
             state_->render_target_->GetFormat(),
             state_->render_target_->GetExtent(),
-            state_->swapchain_ ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            state_->swapchain_ ? vk::ImageLayout::ePresentSrcKHR : vk::ImageLayout::eColorAttachmentOptimal);
 
     // color attachment -> present when capture did not already perform that transition.
     if (state_->swapchain_ && !captured_with_ui)
     {
-        const std::array barriers{VkImageMemoryBarrier2{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_NONE,
-            .dstAccessMask = VK_ACCESS_2_NONE,
-            .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = state_->render_target_->GetImage(state_->image_index_),
-            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
-        }};
-        const VkDependencyInfo dependency{
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .imageMemoryBarrierCount = barriers.size(),
-            .pImageMemoryBarriers = barriers.data(),
-        };
-        Vulkan::CmdPipelineBarrier2(frame.command_buffer, dependency);
+        const auto range = vk::ImageSubresourceRange{}
+                               .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                               .setLevelCount(1)
+                               .setLayerCount(1);
+        const std::array barriers{vk::ImageMemoryBarrier2{}
+                                      .setSrcStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput)
+                                      .setSrcAccessMask(vk::AccessFlagBits2::eColorAttachmentWrite)
+                                      .setDstStageMask(vk::PipelineStageFlagBits2::eNone)
+                                      .setDstAccessMask(vk::AccessFlagBits2::eNone)
+                                      .setOldLayout(vk::ImageLayout::eColorAttachmentOptimal)
+                                      .setNewLayout(vk::ImageLayout::ePresentSrcKHR)
+                                      .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+                                      .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+                                      .setImage(state_->render_target_->GetImage(state_->image_index_))
+                                      .setSubresourceRange(range)};
+        frame.command_buffer.pipelineBarrier2(vk::DependencyInfo{}.setImageMemoryBarriers(barriers));
     }
 
-    Vulkan::EndCommandBuffer(frame.command_buffer);
+    VulkanValue(frame.command_buffer.end(), "vkEndCommandBuffer");
     state_->frame_active_ = false;
 
-    const std::array command_buffer_infos{VkCommandBufferSubmitInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-        .commandBuffer = frame.command_buffer,
-    }};
-    VkSemaphore render_finished = VK_NULL_HANDLE;
+    const std::array command_buffer_infos{vk::CommandBufferSubmitInfo{}.setCommandBuffer(frame.command_buffer)};
+    vk::Semaphore render_finished = nullptr;
     if (state_->swapchain_)
     {
         render_finished = state_->render_finished_[state_->image_index_];
-        const std::array wait_infos{VkSemaphoreSubmitInfo{
-            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-            .semaphore = frame.image_available,
-            .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-        }};
-        const std::array signal_infos{VkSemaphoreSubmitInfo{
-            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-            .semaphore = render_finished,
-            .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-        }};
-        const std::array submit_infos{VkSubmitInfo2{
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-            .waitSemaphoreInfoCount = wait_infos.size(),
-            .pWaitSemaphoreInfos = wait_infos.data(),
-            .commandBufferInfoCount = command_buffer_infos.size(),
-            .pCommandBufferInfos = command_buffer_infos.data(),
-            .signalSemaphoreInfoCount = signal_infos.size(),
-            .pSignalSemaphoreInfos = signal_infos.data(),
-        }};
-        Vulkan::QueueSubmit2(state_->device_context_->GetGraphicsQueue(), submit_infos, frame.in_flight);
+        const std::array wait_infos{vk::SemaphoreSubmitInfo{}
+                                        .setSemaphore(frame.image_available)
+                                        .setStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput)};
+        const std::array signal_infos{vk::SemaphoreSubmitInfo{}
+                                          .setSemaphore(render_finished)
+                                          .setStageMask(vk::PipelineStageFlagBits2::eAllCommands)};
+        const std::array submit_infos{vk::SubmitInfo2{}
+                                          .setWaitSemaphoreInfos(wait_infos)
+                                          .setCommandBufferInfos(command_buffer_infos)
+                                          .setSignalSemaphoreInfos(signal_infos)};
+        VulkanValue(
+            state_->device_context_->GetGraphicsQueue().submit2(submit_infos, frame.in_flight),
+            "vkQueueSubmit2");
     }
     else
     {
-        const std::array submit_infos{VkSubmitInfo2{
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-            .commandBufferInfoCount = command_buffer_infos.size(),
-            .pCommandBufferInfos = command_buffer_infos.data(),
-        }};
-        Vulkan::QueueSubmit2(state_->device_context_->GetGraphicsQueue(), submit_infos, frame.in_flight);
+        const std::array submit_infos{vk::SubmitInfo2{}.setCommandBufferInfos(command_buffer_infos)};
+        VulkanValue(
+            state_->device_context_->GetGraphicsQueue().submit2(submit_infos, frame.in_flight),
+            "vkQueueSubmit2");
     }
 
     if (state_->swapchain_)
@@ -968,16 +987,19 @@ void Application::PostTick()
         const std::array swapchains{state_->swapchain_->GetHandle()};
         // pImageIndices has no count of its own - it is parallel to pSwapchains.
         const std::array image_indices{state_->image_index_};
-        const VkPresentInfoKHR present_info{
-            .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-            .waitSemaphoreCount = wait_semaphores.size(),
-            .pWaitSemaphores = wait_semaphores.data(),
-            .swapchainCount = swapchains.size(),
-            .pSwapchains = swapchains.data(),
-            .pImageIndices = image_indices.data(),
-        };
-        const PresentStatus status = Vulkan::QueuePresentKHR(state_->device_context_->GetGraphicsQueue(), present_info);
-        if (status == PresentStatus::OutOfDate || status == PresentStatus::Suboptimal) state_->RecreateSwapchain();
+        const auto present_info = vk::PresentInfoKHR{}
+                                      .setWaitSemaphores(wait_semaphores)
+                                      .setSwapchains(swapchains)
+                                      .setPImageIndices(image_indices.data());
+        const vk::Result result = state_->device_context_->GetGraphicsQueue().presentKHR(present_info);
+        if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR)
+        {
+            state_->RecreateSwapchain();
+        }
+        else
+        {
+            VulkanCheck(result, "vkQueuePresentKHR");
+        }
     }
 
     ++state_->completed_frames_;
@@ -1129,17 +1151,17 @@ DeviceContext& Application::GetDeviceContext()
     return *state_->device_context_;
 }
 
-VkFormat Application::GetSwapchainFormat() const
+vk::Format Application::GetSwapchainFormat() const
 {
     return state_->render_target_->GetFormat();
 }
 
-VkFormat Application::GetDepthFormat() const
+vk::Format Application::GetDepthFormat() const
 {
     return state_->render_target_->GetDepthStencilFormat();
 }
 
-VkCommandBuffer Application::GetCurrentCommandBuffer() const
+vk::CommandBuffer Application::GetCurrentCommandBuffer() const
 {
     ErrorHandling::Ensure(state_->frame_active_, "No frame is being recorded (must be between PreTick and PostTick)");
     return state_->frames_[state_->frame_index_].command_buffer;

@@ -9,42 +9,40 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/shader/shader_cache_manager.hpp"
 #include "klvk/shader/shader_module.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 #include "klvk/window.hpp"
 
 namespace klvk
 {
-
 namespace
 {
 
-VKAPI_ATTR VkBool32 VKAPI_CALL DebugMessengerCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-    [[maybe_unused]] VkDebugUtilsMessageTypeFlagsEXT type,
-    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+VKAPI_ATTR vk::Bool32 VKAPI_CALL DebugMessengerCallback(
+    vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
+    [[maybe_unused]] vk::DebugUtilsMessageTypeFlagsEXT type,
+    const vk::DebugUtilsMessengerCallbackDataEXT* callback_data,
     [[maybe_unused]] void* user_data)
 {
-    const auto style = severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT ? fmt::fg(fmt::rgb(255, 0, 0))
-                                                                                 : fmt::fg(fmt::rgb(255, 255, 0));
+    const auto style = severity >= vk::DebugUtilsMessageSeverityFlagBitsEXT::eError ? fmt::fg(fmt::rgb(255, 0, 0))
+                                                                                    : fmt::fg(fmt::rgb(255, 255, 0));
     fmt::print(style, "[vulkan] {}\n", callback_data->pMessage);
-    return VK_FALSE;
+    return vk::False;
 }
 
-VkDebugUtilsMessengerCreateInfoEXT MakeDebugMessengerCreateInfo()
+vk::DebugUtilsMessengerCreateInfoEXT MakeDebugMessengerCreateInfo()
 {
-    return {
-        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-        .messageSeverity =
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-        .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                       VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-        .pfnUserCallback = DebugMessengerCallback,
-    };
+    return vk::DebugUtilsMessengerCreateInfoEXT{}
+        .setMessageSeverity(
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError)
+        .setMessageType(
+            vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
+            vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance)
+        .setPfnUserCallback(DebugMessengerCallback);
 }
 
 bool HasLayer(std::string_view name)
 {
-    const auto layers = Vulkan::EnumerateInstanceLayerProperties();
+    const auto layers = VulkanValue(vk::enumerateInstanceLayerProperties(), "vkEnumerateInstanceLayerProperties");
     for (const auto& layer : layers)
     {
         if (name == layer.layerName) return true;
@@ -52,20 +50,15 @@ bool HasLayer(std::string_view name)
     return false;
 }
 
-bool HasDeviceExtension(VkPhysicalDevice device, std::string_view name)
+bool HasDeviceExtension(vk::PhysicalDevice device, std::string_view name)
 {
-    const auto extensions = Vulkan::EnumerateDeviceExtensionProperties(device);
+    const auto extensions =
+        VulkanValue(device.enumerateDeviceExtensionProperties(), "vkEnumerateDeviceExtensionProperties");
     for (const auto& extension : extensions)
     {
         if (name == extension.extensionName) return true;
     }
     return false;
-}
-
-void InitializeVolkOnce()
-{
-    static const VkResult result = volkInitialize();
-    CheckVkResult(result, "volkInitialize");
 }
 
 }  // namespace
@@ -74,7 +67,7 @@ DeviceContext::DeviceContext(Window* presentation_window) : DeviceContext(presen
 
 DeviceContext::DeviceContext(Window* presentation_window, const Settings& settings)
 {
-    InitializeVolkOnce();
+    InitializeVulkanDispatcher();
     presentation_enabled_ = presentation_window != nullptr;
     CreateInstance(settings, presentation_window);
     if (presentation_window) surface_ = presentation_window->CreateVulkanSurface(instance_);
@@ -82,24 +75,22 @@ DeviceContext::DeviceContext(Window* presentation_window, const Settings& settin
     CreateDevice();
     CreateAllocator();
 
-    const VkCommandPoolCreateInfo pool_info{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-        .queueFamilyIndex = graphics_queue_family_,
-    };
-    one_time_pool_ = Vulkan::CreateCommandPool(device_, pool_info);
+    const auto pool_info = vk::CommandPoolCreateInfo{}
+                               .setFlags(vk::CommandPoolCreateFlagBits::eTransient)
+                               .setQueueFamilyIndex(graphics_queue_family_);
+    one_time_pool_ = VulkanValue(device_.createCommandPool(pool_info), "vkCreateCommandPool");
 }
 
 DeviceContext::~DeviceContext()
 {
     shader_cache_.reset();
-    if (device_) (void)Vulkan::DeviceWaitIdleNE(device_);
-    if (one_time_pool_) Vulkan::DestroyCommandPool(device_, one_time_pool_);
+    if (device_) (void)device_.waitIdle();
+    if (one_time_pool_) device_.destroy(one_time_pool_);
     if (allocator_) vmaDestroyAllocator(allocator_);
-    if (device_) Vulkan::DestroyDevice(device_);
-    if (surface_) Vulkan::DestroySurfaceKHR(instance_, surface_);
-    if (debug_messenger_) Vulkan::DestroyDebugUtilsMessengerEXT(instance_, debug_messenger_);
-    if (instance_) Vulkan::DestroyInstance(instance_);
+    if (device_) device_.destroy();
+    if (surface_) instance_.destroy(surface_);
+    if (debug_messenger_) instance_.destroy(debug_messenger_);
+    if (instance_) instance_.destroy();
 }
 
 void DeviceContext::InitializeShaderCache(
@@ -123,16 +114,16 @@ ShaderModule DeviceContext::LoadShaderModule(const std::filesystem::path& source
         shader->interface != nullptr,
         "Shader '{}' has no reflection; use CreateShaderModuleFromSourceUnchecked for legacy GLSL",
         source_path.string());
-    VkShaderModule module = CreateShaderModule(
+    vk::ShaderModule module = CreateShaderModule(
         std::string_view(reinterpret_cast<const char*>(shader->spirv->data()), shader->spirv->size() * sizeof(u32)),
         source_path.filename().string());
     return ShaderModule{
-        VkObject<VkShaderModule>{device_, module},
+        VulkanObject<vk::ShaderModule>{device_, module},
         shader->interface,
     };
 }
 
-VkShaderModule DeviceContext::CreateShaderModuleFromSourceUnchecked(const std::filesystem::path& source_path) const
+vk::ShaderModule DeviceContext::CreateShaderModuleFromSourceUnchecked(const std::filesystem::path& source_path) const
 {
     const auto shader = GetShaderCacheManager().GetOrCompile(source_path);
     return CreateShaderModule(
@@ -142,12 +133,10 @@ VkShaderModule DeviceContext::CreateShaderModuleFromSourceUnchecked(const std::f
 
 void DeviceContext::CreateInstance(const Settings& settings, const Window* presentation_window)
 {
-    const VkApplicationInfo app_info{
-        .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-        .pApplicationName = settings.app_name.c_str(),
-        .pEngineName = "klvk",
-        .apiVersion = VK_API_VERSION_1_3,
-    };
+    const auto app_info = vk::ApplicationInfo{}
+                              .setPApplicationName(settings.app_name.c_str())
+                              .setPEngineName("klvk")
+                              .setApiVersion(vk::ApiVersion13);
 
     std::vector<const char*> extensions;
     if (presentation_window)
@@ -162,65 +151,62 @@ void DeviceContext::CreateInstance(const Settings& settings, const Window* prese
         fmt::print("klvk: VK_LAYER_KHRONOS_validation requested but is not available\n");
     }
 
-    VkInstanceCreateInfo create_info{
-        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        .pApplicationInfo = &app_info,
-    };
-
+    auto create_info = vk::InstanceCreateInfo{}.setPApplicationInfo(&app_info);
     const auto messenger_info = MakeDebugMessengerCreateInfo();
     if (validation)
     {
         layers.push_back("VK_LAYER_KHRONOS_validation");
-        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-        create_info.pNext = &messenger_info;
+        extensions.push_back(vk::EXTDebugUtilsExtensionName);
+        vk::StructureChain<vk::InstanceCreateInfo, vk::DebugUtilsMessengerCreateInfoEXT> chain{
+            create_info,
+            messenger_info};
+        chain.get<vk::InstanceCreateInfo>().setPEnabledLayerNames(layers).setPEnabledExtensionNames(extensions);
+        instance_ = VulkanValue(vk::createInstance(chain.get<vk::InstanceCreateInfo>()), "vkCreateInstance");
     }
-
-    create_info.enabledLayerCount = static_cast<u32>(layers.size());
-    create_info.ppEnabledLayerNames = layers.data();
-    create_info.enabledExtensionCount = static_cast<u32>(extensions.size());
-    create_info.ppEnabledExtensionNames = extensions.data();
-
-    instance_ = Vulkan::CreateInstance(create_info);
-    volkLoadInstance(instance_);
+    else
+    {
+        create_info.setPEnabledLayerNames(layers).setPEnabledExtensionNames(extensions);
+        instance_ = VulkanValue(vk::createInstance(create_info), "vkCreateInstance");
+    }
+    InitializeVulkanDispatcher(instance_);
 
     if (validation)
     {
-        debug_messenger_ = Vulkan::CreateDebugUtilsMessengerEXT(instance_, messenger_info);
+        debug_messenger_ =
+            VulkanValue(instance_.createDebugUtilsMessengerEXT(messenger_info), "vkCreateDebugUtilsMessengerEXT");
     }
 }
 
 void DeviceContext::PickPhysicalDevice()
 {
-    const auto devices = Vulkan::EnumeratePhysicalDevices(instance_);
+    const auto devices = VulkanValue(instance_.enumeratePhysicalDevices(), "vkEnumeratePhysicalDevices");
     ErrorHandling::Ensure(!devices.empty(), "No Vulkan devices found");
 
     int best_score = -1;
-    for (VkPhysicalDevice device : devices)
+    for (vk::PhysicalDevice device : devices)
     {
-        const VkPhysicalDeviceProperties properties = Vulkan::GetPhysicalDeviceProperties(device);
-        if (properties.apiVersion < VK_API_VERSION_1_3) continue;
-        if (presentation_enabled_ && !HasDeviceExtension(device, VK_KHR_SWAPCHAIN_EXTENSION_NAME)) continue;
+        const vk::PhysicalDeviceProperties properties = device.getProperties();
+        if (properties.apiVersion < vk::ApiVersion13) continue;
+        if (presentation_enabled_ && !HasDeviceExtension(device, vk::KHRSwapchainExtensionName)) continue;
 
-        VkPhysicalDeviceVulkan13Features features13{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
-        VkPhysicalDeviceVulkan11Features features11{
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
-            .pNext = &features13,
-        };
-        VkPhysicalDeviceFeatures2 features2{
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-            .pNext = &features11,
-        };
-        Vulkan::GetPhysicalDeviceFeatures2(device, features2);
-        if (!features11.shaderDrawParameters || !features13.dynamicRendering || !features13.synchronization2) continue;
+        auto features = device.getFeatures2<
+            vk::PhysicalDeviceFeatures2,
+            vk::PhysicalDeviceVulkan11Features,
+            vk::PhysicalDeviceVulkan13Features>();
+        if (!features.get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters ||
+            !features.get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering ||
+            !features.get<vk::PhysicalDeviceVulkan13Features>().synchronization2)
+        {
+            continue;
+        }
 
-        // Single queue family that can do both graphics and present keeps ownership simple.
-        const auto families = Vulkan::GetPhysicalDeviceQueueFamilyProperties(device);
-
+        const auto families = device.getQueueFamilyProperties();
         std::optional<u32> graphics_family;
         for (u32 family = 0; family != static_cast<u32>(families.size()); ++family)
         {
-            if (!(families[family].queueFlags & VK_QUEUE_GRAPHICS_BIT)) continue;
-            if (!presentation_enabled_ || Vulkan::GetPhysicalDeviceSurfaceSupportKHR(device, family, surface_))
+            if (!(families[family].queueFlags & vk::QueueFlagBits::eGraphics)) continue;
+            if (!presentation_enabled_ ||
+                VulkanValue(device.getSurfaceSupportKHR(family, surface_), "vkGetPhysicalDeviceSurfaceSupportKHR"))
             {
                 graphics_family = family;
                 break;
@@ -229,8 +215,8 @@ void DeviceContext::PickPhysicalDevice()
         if (!graphics_family) continue;
 
         int score = 1;
-        if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) score += 1000;
-        if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) score += 100;
+        if (properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu) score += 1000;
+        if (properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu) score += 100;
 
         if (score > best_score)
         {
@@ -243,150 +229,111 @@ void DeviceContext::PickPhysicalDevice()
     if (presentation_enabled_)
     {
         ErrorHandling::Ensure(
-            physical_device_ != VK_NULL_HANDLE,
+            physical_device_ != nullptr,
             "No Vulkan device with shader draw parameters, 1.3 dynamic rendering, synchronization2, and a "
             "graphics+present queue found");
     }
     else
     {
         ErrorHandling::Ensure(
-            physical_device_ != VK_NULL_HANDLE,
+            physical_device_ != nullptr,
             "No Vulkan device with shader draw parameters, 1.3 dynamic rendering, synchronization2, and a graphics "
             "queue found");
     }
 
-    const VkPhysicalDeviceProperties properties = Vulkan::GetPhysicalDeviceProperties(physical_device_);
-    fmt::print("klvk: using device {}\n", properties.deviceName);
+    fmt::print("klvk: using device {}\n", physical_device_.getProperties().deviceName.data());
 }
 
 void DeviceContext::CreateDevice()
 {
     const std::array priorities{1.f};
-    const std::array queue_infos{VkDeviceQueueCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-        .queueFamilyIndex = graphics_queue_family_,
-        .queueCount = priorities.size(),
-        .pQueuePriorities = priorities.data(),
-    }};
+    const std::array queue_infos{
+        vk::DeviceQueueCreateInfo{}.setQueueFamilyIndex(graphics_queue_family_).setQueuePriorities(priorities)};
 
-    VkPhysicalDeviceVulkan13Features features13{
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-        .synchronization2 = VK_TRUE,
-        .dynamicRendering = VK_TRUE,
-    };
-    VkPhysicalDeviceVulkan11Features features11{
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
-        .pNext = &features13,
-        .shaderDrawParameters = VK_TRUE,
-    };
+    const vk::PhysicalDeviceFeatures supported_features = physical_device_.getFeatures();
+    geometry_shader_enabled_ = supported_features.geometryShader == vk::True;
+    tessellation_shader_enabled_ = supported_features.tessellationShader == vk::True;
 
-    // Optional features are enabled when the hardware has them; users query the
-    // corresponding accessors before creating pipelines that need them.
-    const VkPhysicalDeviceFeatures supported_features = Vulkan::GetPhysicalDeviceFeatures(physical_device_);
-    geometry_shader_enabled_ = supported_features.geometryShader == VK_TRUE;
-    tessellation_shader_enabled_ = supported_features.tessellationShader == VK_TRUE;
-
-    const VkPhysicalDeviceFeatures2 features2{
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-        .pNext = &features11,
-        .features =
-            {
-                .geometryShader = supported_features.geometryShader,
-                .tessellationShader = supported_features.tessellationShader,
-            },
-    };
+    auto features2 = vk::PhysicalDeviceFeatures2{}.setFeatures(
+        vk::PhysicalDeviceFeatures{}
+            .setGeometryShader(supported_features.geometryShader)
+            .setTessellationShader(supported_features.tessellationShader));
+    auto features11 = vk::PhysicalDeviceVulkan11Features{}.setShaderDrawParameters(true);
+    auto features13 = vk::PhysicalDeviceVulkan13Features{}.setSynchronization2(true).setDynamicRendering(true);
 
     std::vector<const char*> extensions;
-    if (presentation_enabled_) extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    // Promoted to core in 1.3 but the imgui backend resolves the KHR-suffixed entry points,
-    // which are only guaranteed to exist when the extension is enabled explicitly.
-    if (HasDeviceExtension(physical_device_, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME))
+    if (presentation_enabled_) extensions.push_back(vk::KHRSwapchainExtensionName);
+    if (HasDeviceExtension(physical_device_, vk::KHRDynamicRenderingExtensionName))
     {
-        extensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+        extensions.push_back(vk::KHRDynamicRenderingExtensionName);
     }
-
-    // Lets device memory be exported as an opaque fd so another API (CUDA) can import
-    // the same allocation. Optional: only interop code needs it.
-    if (HasDeviceExtension(physical_device_, VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME))
+    if (HasDeviceExtension(physical_device_, vk::KHRExternalMemoryFdExtensionName))
     {
-        extensions.push_back(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+        extensions.push_back(vk::KHRExternalMemoryFdExtensionName);
         external_memory_fd_enabled_ = true;
     }
 
-    const VkDeviceCreateInfo create_info{
-        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext = &features2,
-        .queueCreateInfoCount = queue_infos.size(),
-        .pQueueCreateInfos = queue_infos.data(),
-        .enabledExtensionCount = static_cast<u32>(extensions.size()),
-        .ppEnabledExtensionNames = extensions.data(),
-    };
+    auto create_info = vk::DeviceCreateInfo{}.setQueueCreateInfos(queue_infos).setPEnabledExtensionNames(extensions);
+    vk::StructureChain<
+        vk::DeviceCreateInfo,
+        vk::PhysicalDeviceFeatures2,
+        vk::PhysicalDeviceVulkan11Features,
+        vk::PhysicalDeviceVulkan13Features>
+        chain{create_info, features2, features11, features13};
 
-    device_ = Vulkan::CreateDevice(physical_device_, create_info);
-    volkLoadDevice(device_);
-    graphics_queue_ = Vulkan::GetDeviceQueue(device_, graphics_queue_family_, 0);
+    device_ = VulkanValue(physical_device_.createDevice(chain.get<vk::DeviceCreateInfo>()), "vkCreateDevice");
+    InitializeVulkanDispatcher(device_);
+    graphics_queue_ = device_.getQueue(graphics_queue_family_, 0);
 }
 
 void DeviceContext::CreateAllocator()
 {
     const VmaVulkanFunctions functions{
-        .vkGetInstanceProcAddr = vkGetInstanceProcAddr,
-        .vkGetDeviceProcAddr = vkGetDeviceProcAddr,
+        .vkGetInstanceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetInstanceProcAddr,
+        .vkGetDeviceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceProcAddr,
     };
     const VmaAllocatorCreateInfo create_info{
-        .physicalDevice = physical_device_,
-        .device = device_,
+        .physicalDevice = static_cast<VkPhysicalDevice>(physical_device_),
+        .device = static_cast<VkDevice>(device_),
         .pVulkanFunctions = &functions,
-        .instance = instance_,
-        .vulkanApiVersion = VK_API_VERSION_1_3,
+        .instance = static_cast<VkInstance>(instance_),
+        .vulkanApiVersion = vk::ApiVersion13,
     };
-    CheckVkResult(vmaCreateAllocator(&create_info, &allocator_), "vmaCreateAllocator");
+    VulkanCheck(static_cast<vk::Result>(vmaCreateAllocator(&create_info, &allocator_)), "vmaCreateAllocator");
 }
 
 void DeviceContext::WaitIdle() const
 {
-    Vulkan::DeviceWaitIdle(device_);
+    VulkanValue(device_.waitIdle(), "vkDeviceWaitIdle");
 }
 
-VkCommandBuffer DeviceContext::BeginOneTimeCommands() const
+vk::CommandBuffer DeviceContext::BeginOneTimeCommands() const
 {
-    const VkCommandBufferAllocateInfo allocate_info{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = one_time_pool_,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-    const auto command_buffers = Vulkan::AllocateCommandBuffers(device_, allocate_info);
-    const VkCommandBuffer command_buffer = command_buffers.front();
+    const auto allocate_info = vk::CommandBufferAllocateInfo{}
+                                   .setCommandPool(one_time_pool_)
+                                   .setLevel(vk::CommandBufferLevel::ePrimary)
+                                   .setCommandBufferCount(1);
+    const auto command_buffers = VulkanValue(device_.allocateCommandBuffers(allocate_info), "vkAllocateCommandBuffers");
+    const vk::CommandBuffer command_buffer = command_buffers.front();
 
-    const VkCommandBufferBeginInfo begin_info{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-    };
-    Vulkan::BeginCommandBuffer(command_buffer, begin_info);
+    const auto begin_info = vk::CommandBufferBeginInfo{}.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+    VulkanValue(command_buffer.begin(begin_info), "vkBeginCommandBuffer");
     return command_buffer;
 }
 
-void DeviceContext::EndOneTimeCommands(VkCommandBuffer command_buffer) const
+void DeviceContext::EndOneTimeCommands(vk::CommandBuffer command_buffer) const
 {
-    Vulkan::EndCommandBuffer(command_buffer);
+    VulkanValue(command_buffer.end(), "vkEndCommandBuffer");
 
-    const std::array command_buffer_infos{VkCommandBufferSubmitInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-        .commandBuffer = command_buffer,
-    }};
-    const std::array submit_infos{VkSubmitInfo2{
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-        .commandBufferInfoCount = command_buffer_infos.size(),
-        .pCommandBufferInfos = command_buffer_infos.data(),
-    }};
-    Vulkan::QueueSubmit2(graphics_queue_, submit_infos);
-    Vulkan::QueueWaitIdle(graphics_queue_);
+    const std::array command_buffer_infos{vk::CommandBufferSubmitInfo{}.setCommandBuffer(command_buffer)};
+    const std::array submit_infos{vk::SubmitInfo2{}.setCommandBufferInfos(command_buffer_infos)};
+    VulkanValue(graphics_queue_.submit2(submit_infos), "vkQueueSubmit2");
+    VulkanValue(graphics_queue_.waitIdle(), "vkQueueWaitIdle");
     const std::array command_buffers{command_buffer};
-    Vulkan::FreeCommandBuffers(device_, one_time_pool_, command_buffers);
+    device_.freeCommandBuffers(one_time_pool_, command_buffers);
 }
 
-VkShaderModule DeviceContext::CreateShaderModule(std::string_view spirv_bytes, std::string_view debug_name) const
+vk::ShaderModule DeviceContext::CreateShaderModule(std::string_view spirv_bytes, std::string_view debug_name) const
 {
     ErrorHandling::Ensure(
         spirv_bytes.size() % sizeof(u32) == 0 && !spirv_bytes.empty(),
@@ -394,12 +341,10 @@ VkShaderModule DeviceContext::CreateShaderModule(std::string_view spirv_bytes, s
         debug_name,
         spirv_bytes.size());
 
-    const VkShaderModuleCreateInfo create_info{
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = spirv_bytes.size(),
-        .pCode = reinterpret_cast<const u32*>(spirv_bytes.data()),  // NOLINT
-    };
-    return Vulkan::CreateShaderModule(device_, create_info);
+    const auto create_info = vk::ShaderModuleCreateInfo{}
+                                 .setCodeSize(spirv_bytes.size())
+                                 .setPCode(reinterpret_cast<const u32*>(spirv_bytes.data()));  // NOLINT
+    return VulkanValue(device_.createShaderModule(create_info), "vkCreateShaderModule");
 }
 
 }  // namespace klvk

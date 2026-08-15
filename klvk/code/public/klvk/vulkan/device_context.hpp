@@ -39,11 +39,11 @@ public:
     DeviceContext(DeviceContext&&) = delete;
     ~DeviceContext();
 
-    [[nodiscard]] VkInstance GetInstance() const noexcept { return instance_; }
-    [[nodiscard]] VkSurfaceKHR GetSurface() const noexcept { return surface_; }
-    [[nodiscard]] VkPhysicalDevice GetPhysicalDevice() const noexcept { return physical_device_; }
-    [[nodiscard]] VkDevice GetDevice() const noexcept { return device_; }
-    [[nodiscard]] VkQueue GetGraphicsQueue() const noexcept { return graphics_queue_; }
+    [[nodiscard]] vk::Instance GetInstance() const noexcept { return instance_; }
+    [[nodiscard]] vk::SurfaceKHR GetSurface() const noexcept { return surface_; }
+    [[nodiscard]] vk::PhysicalDevice GetPhysicalDevice() const noexcept { return physical_device_; }
+    [[nodiscard]] vk::Device GetDevice() const noexcept { return device_; }
+    [[nodiscard]] vk::Queue GetGraphicsQueue() const noexcept { return graphics_queue_; }
     [[nodiscard]] u32 GetGraphicsQueueFamily() const noexcept { return graphics_queue_family_; }
     [[nodiscard]] VmaAllocator GetAllocator() const noexcept { return allocator_; }
 
@@ -54,7 +54,7 @@ public:
     [[nodiscard]] bool IsTessellationShaderEnabled() const noexcept { return tessellation_shader_enabled_; }
 
     // True when VK_KHR_external_memory_fd was available and enabled, which lets device
-    // memory allocated here be exported as an opaque fd and imported by another API (e.g. CUDA).
+    // memory allocated here be exported as an opaque fd and imported by an external API.
     [[nodiscard]] bool IsExternalMemoryFdEnabled() const noexcept { return external_memory_fd_enabled_; }
 
     void WaitIdle() const;
@@ -63,20 +63,21 @@ public:
     template <typename F>
     void SubmitOneTimeCommands(F&& record) const
     {
-        VkCommandBuffer command_buffer = BeginOneTimeCommands();
+        vk::CommandBuffer command_buffer = BeginOneTimeCommands();
         std::forward<F>(record)(command_buffer);
         EndOneTimeCommands(command_buffer);
     }
 
-    [[nodiscard]] VkShaderModule CreateShaderModule(std::string_view spirv_bytes, std::string_view debug_name) const;
+    [[nodiscard]] vk::ShaderModule CreateShaderModule(std::string_view spirv_bytes, std::string_view debug_name) const;
     void InitializeShaderCache(const std::filesystem::path& source_root, const std::filesystem::path& cache_root = {});
     [[nodiscard]] ShaderModule LoadShaderModule(const std::filesystem::path& source_path) const;
-    [[nodiscard]] VkShaderModule CreateShaderModuleFromSourceUnchecked(const std::filesystem::path& source_path) const;
+    [[nodiscard]] vk::ShaderModule CreateShaderModuleFromSourceUnchecked(
+        const std::filesystem::path& source_path) const;
     [[nodiscard]] ShaderCacheManager& GetShaderCacheManager() const;
 
 private:
-    [[nodiscard]] VkCommandBuffer BeginOneTimeCommands() const;
-    void EndOneTimeCommands(VkCommandBuffer command_buffer) const;
+    [[nodiscard]] vk::CommandBuffer BeginOneTimeCommands() const;
+    void EndOneTimeCommands(vk::CommandBuffer command_buffer) const;
 
     void CreateInstance(const Settings& settings, const Window* presentation_window);
     void CreateDebugMessenger();
@@ -84,15 +85,15 @@ private:
     void CreateDevice();
     void CreateAllocator();
 
-    VkInstance instance_ = VK_NULL_HANDLE;
-    VkDebugUtilsMessengerEXT debug_messenger_ = VK_NULL_HANDLE;
-    VkSurfaceKHR surface_ = VK_NULL_HANDLE;
-    VkPhysicalDevice physical_device_ = VK_NULL_HANDLE;
-    VkDevice device_ = VK_NULL_HANDLE;
-    VkQueue graphics_queue_ = VK_NULL_HANDLE;
+    vk::Instance instance_ = nullptr;
+    vk::DebugUtilsMessengerEXT debug_messenger_ = nullptr;
+    vk::SurfaceKHR surface_ = nullptr;
+    vk::PhysicalDevice physical_device_ = nullptr;
+    vk::Device device_ = nullptr;
+    vk::Queue graphics_queue_ = nullptr;
     u32 graphics_queue_family_ = 0;
-    VmaAllocator allocator_ = VK_NULL_HANDLE;
-    VkCommandPool one_time_pool_ = VK_NULL_HANDLE;
+    VmaAllocator allocator_ = nullptr;
+    vk::CommandPool one_time_pool_ = nullptr;
     bool geometry_shader_enabled_ = false;
     bool tessellation_shader_enabled_ = false;
     bool external_memory_fd_enabled_ = false;

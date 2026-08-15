@@ -24,27 +24,27 @@ class GpuBuffer
 {
 public:
     GpuBuffer() = default;
-    GpuBuffer(DeviceContext& context, VkBufferUsageFlags usage, VkDeviceSize size, bool host_visible);
-    GpuBuffer(DeviceContext& context, VkBufferUsageFlags usage, VkDeviceSize size, GpuBufferHostAccess host_access);
+    GpuBuffer(DeviceContext& context, vk::BufferUsageFlags usage, vk::DeviceSize size, bool host_visible);
+    GpuBuffer(DeviceContext& context, vk::BufferUsageFlags usage, vk::DeviceSize size, GpuBufferHostAccess host_access);
     GpuBuffer(const GpuBuffer&) = delete;
     GpuBuffer(GpuBuffer&& other) noexcept;
     GpuBuffer& operator=(GpuBuffer&& other) noexcept;
     ~GpuBuffer();
 
-    [[nodiscard]] bool IsValid() const noexcept { return buffer_ != VK_NULL_HANDLE; }
-    [[nodiscard]] VkBuffer GetHandle() const noexcept { return buffer_; }
-    [[nodiscard]] VkDeviceSize GetSize() const noexcept { return size_; }
+    [[nodiscard]] bool IsValid() const noexcept { return buffer_ != nullptr; }
+    [[nodiscard]] vk::Buffer GetHandle() const noexcept { return buffer_; }
+    [[nodiscard]] vk::DeviceSize GetSize() const noexcept { return size_; }
 
-    void Write(std::span<const std::byte> bytes, VkDeviceSize offset = 0);
-    void Read(std::span<std::byte> bytes, VkDeviceSize offset = 0) const;
+    void Write(std::span<const std::byte> bytes, vk::DeviceSize offset = 0);
+    void Read(std::span<std::byte> bytes, vk::DeviceSize offset = 0) const;
 
 private:
     void Destroy();
 
     DeviceContext* context_ = nullptr;
-    VkBuffer buffer_ = VK_NULL_HANDLE;
-    VmaAllocation allocation_ = VK_NULL_HANDLE;
-    VkDeviceSize size_ = 0;
+    vk::Buffer buffer_ = nullptr;
+    VmaAllocation allocation_ = nullptr;
+    vk::DeviceSize size_ = 0;
     void* mapped_ = nullptr;
     GpuBufferHostAccess host_access_ = GpuBufferHostAccess::None;
 };

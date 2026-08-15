@@ -59,7 +59,7 @@ public:
     // Records the copies for everything added since the last call, and the barrier
     // that makes them visible to sampling. Call before beginning the pass that
     // draws the text, with the frame slot being recorded.
-    void RecordPendingUploads(VkCommandBuffer command_buffer, size_t frame_index);
+    void RecordPendingUploads(vk::CommandBuffer command_buffer, size_t frame_index);
 
     [[nodiscard]] std::optional<Glyph> Find(char32_t codepoint) const;
     [[nodiscard]] bool Contains(char32_t codepoint) const { return glyphs_.contains(codepoint); }

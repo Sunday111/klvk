@@ -20,7 +20,7 @@ FractalPushConstants MakeFractalPushConstants(const FractalSettings& settings, c
     return push_constants;
 }
 
-VkPipeline CreateFullscreenPipeline(
+vk::Pipeline CreateFullscreenPipeline(
     klvk::Application& app,
     const klvk::PipelineLayout& pipeline_layout,
     const klvk::ShaderStages& stages)
@@ -28,25 +28,25 @@ VkPipeline CreateFullscreenPipeline(
     return klvk::GraphicsPipelineBuilder(app).Layout(pipeline_layout).Stages(stages).Build();
 }
 
-void CmdSetGlStyleViewport(VkCommandBuffer command_buffer, const klvk::Viewport& viewport, edt::Vec2u32 framebuffer)
+void CmdSetGlStyleViewport(vk::CommandBuffer command_buffer, const klvk::Viewport& viewport, edt::Vec2u32 framebuffer)
 {
     const auto position = viewport.position.Cast<float>();
     const auto size = viewport.size.Cast<float>();
-    const VkViewport vk_viewport{
-        .x = position.x(),
-        .y = static_cast<float>(framebuffer.y()) - position.y(),
-        .width = size.x(),
-        .height = -size.y(),
-        .minDepth = 0.f,
-        .maxDepth = 1.f,
-    };
-    klvk::Vulkan::CmdSetViewport(command_buffer, 0, std::span{&vk_viewport, 1});
+    const vk::Viewport vk_viewport = vk::Viewport{}
+                                         .setX(position.x())
+                                         .setY(static_cast<float>(framebuffer.y()) - position.y())
+                                         .setWidth(size.x())
+                                         .setHeight(-size.y())
+                                         .setMinDepth(0.f)
+                                         .setMaxDepth(1.f);
+    command_buffer.setViewport(0, std::span{&vk_viewport, 1});
 
-    const VkRect2D scissor{
-        .offset =
-            {.x = static_cast<i32>(viewport.position.x()),
-             .y = static_cast<i32>(framebuffer.y() - viewport.position.y() - viewport.size.y())},
-        .extent = {.width = viewport.size.x(), .height = viewport.size.y()},
-    };
-    klvk::Vulkan::CmdSetScissor(command_buffer, 0, std::span{&scissor, 1});
+    const vk::Rect2D scissor =
+        vk::Rect2D{}
+            .setOffset(
+                vk::Offset2D{
+                    static_cast<i32>(viewport.position.x()),
+                    static_cast<i32>(framebuffer.y() - viewport.position.y() - viewport.size.y())})
+            .setExtent(vk::Extent2D{viewport.size.x(), viewport.size.y()});
+    command_buffer.setScissor(0, std::span{&scissor, 1});
 }

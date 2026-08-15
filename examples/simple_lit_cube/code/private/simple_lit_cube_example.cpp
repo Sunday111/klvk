@@ -17,8 +17,8 @@
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
-#include "klvk/vulkan/vk_object.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
+#include "klvk/vulkan/vulkan_object.hpp"
 #include "klvk/window.hpp"
 
 using namespace edt::lazy_matrix_aliases;  // NOLINT
@@ -72,13 +72,13 @@ class SimpleLitCubeApp : public klvk::Application
         index_count_ = static_cast<u32>(mesh.indices.size());
         vertex_buffer_ = klvk::GpuBuffer(
             context,
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            vk::BufferUsageFlagBits::eVertexBuffer,
             vertices.size() * sizeof(vertices.front()),
             true);
         vertex_buffer_.Write(std::as_bytes(std::span{vertices}));
         index_buffer_ = klvk::GpuBuffer(
             context,
-            VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            vk::BufferUsageFlagBits::eIndexBuffer,
             mesh.indices.size() * sizeof(mesh.indices.front()),
             true);
         index_buffer_.Write(std::as_bytes(std::span{mesh.indices}));
@@ -105,39 +105,37 @@ class SimpleLitCubeApp : public klvk::Application
         descriptor_sets_ = klvk::DescriptorSets::Builder(context)
                                .Binding(
                                    0,
-                                   VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                                   VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+                                   vk::DescriptorType::eUniformBuffer,
+                                   vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment)
                                .Build(kFramesInFlight);
         for (size_t index = 0; index != kFramesInFlight; ++index)
         {
             uniform_buffers_[index] =
-                klvk::GpuBuffer(context, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(SceneUniforms), true);
+                klvk::GpuBuffer(context, vk::BufferUsageFlagBits::eUniformBuffer, sizeof(SceneUniforms), true);
             descriptor_sets_.WriteBuffer(index, 0, uniform_buffers_[index].GetHandle(), sizeof(SceneUniforms));
         }
     }
 
-    void CreatePipeline(klvk::DeviceContext& context, VkPrimitiveTopology topology)
+    void CreatePipeline(klvk::DeviceContext& context, vk::PrimitiveTopology topology)
     {
-        VkDevice device = context.GetDevice();
-        const VkPushConstantRange push_constant_range{
-            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-            .size = sizeof(ModelPushConstants),
-        };
+        vk::Device device = context.GetDevice();
+        const vk::PushConstantRange push_constant_range =
+            vk::PushConstantRange{}.setStageFlags(vk::ShaderStageFlagBits::eVertex).setSize(sizeof(ModelPushConstants));
         const auto set_layout = descriptor_sets_.GetLayoutView();
         pipeline_layout_ = klvk::PipelineLayout{context, std::span{&set_layout, 1}, std::span{&push_constant_range, 1}};
 
         const std::filesystem::path shader_dir = GetShaderDir() / "basic_light_3d";
-        pipeline_ = klvk::VkObject<VkPipeline>{
+        pipeline_ = klvk::VulkanObject<vk::Pipeline>{
             device,
             klvk::GraphicsPipelineBuilder(*this)
                 .Layout(pipeline_layout_)
                 .VertexShaderFile(shader_dir / "basic_light_3d.vert.slang")
                 .FragmentShaderFile(shader_dir / "basic_light_3d.frag.slang")
                 .Topology(topology)
-                .CullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE)
-                .VertexBinding(0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX)
-                .VertexAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position))
-                .VertexAttribute(1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, normal))
+                .CullMode(vk::CullModeFlagBits::eBack, vk::FrontFace::eClockwise)
+                .VertexBinding(0, sizeof(Vertex), vk::VertexInputRate::eVertex)
+                .VertexAttribute(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, position))
+                .VertexAttribute(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, normal))
                 .DepthTest()
                 .Build()};
     }
@@ -163,19 +161,19 @@ class SimpleLitCubeApp : public klvk::Application
         const size_t frame_index = GetFrameInFlightIndex();
         uniform_buffers_[frame_index].Write(std::as_bytes(std::span{&uniforms, 1}));
 
-        VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
-        const VkBuffer vertex_buffer = vertex_buffer_.GetHandle();
-        constexpr VkDeviceSize offset = 0;
-        const VkDescriptorSet descriptor_set = descriptor_sets_.Get(frame_index);
-        klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-        klvk::Vulkan::CmdBindDescriptorSets(
-            command_buffer,
-            VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vk::CommandBuffer command_buffer = GetCurrentCommandBuffer();
+        const vk::Buffer vertex_buffer = vertex_buffer_.GetHandle();
+        constexpr vk::DeviceSize offset = 0;
+        const vk::DescriptorSet descriptor_set = descriptor_sets_.Get(frame_index);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+        command_buffer.bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics,
             pipeline_layout_.GetHandle(),
             0,
-            std::span{&descriptor_set, 1});
-        klvk::Vulkan::CmdBindVertexBuffers(command_buffer, 0, std::span{&vertex_buffer, 1}, std::span{&offset, 1});
-        klvk::Vulkan::CmdBindIndexBuffer(command_buffer, index_buffer_.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
+            std::span{&descriptor_set, 1},
+            {});
+        command_buffer.bindVertexBuffers(0, std::span{&vertex_buffer, 1}, std::span{&offset, 1});
+        command_buffer.bindIndexBuffer(index_buffer_.GetHandle(), 0, vk::IndexType::eUint32);
         for (const edt::Mat4f& model : cubes_)
         {
             ModelPushConstants model_constants;
@@ -183,13 +181,13 @@ class SimpleLitCubeApp : public klvk::Application
             {
                 model_constants.columns[column] = model.GetColumn(column);
             }
-            klvk::Vulkan::CmdPushConstants(
-                command_buffer,
+            command_buffer.pushConstants(
                 pipeline_layout_.GetHandle(),
-                VK_SHADER_STAGE_VERTEX_BIT,
+                vk::ShaderStageFlagBits::eVertex,
                 0,
-                model_constants);
-            klvk::Vulkan::CmdDrawIndexed(command_buffer, index_count_, 1, 0, 0, 0);
+                sizeof(model_constants),
+                &model_constants);
+            command_buffer.drawIndexed(index_count_, 1, 0, 0, 0);
         }
 
         if (ImGui::Begin("Settings"))
@@ -239,7 +237,7 @@ private:
     std::array<klvk::GpuBuffer, kFramesInFlight> uniform_buffers_;
     klvk::DescriptorSets descriptor_sets_;
     klvk::PipelineLayout pipeline_layout_;
-    klvk::VkObject<VkPipeline> pipeline_;
+    klvk::VulkanObject<vk::Pipeline> pipeline_;
     u32 index_count_ = 0;
     float move_speed_ = 5.f;
     std::vector<edt::Mat4f> cubes_;

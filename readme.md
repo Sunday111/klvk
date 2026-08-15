@@ -3,7 +3,7 @@
 Vulkan rendering library. A Vulkan counterpart of [klgl](https://github.com/Sunday111/klgl) with the same high-level
 API (`Application`, `Window`, events, camera) built on Vulkan 1.3 with dynamic rendering.
 
-- Function loading via [volk](https://github.com/zeux/volk).
+- Vulkan API types and dynamic dispatch via [Vulkan-Hpp](https://github.com/KhronosGroup/Vulkan-Hpp).
 - Memory management via [VulkanMemoryAllocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator).
 - Slang shaders are staged at build time and compiled to SPIR-V on demand, then cached on disk.
 - Slang shader files must currently be self-contained. Imports and includes fail explicitly until persistent shader
@@ -38,7 +38,7 @@ of it must name.
 
 Depth and stencil are enabled independently. `Application::SetStencilBufferEnabled` attaches the stencil plane and
 clears it to zero each frame without turning on depth testing, which is what a stencil-only technique wants.
-`GraphicsPipelineBuilder::StencilTest` takes the front and back `VkStencilOpState` and declares the stencil
+`GraphicsPipelineBuilder::StencilTest` takes the front and back `vk::StencilOpState` and declares the stencil
 attachment format on its own, `DynamicStencilMasks` moves compare mask, write mask and reference to the command
 buffer so one pipeline covers every combination, and `ColorWriteMask(0)` gives a pass that accumulates coverage
 without touching color.
@@ -276,18 +276,12 @@ yae run klvk_falling_sand_example -- --klvk-diagnostics /tmp/session.json --klvk
 For repeatable main-versus-branch rendering checks, see the
 [diagnostic smoke-test suite](diagnostics/smoke/readme.md).
 
-## Vulkan API wrappers
+## Vulkan API
 
-`klvk::Vulkan` provides three forms for Vulkan calls that return `VkResult`:
+Include `klvk/vulkan/vulkan.hpp` for the project's Vulkan-Hpp configuration. It provides dynamic dispatch without
+Vulkan prototypes or Vulkan-Hpp exceptions and uses `std::expected` for enhanced calls.
 
-- `NE` invokes Vulkan without error handling and returns the raw result plus any typed output.
-- `CE` returns failures as `VulkanError` through `tl::expected` or `std::optional`, without throwing.
-- The unsuffixed form delegates to `CE` and throws the same `VulkanError`.
-
-`VulkanError` preserves the `VkResult`, call context, and captured stack trace. Expected runtime conditions are typed
-outcomes instead of exceptions—for example, acquire, present, and fence-wait statuses include suboptimal, out-of-date,
-not-ready, and timeout states where applicable.
-
-Wrappers are compiled into `klvk` by default. Configure with `-DKLVK_INLINE_VULKAN_WRAPPERS=ON` to include their
-implementations inline from the public header instead. The CMake option applies the corresponding definition to the
-library and its consumers consistently; do not override it per translation unit.
+`VulkanCheck` checks a `vk::Result`, while `VulkanValue` unwraps enhanced calls returning
+`std::expected<T, vk::Result>`. Both throw `VulkanError` on failure with the `vk::Result`, operation context, and a
+captured stack trace. Operations with multiple ordinary outcomes, such as swapchain acquire and present, are handled
+directly from their Vulkan-Hpp results.

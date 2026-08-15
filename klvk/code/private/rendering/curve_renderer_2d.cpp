@@ -8,7 +8,7 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk
 {
@@ -36,33 +36,31 @@ static_assert(sizeof(PushConstants) == 64);
 // CompositeMode::Union takes the per-channel MAX so overlapping/self-intersecting
 // coverage unions instead of alpha-over double-blending; it is correct only over a
 // black/transparent clear (the direct-to-target consumers clear to (0,0,0,0)).
-constexpr VkPipelineColorBlendAttachmentState kUnionBlend{
-    .blendEnable = VK_TRUE,
-    .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,  // factors ignored by MAX; must be valid enums
-    .dstColorBlendFactor = VK_BLEND_FACTOR_ONE,
-    .colorBlendOp = VK_BLEND_OP_MAX,
-    .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-    .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-    .alphaBlendOp = VK_BLEND_OP_MAX,
-    .colorWriteMask =
-        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-};
+constexpr auto kColorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                                 vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+constexpr auto kUnionBlend = vk::PipelineColorBlendAttachmentState{}
+                                 .setBlendEnable(true)
+                                 .setSrcColorBlendFactor(vk::BlendFactor::eOne)
+                                 .setDstColorBlendFactor(vk::BlendFactor::eOne)
+                                 .setColorBlendOp(vk::BlendOp::eMax)
+                                 .setSrcAlphaBlendFactor(vk::BlendFactor::eOne)
+                                 .setDstAlphaBlendFactor(vk::BlendFactor::eOne)
+                                 .setAlphaBlendOp(vk::BlendOp::eMax)
+                                 .setColorWriteMask(kColorWriteMask);
 
 // CompositeMode::Accumulate is premultiplied alpha-over - identical to straight
 // alpha-over for the composited result, so many stacked or frame-accumulated
 // strokes build up additively as before, now antialiased. Correct over any
 // background; use this when curves accumulate into a persistent target.
-constexpr VkPipelineColorBlendAttachmentState kAccumulateBlend{
-    .blendEnable = VK_TRUE,
-    .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
-    .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-    .colorBlendOp = VK_BLEND_OP_ADD,
-    .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-    .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-    .alphaBlendOp = VK_BLEND_OP_ADD,
-    .colorWriteMask =
-        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-};
+constexpr auto kAccumulateBlend = vk::PipelineColorBlendAttachmentState{}
+                                      .setBlendEnable(true)
+                                      .setSrcColorBlendFactor(vk::BlendFactor::eOne)
+                                      .setDstColorBlendFactor(vk::BlendFactor::eOneMinusSrcAlpha)
+                                      .setColorBlendOp(vk::BlendOp::eAdd)
+                                      .setSrcAlphaBlendFactor(vk::BlendFactor::eOne)
+                                      .setDstAlphaBlendFactor(vk::BlendFactor::eOneMinusSrcAlpha)
+                                      .setAlphaBlendOp(vk::BlendOp::eAdd)
+                                      .setColorWriteMask(kColorWriteMask);
 
 size_t GrowCapacity(size_t required)
 {
@@ -84,7 +82,7 @@ CurveRenderer2d::CurveRenderer2d(Application& app)
 {
 }
 
-CurveRenderer2d::CurveRenderer2d(Application& app, VkFormat color_format, CompositeMode composite)
+CurveRenderer2d::CurveRenderer2d(Application& app, vk::Format color_format, CompositeMode composite)
     : app_(&app),
       composite_(composite)
 {
@@ -94,16 +92,12 @@ CurveRenderer2d::CurveRenderer2d(Application& app, VkFormat color_format, Compos
         "CurveRenderer2d requires Vulkan tessellation-shader support");
     ErrorHandling::Ensure(context.IsGeometryShaderEnabled(), "CurveRenderer2d requires Vulkan geometry-shader support");
 
-    constexpr VkShaderStageFlags push_stages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
-                                               VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
-                                               VK_SHADER_STAGE_GEOMETRY_BIT;
-    const std::array push_ranges{VkPushConstantRange{
-        .stageFlags = push_stages,
-        .offset = 0,
-        .size = sizeof(PushConstants),
-    }};
+    constexpr vk::ShaderStageFlags push_stages =
+        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eTessellationControl |
+        vk::ShaderStageFlagBits::eTessellationEvaluation | vk::ShaderStageFlagBits::eGeometry;
+    const std::array push_ranges{vk::PushConstantRange{push_stages, 0, sizeof(PushConstants)}};
     pipeline_layout_ = PipelineLayout{context, {}, push_ranges};
-    pipeline_ = VkObject<VkPipeline>{
+    pipeline_ = VulkanObject<vk::Pipeline>{
         context.GetDevice(),
         GraphicsPipelineBuilder(app)
             .Layout(pipeline_layout_)
@@ -112,11 +106,11 @@ CurveRenderer2d::CurveRenderer2d(Application& app, VkFormat color_format, Compos
             .TessellationEvaluationShaderFile(app.GetShaderDir() / "klvk/curve2d.domain.slang")
             .GeometryShaderFile(app.GetShaderDir() / "klvk/curve2d.geom.slang")
             .FragmentShaderFile(app.GetShaderDir() / "klvk/curve2d.frag.slang")
-            .Topology(VK_PRIMITIVE_TOPOLOGY_PATCH_LIST)
+            .Topology(vk::PrimitiveTopology::ePatchList)
             .PatchControlPoints(6)
-            .VertexBinding(0, sizeof(ControlPoint), VK_VERTEX_INPUT_RATE_VERTEX)
-            .VertexAttribute(0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(ControlPoint, position))
-            .VertexAttribute(1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(ControlPoint, color))
+            .VertexBinding(0, sizeof(ControlPoint), vk::VertexInputRate::eVertex)
+            .VertexAttribute(0, 0, vk::Format::eR32G32Sfloat, offsetof(ControlPoint, position))
+            .VertexAttribute(1, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(ControlPoint, color))
             .Blend(composite == CompositeMode::Accumulate ? kAccumulateBlend : kUnionBlend)
             .ColorFormat(color_format)
             .Build()};
@@ -134,7 +128,7 @@ void CurveRenderer2d::EnsureBuffers(size_t frame_index, size_t vertex_bytes, siz
     {
         vertex_buffer = GpuBuffer(
             app_->GetDeviceContext(),
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            vk::BufferUsageFlagBits::eVertexBuffer,
             GrowCapacity(vertex_bytes),
             GpuBufferHostAccess::SequentialWrite);
     }
@@ -143,7 +137,7 @@ void CurveRenderer2d::EnsureBuffers(size_t frame_index, size_t vertex_bytes, siz
     {
         index_buffer = GpuBuffer(
             app_->GetDeviceContext(),
-            VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            vk::BufferUsageFlagBits::eIndexBuffer,
             GrowCapacity(index_bytes),
             GpuBufferHostAccess::SequentialWrite);
     }
@@ -202,20 +196,19 @@ void CurveRenderer2d::Draw(
         .segment_pixel_length = segment_pixel_length,
         .antialias = composite_ == CompositeMode::Union ? 1.f : 0.f,
     };
-    const VkCommandBuffer command_buffer = app_->GetCurrentCommandBuffer();
+    const vk::CommandBuffer command_buffer = app_->GetCurrentCommandBuffer();
     const std::array vertex_buffers{vertex_buffers_[frame].GetHandle()};
-    constexpr std::array<VkDeviceSize, 1> offsets{0};
-    Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-    Vulkan::CmdBindVertexBuffers(command_buffer, 0, vertex_buffers, offsets);
-    Vulkan::CmdBindIndexBuffer(command_buffer, index_buffers_[frame].GetHandle(), 0, VK_INDEX_TYPE_UINT32);
-    Vulkan::CmdPushConstants(
-        command_buffer,
+    constexpr std::array<vk::DeviceSize, 1> offsets{0};
+    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+    command_buffer.bindVertexBuffers(0, vertex_buffers, offsets);
+    command_buffer.bindIndexBuffer(index_buffers_[frame].GetHandle(), 0, vk::IndexType::eUint32);
+    command_buffer.pushConstants<PushConstants>(
         pipeline_layout_.GetHandle(),
-        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
-            VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_GEOMETRY_BIT,
+        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eTessellationControl |
+            vk::ShaderStageFlagBits::eTessellationEvaluation | vk::ShaderStageFlagBits::eGeometry,
         0,
         constants);
-    Vulkan::CmdDrawIndexed(command_buffer, static_cast<u32>(indices_.size()), 1, 0, 0, 0);
+    command_buffer.drawIndexed(static_cast<u32>(indices_.size()), 1, 0, 0, 0);
 }
 
 }  // namespace klvk

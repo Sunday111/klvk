@@ -6,7 +6,6 @@
         "Public": [
             "imgui_sources",
             "glfw",
-            "volk",
             "vulkan_headers"
         ],
         "Private": []

@@ -17,7 +17,7 @@ class ImGuiTextureViewer
 public:
     explicit ImGuiTextureViewer(
         std::string title,
-        VkSamplerCreateInfo sampler_info = RegisteredImGuiTexture::DefaultSamplerCreateInfo())
+        vk::SamplerCreateInfo sampler_info = RegisteredImGuiTexture::DefaultSamplerCreateInfo())
         : title_{std::move(title)},
           sampler_info_{sampler_info}
     {
@@ -26,19 +26,19 @@ public:
 
     void Draw(
         DeviceContext& context,
-        VkImageView image_view,
+        vk::ImageView image_view,
         edt::Vec2<u32> size,
         std::string_view description = {},
         bool* open = nullptr);
 
 private:
-    void RegisterTexture(DeviceContext& context, VkImageView image_view);
+    void RegisterTexture(DeviceContext& context, vk::ImageView image_view);
     [[nodiscard]] bool DrawSamplerControls();
 
     std::string title_;
-    VkSamplerCreateInfo sampler_info_{};
+    vk::SamplerCreateInfo sampler_info_{};
     DeviceContext* registered_context_ = nullptr;
-    VkImageView registered_view_ = VK_NULL_HANDLE;
+    vk::ImageView registered_view_ = nullptr;
     std::unique_ptr<RegisteredImGuiTexture> registered_texture_;
     float zoom_ = 1.f;
     bool fit_ = true;

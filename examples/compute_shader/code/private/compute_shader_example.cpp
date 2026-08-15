@@ -21,8 +21,8 @@
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
-#include "klvk/vulkan/vk_object.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
+#include "klvk/vulkan/vulkan_object.hpp"
 #include "klvk/window.hpp"
 
 namespace
@@ -80,22 +80,28 @@ class ComputeShaderApp : public klvk::Application
         GetEventManager().AddEventListener(*listener_);
 
         auto& context = GetDeviceContext();
-        descriptor_sets_ =
-            klvk::DescriptorSets::Builder(context)
-                .Binding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT)
-                .Build();
+        descriptor_sets_ = klvk::DescriptorSets::Builder(context)
+                               .Binding(
+                                   0,
+                                   vk::DescriptorType::eStorageBuffer,
+                                   vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eVertex)
+                               .Build();
 
         // The particle state persists across frames (klgl keeps one SSBO), so a
         // single buffer serves every frame; barriers order the accesses.
         const std::vector particles = MakeParticles();
-        const VkDeviceSize bytes = particles.size() * sizeof(Particle);
-        buffer_ = klvk::GpuBuffer(context, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, bytes, true);
+        const vk::DeviceSize bytes = particles.size() * sizeof(Particle);
+        buffer_ = klvk::GpuBuffer(context, vk::BufferUsageFlagBits::eStorageBuffer, bytes, true);
         buffer_.Write(std::as_bytes(std::span{particles}));
         descriptor_sets_.WriteBuffer(0, 0, buffer_.GetHandle(), bytes);
 
         const std::array ranges{
-            VkPushConstantRange{.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .size = sizeof(SimulationPushConstants)},
-            VkPushConstantRange{.stageFlags = VK_SHADER_STAGE_VERTEX_BIT, .size = sizeof(GraphicsPushConstants)},
+            vk::PushConstantRange{}
+                .setStageFlags(vk::ShaderStageFlagBits::eCompute)
+                .setSize(sizeof(SimulationPushConstants)),
+            vk::PushConstantRange{}
+                .setStageFlags(vk::ShaderStageFlagBits::eVertex)
+                .setSize(sizeof(GraphicsPushConstants)),
         };
         const auto set_layout = descriptor_sets_.GetLayoutView();
         pipeline_layout_ = klvk::PipelineLayout{context, std::span{&set_layout, 1}, ranges};
@@ -129,35 +135,37 @@ class ComputeShaderApp : public klvk::Application
         return context.LoadShaderModule(GetShaderDir() / "compute_shader" / name);
     }
 
-    VkPipeline CreateGraphicsPipeline(
+    vk::Pipeline CreateGraphicsPipeline(
         klvk::DeviceContext& context,
         const klvk::ShaderModule& vertex,
         const klvk::ShaderModule& fragment)
     {
-        klvk::ShaderStages stages{VK_SHADER_STAGE_VERTEX_BIT, vertex};
-        stages.Append(klvk::ShaderStages{VK_SHADER_STAGE_FRAGMENT_BIT, fragment});
+        klvk::ShaderStages stages{vk::ShaderStageFlagBits::eVertex, vertex};
+        stages.Append(klvk::ShaderStages{vk::ShaderStageFlagBits::eFragment, fragment});
         return CreateGraphicsPipeline(context, stages);
     }
 
-    VkPipeline CreateGraphicsPipeline(klvk::DeviceContext& context, const klvk::ShaderStages& stages)
+    vk::Pipeline CreateGraphicsPipeline(klvk::DeviceContext& context, const klvk::ShaderStages& stages)
     {
         // Straight-alpha color blend but with the destination alpha left untouched
         // (dstAlpha = ZERO), so this needs an explicit attachment rather than the
         // AlphaBlend() preset.
-        const VkPipelineColorBlendAttachmentState attachment{
-            .blendEnable = VK_TRUE,
-            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-            .colorBlendOp = VK_BLEND_OP_ADD,
-            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
-            .alphaBlendOp = VK_BLEND_OP_ADD,
-            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
-                              VK_COLOR_COMPONENT_A_BIT};
+        const vk::PipelineColorBlendAttachmentState attachment =
+            vk::PipelineColorBlendAttachmentState{}
+                .setBlendEnable(true)
+                .setSrcColorBlendFactor(vk::BlendFactor::eSrcAlpha)
+                .setDstColorBlendFactor(vk::BlendFactor::eOneMinusSrcAlpha)
+                .setColorBlendOp(vk::BlendOp::eAdd)
+                .setSrcAlphaBlendFactor(vk::BlendFactor::eOne)
+                .setDstAlphaBlendFactor(vk::BlendFactor::eZero)
+                .setAlphaBlendOp(vk::BlendOp::eAdd)
+                .setColorWriteMask(
+                    vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB |
+                    vk::ColorComponentFlagBits::eA);
         return klvk::GraphicsPipelineBuilder(context)
             .Layout(pipeline_layout_)
             .Stages(stages)
-            .Topology(VK_PRIMITIVE_TOPOLOGY_POINT_LIST)
+            .Topology(vk::PrimitiveTopology::ePointList)
             .Blend(attachment)
             .ColorFormat(GetSwapchainFormat())
             .Build();
@@ -165,20 +173,22 @@ class ComputeShaderApp : public klvk::Application
 
     void CreatePipelines(klvk::DeviceContext& context)
     {
-        const VkDevice device = context.GetDevice();
+        const vk::Device device = context.GetDevice();
         const klvk::ShaderModule compute = Load(context, "particles.comp.slang");
         const klvk::ShaderModule bodies_vertex = Load(context, "bodies.vert.slang");
         const klvk::ShaderModule fragment = Load(context, "particles.frag.slang");
-        const klvk::ShaderStages compute_stage{VK_SHADER_STAGE_COMPUTE_BIT, compute};
+        const klvk::ShaderStages compute_stage{vk::ShaderStageFlagBits::eCompute, compute};
         (void)pipeline_layout_.Validate(compute_stage);
-        const VkComputePipelineCreateInfo compute_info{
-            .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-            .stage = compute_stage.GetCreateInfos().front(),
-            .layout = pipeline_layout_.GetHandle()};
-        compute_pipeline_ = klvk::VkObject<VkPipeline>{
-            device,
-            klvk::Vulkan::CreateComputePipelines(device, {}, std::span{&compute_info, 1}).front()};
-        bodies_pipeline_ = klvk::VkObject<VkPipeline>{device, CreateGraphicsPipeline(context, bodies_vertex, fragment)};
+        const vk::ComputePipelineCreateInfo compute_info = vk::ComputePipelineCreateInfo{}
+                                                               .setStage(compute_stage.GetCreateInfos().front())
+                                                               .setLayout(pipeline_layout_.GetHandle());
+        std::array<vk::Pipeline, 1> pipelines{};
+        const vk::Result result = device.createComputePipelines(nullptr, 1, &compute_info, nullptr, pipelines.data());
+        klvk::VulkanObject<vk::Pipeline> compute_pipeline{device, pipelines.front()};
+        klvk::VulkanCheck(result, "vkCreateComputePipelines");
+        compute_pipeline_ = std::move(compute_pipeline);
+        bodies_pipeline_ =
+            klvk::VulkanObject<vk::Pipeline>{device, CreateGraphicsPipeline(context, bodies_vertex, fragment)};
 
         klvk::Shader::shaders_dir_ = GetShaderDir();
         particles_shader_ = std::make_unique<klvk::Shader>(context, "compute_shader/particles");
@@ -186,8 +196,7 @@ class ComputeShaderApp : public klvk::Application
         RebuildParticlesPipeline();
     }
 
-    // klgl recompiles the particle shader when COLOR_FUNCTION changes; the
-    // specialization constants in klvk::Shader require a pipeline rebuild the same way.
+    // Specialization constant changes take effect only when the pipeline is rebuilt.
     void RebuildParticlesPipeline()
     {
         auto& context = GetDeviceContext();
@@ -197,8 +206,10 @@ class ComputeShaderApp : public klvk::Application
         if (particles_pipeline_.IsValid()) context.WaitIdle();
 
         // The .comp stage belongs to the simulation pipeline, not this one.
-        const auto stages = particles_shader_->MakeStages(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-        particles_pipeline_ = klvk::VkObject<VkPipeline>{context.GetDevice(), CreateGraphicsPipeline(context, stages)};
+        const auto stages =
+            particles_shader_->MakeStages(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
+        particles_pipeline_ =
+            klvk::VulkanObject<vk::Pipeline>{context.GetDevice(), CreateGraphicsPipeline(context, stages)};
         particles_pipeline_shader_version_ = particles_shader_->GetVersion();
     }
 
@@ -242,16 +253,16 @@ class ComputeShaderApp : public klvk::Application
             RebuildParticlesPipeline();
         }
 
-        const VkDescriptorSet set = descriptor_sets_.Get(0);
-        const VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
+        const vk::DescriptorSet set = descriptor_sets_.Get(0);
+        const vk::CommandBuffer command_buffer = GetCurrentCommandBuffer();
         std::array<Vec4f, 2> bodies{};
-        klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline_);
-        klvk::Vulkan::CmdBindDescriptorSets(
-            command_buffer,
-            VK_PIPELINE_BIND_POINT_COMPUTE,
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline_);
+        command_buffer.bindDescriptorSets(
+            vk::PipelineBindPoint::eCompute,
             pipeline_layout_.GetHandle(),
             0,
-            std::span{&set, 1});
+            std::span{&set, 1},
+            {});
         for (int step = 0; step != time_steps_per_frame_; ++step)
         {
             bodies = UpdateBodies();
@@ -260,58 +271,58 @@ class ComputeShaderApp : public klvk::Application
                 .body_b = bodies[1],
                 .delta_time = time_step_,
                 .particle_count = kParticleCount};
-            klvk::Vulkan::CmdPushConstants(
-                command_buffer,
+            command_buffer.pushConstants(
                 pipeline_layout_.GetHandle(),
-                VK_SHADER_STAGE_COMPUTE_BIT,
+                vk::ShaderStageFlagBits::eCompute,
                 0,
-                simulation);
-            klvk::Vulkan::CmdDispatch(command_buffer, (kParticleCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
-            const VkBufferMemoryBarrier2 barrier{
-                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                .srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                .dstStageMask = step + 1 == time_steps_per_frame_ ? VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                                                                  : VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                .dstAccessMask = step + 1 == time_steps_per_frame_
-                                     ? VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-                                     : VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .buffer = buffer_.GetHandle(),
-                .size = VK_WHOLE_SIZE};
-            const VkDependencyInfo dependency{
-                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                .bufferMemoryBarrierCount = 1,
-                .pBufferMemoryBarriers = &barrier};
-            klvk::Vulkan::CmdPipelineBarrier2(command_buffer, dependency);
+                sizeof(simulation),
+                &simulation);
+            command_buffer.dispatch((kParticleCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
+            const vk::PipelineStageFlags2 destination_stage = step + 1 == time_steps_per_frame_
+                                                                  ? vk::PipelineStageFlagBits2::eVertexShader
+                                                                  : vk::PipelineStageFlagBits2::eComputeShader;
+            const vk::AccessFlags2 destination_access =
+                step + 1 == time_steps_per_frame_
+                    ? vk::AccessFlagBits2::eShaderStorageRead
+                    : vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite;
+            const vk::BufferMemoryBarrier2 barrier = vk::BufferMemoryBarrier2{}
+                                                         .setSrcStageMask(vk::PipelineStageFlagBits2::eComputeShader)
+                                                         .setSrcAccessMask(vk::AccessFlagBits2::eShaderStorageWrite)
+                                                         .setDstStageMask(destination_stage)
+                                                         .setDstAccessMask(destination_access)
+                                                         .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+                                                         .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+                                                         .setBuffer(buffer_.GetHandle())
+                                                         .setSize(vk::WholeSize);
+            const vk::DependencyInfo dependency = vk::DependencyInfo{}.setBufferMemoryBarriers(barrier);
+            command_buffer.pipelineBarrier2(dependency);
         }
         if (time_steps_per_frame_ == 0) bodies = UpdateBodies();
 
         GraphicsPushConstants graphics = MakeGraphicsConstants(bodies);
-        klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, particles_pipeline_);
-        klvk::Vulkan::CmdBindDescriptorSets(
-            command_buffer,
-            VK_PIPELINE_BIND_POINT_GRAPHICS,
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, particles_pipeline_);
+        command_buffer.bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics,
             pipeline_layout_.GetHandle(),
             0,
-            std::span{&set, 1});
-        klvk::Vulkan::CmdPushConstants(
-            command_buffer,
+            std::span{&set, 1},
+            {});
+        command_buffer.pushConstants(
             pipeline_layout_.GetHandle(),
-            VK_SHADER_STAGE_VERTEX_BIT,
+            vk::ShaderStageFlagBits::eVertex,
             0,
-            graphics);
-        klvk::Vulkan::CmdDraw(command_buffer, kParticleCount, 1, 0, 0);
+            sizeof(graphics),
+            &graphics);
+        command_buffer.draw(kParticleCount, 1, 0, 0);
         graphics.color = {1.f, 0.f, 0.f, 1.f};
-        klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, bodies_pipeline_);
-        klvk::Vulkan::CmdPushConstants(
-            command_buffer,
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, bodies_pipeline_);
+        command_buffer.pushConstants(
             pipeline_layout_.GetHandle(),
-            VK_SHADER_STAGE_VERTEX_BIT,
+            vk::ShaderStageFlagBits::eVertex,
             0,
-            graphics);
-        klvk::Vulkan::CmdDraw(command_buffer, 2, 1, 0, 0);
+            sizeof(graphics),
+            &graphics);
+        command_buffer.draw(2, 1, 0, 0);
         RenderGui();
     }
 
@@ -396,9 +407,9 @@ class ComputeShaderApp : public klvk::Application
 private:
     klvk::DescriptorSets descriptor_sets_;
     klvk::PipelineLayout pipeline_layout_;
-    klvk::VkObject<VkPipeline> compute_pipeline_;
-    klvk::VkObject<VkPipeline> particles_pipeline_;
-    klvk::VkObject<VkPipeline> bodies_pipeline_;
+    klvk::VulkanObject<vk::Pipeline> compute_pipeline_;
+    klvk::VulkanObject<vk::Pipeline> particles_pipeline_;
+    klvk::VulkanObject<vk::Pipeline> bodies_pipeline_;
     klvk::GpuBuffer buffer_;
     std::unique_ptr<klvk::events::IEventListener> listener_;
     klvk::Camera3d camera_{Vec3f{0.f, 15.f, 0.f}, {.yaw = -90.f}};

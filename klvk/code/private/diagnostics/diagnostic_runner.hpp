@@ -42,13 +42,13 @@ public:
     // a copy and leaves it in final_layout.
     bool RecordReadback(
         DeviceContext& context,
-        VkCommandBuffer command_buffer,
+        vk::CommandBuffer command_buffer,
         size_t frame_in_flight,
         bool include_ui,
-        VkImage image,
-        VkFormat format,
-        VkExtent2D extent,
-        VkImageLayout final_layout);
+        vk::Image image,
+        vk::Format format,
+        vk::Extent2D extent,
+        vk::ImageLayout final_layout);
 
     // Empty when the run requested no checkpoints. Ordered by frame.
     [[nodiscard]] const std::vector<DiagnosticCheckpoint>& GetCheckpoints() const noexcept { return checkpoints_; }
@@ -84,8 +84,8 @@ private:
     struct PendingCapture
     {
         GpuBuffer buffer;
-        VkFormat format = VK_FORMAT_UNDEFINED;
-        VkExtent2D extent{};
+        vk::Format format = vk::Format::eUndefined;
+        vk::Extent2D extent{};
         std::vector<std::filesystem::path> paths;
         std::optional<u64> video_frame;
         // Set when this readback exists to be hashed rather than written out.

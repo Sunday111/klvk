@@ -9,7 +9,7 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/pipeline_layout.hpp"
-#include "klvk/vulkan/vk_object.hpp"
+#include "klvk/vulkan/vulkan_object.hpp"
 
 namespace klvk
 {
@@ -38,7 +38,7 @@ public:
     };
 
     explicit CurveRenderer2d(Application& app);
-    CurveRenderer2d(Application& app, VkFormat color_format, CompositeMode composite = CompositeMode::Union);
+    CurveRenderer2d(Application& app, vk::Format color_format, CompositeMode composite = CompositeMode::Union);
     CurveRenderer2d(const CurveRenderer2d&) = delete;
     CurveRenderer2d(CurveRenderer2d&&) = delete;
     ~CurveRenderer2d();
@@ -59,7 +59,7 @@ private:
     Application* app_ = nullptr;
     CompositeMode composite_ = CompositeMode::Union;
     PipelineLayout pipeline_layout_;
-    VkObject<VkPipeline> pipeline_;
+    VulkanObject<vk::Pipeline> pipeline_;
     std::array<GpuBuffer, Application::kFramesInFlight> vertex_buffers_{};
     std::array<GpuBuffer, Application::kFramesInFlight> index_buffers_{};
     std::vector<u32> indices_;

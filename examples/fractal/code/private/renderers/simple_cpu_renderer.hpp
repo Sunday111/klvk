@@ -17,8 +17,8 @@ public:
     SimpleCpuRenderer(klvk::Application& app, size_t max_iterations);
     ~SimpleCpuRenderer() noexcept override;
 
-    void PrepareFrame(VkCommandBuffer command_buffer, const FractalSettings& settings) override;
-    void Render(VkCommandBuffer command_buffer, const FractalSettings& settings) override;
+    void PrepareFrame(vk::CommandBuffer command_buffer, const FractalSettings& settings) override;
+    void Render(vk::CommandBuffer command_buffer, const FractalSettings& settings) override;
     void ApplySettings(const FractalSettings& settings) override;
 
 private:
@@ -32,20 +32,20 @@ private:
     std::vector<edt::Vec4u8> image_buffer_;
 
     edt::Vec2<size_t> image_size_{};
-    VkImage image_ = VK_NULL_HANDLE;
-    VmaAllocation image_allocation_ = VK_NULL_HANDLE;
-    VkImageView image_view_ = VK_NULL_HANDLE;
-    VkSampler sampler_ = VK_NULL_HANDLE;
+    vk::Image image_ = nullptr;
+    VmaAllocation image_allocation_ = nullptr;
+    vk::ImageView image_view_ = nullptr;
+    vk::Sampler sampler_ = nullptr;
     bool image_initialized_ = false;
 
     std::array<klvk::GpuBuffer, klvk::Application::kFramesInFlight> staging_buffers_{};
 
     klvk::Shader fullscreen_shader_;
     klvk::Shader textured_quad_shader_;
-    VkDescriptorSetLayout set_layout_ = VK_NULL_HANDLE;
+    vk::DescriptorSetLayout set_layout_ = nullptr;
     klvk::DescriptorSetLayoutDescription set_layout_description_;
-    VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
-    VkDescriptorSet descriptor_set_ = VK_NULL_HANDLE;
+    vk::DescriptorPool descriptor_pool_ = nullptr;
+    vk::DescriptorSet descriptor_set_ = nullptr;
     klvk::PipelineLayout pipeline_layout_;
-    VkPipeline pipeline_ = VK_NULL_HANDLE;
+    vk::Pipeline pipeline_ = nullptr;
 };

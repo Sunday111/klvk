@@ -15,18 +15,18 @@ class ShaderStages
 {
 public:
     // ShaderStages owns all create-info and specialization backing storage, but
-    // borrows VkShaderModule handles. Their ShaderModule owners must outlive
+    // borrows vk::ShaderModule handles. Their ShaderModule owners must outlive
     // pipeline creation.
     ShaderStages() = default;
-    ShaderStages(VkShaderStageFlagBits stage, const ShaderModule& module);
+    ShaderStages(vk::ShaderStageFlagBits stage, const ShaderModule& module);
 
     ShaderStages(
-        std::vector<VkPipelineShaderStageCreateInfo> stages,
+        std::vector<vk::PipelineShaderStageCreateInfo> stages,
         std::vector<std::shared_ptr<const ShaderInterface>> interfaces,
-        std::vector<VkSpecializationMapEntry> specialization_entries = {},
+        std::vector<vk::SpecializationMapEntry> specialization_entries = {},
         std::vector<u32> specialization_values = {});
 
-    [[nodiscard]] std::span<const VkPipelineShaderStageCreateInfo> GetCreateInfos() const noexcept { return stages_; }
+    [[nodiscard]] std::span<const vk::PipelineShaderStageCreateInfo> GetCreateInfos() const noexcept { return stages_; }
 
     [[nodiscard]] const std::vector<std::shared_ptr<const ShaderInterface>>& GetInterfaces() const noexcept
     {
@@ -39,12 +39,12 @@ public:
 private:
     struct SpecializationStorage
     {
-        std::vector<VkSpecializationMapEntry> entries;
+        std::vector<vk::SpecializationMapEntry> entries;
         std::vector<u32> values;
-        VkSpecializationInfo info{};
+        vk::SpecializationInfo info{};
     };
 
-    std::vector<VkPipelineShaderStageCreateInfo> stages_;
+    std::vector<vk::PipelineShaderStageCreateInfo> stages_;
     std::vector<std::shared_ptr<const ShaderInterface>> interfaces_;
     std::vector<std::shared_ptr<SpecializationStorage>> specialization_storage_;
 };
