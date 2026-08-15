@@ -83,10 +83,7 @@ DeviceContext::DeviceContext(Window* presentation_window, const Settings& settin
 DeviceContext::~DeviceContext()
 {
     shader_cache_.reset();
-    if (device_)
-    {
-        (void)VULKAN_HPP_DEFAULT_DISPATCHER.vkDeviceWaitIdle(static_cast<VkDevice>(GetDevice()));
-    }
+    WaitIdleNoexcept();
     one_time_pool_.reset();
     if (allocator_) vmaDestroyAllocator(allocator_);
     allocator_ = nullptr;
@@ -309,6 +306,11 @@ void DeviceContext::CreateAllocator()
 void DeviceContext::WaitIdle() const
 {
     GetDevice().waitIdle();
+}
+
+void DeviceContext::WaitIdleNoexcept() const noexcept
+{
+    if (device_) (void)VULKAN_HPP_DEFAULT_DISPATCHER.vkDeviceWaitIdle(static_cast<VkDevice>(GetDevice()));
 }
 
 vk::CommandBuffer DeviceContext::BeginOneTimeCommands() const

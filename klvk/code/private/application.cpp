@@ -12,6 +12,7 @@
 #include "application_imgui.hpp"
 #include "diagnostics/diagnostic_runner.hpp"
 #include "diagnostics/input_recorder.hpp"
+#include "edt/functional/on_scope_leave.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/events/application_events.hpp"
 #include "klvk/events/event_listener_method.hpp"
@@ -334,6 +335,15 @@ void Application::Run()
 
 void Application::RunImpl()
 {
+    bool device_needs_emergency_wait = true;
+    auto wait_for_device_on_failure = edt::OnScopeLeave(
+        [this, &device_needs_emergency_wait]
+        {
+            if (device_needs_emergency_wait && state_->device_context_)
+            {
+                state_->device_context_->WaitIdleNoexcept();
+            }
+        });
     Initialize();
     // Recording is independent of replaying: the point is to capture an ordinary
     // interactive session, which has no diagnostic configuration at all.
@@ -380,6 +390,7 @@ void Application::RunImpl()
     if (state_->device_context_)
     {
         state_->device_context_->WaitIdle();
+        device_needs_emergency_wait = false;
         if (state_->diagnostic_runner_)
         {
             state_->diagnostic_runner_->ProcessAllCompleted();
@@ -397,6 +408,10 @@ void Application::RunImpl()
             }
             state_->diagnostic_runner_->EnsureComplete();
         }
+    }
+    else
+    {
+        device_needs_emergency_wait = false;
     }
     if (state_->input_recorder_)
     {
