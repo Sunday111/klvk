@@ -1,21 +1,15 @@
 #include "klvk/application.hpp"
 
-#include <backends/imgui_impl_vulkan.h>
 #include <fmt/core.h>
-#include <imgui.h>
 
-#include <algorithm>
 #include <array>
-#include <chrono>
-#include <concepts>
-#include <cstring>
 #include <limits>
 #include <span>
-#include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
+#include "application_frame_clock.hpp"
+#include "application_imgui.hpp"
 #include "diagnostics/diagnostic_runner.hpp"
 #include "diagnostics/input_recorder.hpp"
 #include "klvk/error_handling.hpp"
@@ -38,34 +32,9 @@
 
 namespace klvk
 {
-namespace
-{
-
-VKAPI_ATTR void VKAPI_CALL UnusedImGuiPresentationFunction() {}
-
-bool IsImGuiPresentationFunction(std::string_view name)
-{
-    constexpr std::array names{
-        "vkCreateSwapchainKHR",
-        "vkDestroySurfaceKHR",
-        "vkDestroySwapchainKHR",
-        "vkGetPhysicalDeviceSurfaceCapabilitiesKHR",
-        "vkGetPhysicalDeviceSurfaceFormatsKHR",
-        "vkGetPhysicalDeviceSurfacePresentModesKHR",
-        "vkGetSwapchainImagesKHR",
-    };
-    return std::ranges::find(names, name) != names.end();
-}
-
-}  // namespace
 
 struct Application::State
 {
-    using Clock = std::chrono::steady_clock;
-    using TimePoint = Clock::time_point;
-
-    static constexpr double kNanosecondsPerSecond = 1'000'000'000.0;
-
     struct FrameInFlight
     {
         vk::UniqueCommandPool command_pool;
@@ -82,10 +51,8 @@ struct Application::State
     std::array<FrameInFlight, kFramesInFlight> frames_{};
     // One per swapchain image: signaled by the last submit that rendered to the image.
     std::vector<vk::UniqueSemaphore> render_finished_;
-    vk::UniqueDescriptorPool imgui_descriptor_pool_;
 
     std::filesystem::path executable_dir_;
-    std::string imgui_ini_filename_;
 
     edt::Vec4f clear_color_{};
     size_t frame_index_ = 0;
@@ -93,9 +60,6 @@ struct Application::State
     bool frame_active_ = false;
     bool depth_buffer_enabled_ = false;
     bool stencil_buffer_enabled_ = false;
-    bool imgui_context_created_ = false;
-    bool imgui_glfw_initialized_ = false;
-    bool imgui_vulkan_initialized_ = false;
     bool offscreen_ = false;
     bool exit_requested_ = false;
     u64 completed_frames_ = 0;
@@ -121,76 +85,20 @@ struct Application::State
         return diagnostic_config_->clock.fixed_step_ns;
     }
 
-    [[nodiscard]] std::optional<double> GetFixedStep() const
-    {
-        const auto step_ns = GetFixedStepNanoseconds();
-        if (!step_ns.has_value()) return std::nullopt;
-        return static_cast<double>(*step_ns) / kNanosecondsPerSecond;
-    }
+    [[nodiscard]] TimerDuration GetElapsedTime() const { return frame_clock_.GetElapsedTime(completed_frames_); }
 
-    // Exact logical time for the diagnostic path. Under a fixed clock this is an
-    // integer product; otherwise it is the monotonic clock truncated to
-    // nanoseconds, which is already its native resolution.
-    [[nodiscard]] TimerDuration GetElapsedTime() const
-    {
-        if (const auto step_ns = GetFixedStepNanoseconds())
-        {
-            ErrorHandling::Ensure(
-                completed_frames_ == 0 || *step_ns <= std::numeric_limits<u64>::max() / completed_frames_,
-                "Diagnostic logical time overflowed the nanosecond range");
-            return TimerDuration{*step_ns * completed_frames_};
-        }
-        const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(GetTime() - app_start_time_).count();
-        return TimerDuration{elapsed > 0 ? static_cast<u64>(elapsed) : 0};
-    }
+    void InitTime() { frame_clock_.Initialize(GetFixedStepNanoseconds()); }
 
-    void InitTime()
-    {
-        app_start_time_ = GetTime();
-        std::ranges::fill(frame_start_time_history_, app_start_time_);
-    }
-
-    void RegisterFrameStartTime()
-    {
-        if (const auto step = GetFixedStep())
-        {
-            last_frame_duration_seconds_ = static_cast<float>(*step);
-            framerate_ = static_cast<float>(1.0 / *step);
-            return;
-        }
-        const TimePoint previous_frame_start_time = frame_start_time_history_[current_frame_time_index_];
-        current_frame_time_index_ = (current_frame_time_index_ + 1) % frame_start_time_history_.size();
-        const TimePoint current_frame_start_time = Clock::now();
-        const TimePoint oldest_frame_start_time =
-            std::exchange(frame_start_time_history_[current_frame_time_index_], current_frame_start_time);
-
-        framerate_ = static_cast<float>(
-            static_cast<double>(frame_start_time_history_.size()) /
-            DurationToSeconds<double>(current_frame_start_time - oldest_frame_start_time));
-
-        last_frame_duration_seconds_ = DurationToSeconds<float>(current_frame_start_time - previous_frame_start_time);
-    }
-
-    static TimePoint GetTime() { return Clock::now(); }
-
-    template <std::floating_point Result = float, typename Duration>
-    static Result DurationToSeconds(Duration&& duration)
-    {
-        return std::chrono::duration_cast<std::chrono::duration<Result, std::chrono::seconds::period>>(
-                   std::forward<Duration>(duration))
-            .count();
-    }
+    void RegisterFrameStartTime() { frame_clock_.RegisterFrameStart(); }
 
     [[nodiscard]] float GetRelativeTimeSeconds() const
     {
-        if (const auto step = GetFixedStep()) return static_cast<float>(static_cast<double>(completed_frames_) * *step);
-        return State::DurationToSeconds(GetTime() - app_start_time_);
+        return frame_clock_.GetRelativeTimeSeconds(completed_frames_);
     }
 
     [[nodiscard]] float GetCurrentFrameStartTime() const
     {
-        if (GetFixedStep().has_value()) return GetRelativeTimeSeconds();
-        return State::DurationToSeconds(frame_start_time_history_[current_frame_time_index_] - app_start_time_);
+        return frame_clock_.GetCurrentFrameStartTime(completed_frames_);
     }
 
     // A fixed clock normally means "render as fast as possible", which is what
@@ -202,31 +110,7 @@ struct Application::State
                GetFixedStepNanoseconds().has_value();
     }
 
-    void PaceToRealTime() const
-    {
-        const u64 step_ns = *GetFixedStepNanoseconds();
-        if (completed_frames_ != 0 && step_ns > std::numeric_limits<u64>::max() / completed_frames_) return;
-        const auto elapsed = std::chrono::nanoseconds{static_cast<i64>(step_ns * completed_frames_)};
-        std::this_thread::sleep_until(app_start_time_ + elapsed);
-    }
-
-    void AlignWithFramerate()
-    {
-        if (ShouldPaceToRealTime())
-        {
-            PaceToRealTime();
-            return;
-        }
-        if (GetFixedStep().has_value()) return;
-        if (target_framerate_.has_value())
-        {
-            const float frame_start = GetCurrentFrameStartTime();
-            constexpr float target_frame_duration = (1 / 60.f) * 0.9995f;
-            while (GetRelativeTimeSeconds() - frame_start < target_frame_duration)
-            {
-            }
-        }
-    }
+    void AlignWithFramerate() { frame_clock_.AlignWithFramerate(ShouldPaceToRealTime(), completed_frames_); }
 
     FrameInFlight& CurrentFrame() { return frames_[frame_index_]; }
 
@@ -291,13 +175,8 @@ struct Application::State
     }
 
     bool auto_clear_ = true;
-    TimePoint app_start_time_{};
-    static constexpr size_t kFrameTimeHistorySize = 128;
-    std::array<TimePoint, kFrameTimeHistorySize> frame_start_time_history_{};
-    float last_frame_duration_seconds_ = 0.f;
-    float framerate_ = 0.0f;
-    u8 current_frame_time_index_ = kFrameTimeHistorySize - 1;
-    std::optional<float> target_framerate_;
+    ApplicationFrameClock frame_clock_;
+    ApplicationImGui imgui_;
     TimerManager timer_manager_;
 
     State()
@@ -321,24 +200,9 @@ Application::~Application()
         state_->device_context_->WaitIdle();
     }
     state_->diagnostic_runner_.reset();
-    if (state_->imgui_vulkan_initialized_)
-    {
-        ImGui_ImplVulkan_Shutdown();
-        state_->imgui_vulkan_initialized_ = false;
-    }
-    if (state_->imgui_glfw_initialized_)
-    {
-        state_->glfw_.ShutdownImGui();
-        state_->imgui_glfw_initialized_ = false;
-    }
-    if (state_->imgui_context_created_)
-    {
-        ImGui::DestroyContext();
-        state_->imgui_context_created_ = false;
-    }
+    state_->imgui_.Shutdown(state_->glfw_);
     if (state_->device_context_)
     {
-        state_->imgui_descriptor_pool_.reset();
         state_->DestroyFrames();
         state_->swapchain_ = nullptr;
         state_->render_target_.reset();
@@ -439,112 +303,23 @@ void Application::Initialize()
     if (realize_hidden_x11) state_->glfw_.HideWindow(*state_->window_);
     state_->CreateFrames();
 
-    ImGui::CreateContext();
-    state_->imgui_context_created_ = true;
-    if (state_->diagnostic_config_.has_value())
-    {
-        // Diagnostic output must not depend on UI state persisted by a previous run.
-        ImGui::GetIO().IniFilename = nullptr;
-    }
-    else
-    {
-        state_->imgui_ini_filename_ = (state_->executable_dir_ / "imgui.ini").string();
-        ImGui::GetIO().IniFilename = state_->imgui_ini_filename_.c_str();
-    }
-    ImGui::StyleColorsDark();
-    if (!state_->offscreen_)
-    {
-        ErrorHandling::Ensure(
-            state_->glfw_.InitializeImGui(*state_->window_),
-            "Failed to initialize imgui GLFW backend");
-        state_->imgui_glfw_initialized_ = true;
-    }
-
-    {
-        vk::Device device = state_->device_context_->GetDevice();
-        const std::array<vk::DescriptorPoolSize, 1> pool_sizes{
-            vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 16},
-        };
-        const auto pool_info = vk::DescriptorPoolCreateInfo{}
-                                   .setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet)
-                                   .setMaxSets(16)
-                                   .setPoolSizes(pool_sizes);
-        state_->imgui_descriptor_pool_ = device.createDescriptorPoolUnique(pool_info);
-
-        const std::array<VkFormat, 1> color_formats{static_cast<VkFormat>(state_->render_target_->GetFormat())};
-        struct ImGuiVulkanLoaderContext
-        {
-            VkInstance instance;
-            VkDevice device;
-            bool presentation_enabled;
-        };
-        ImGuiVulkanLoaderContext loader_context{
-            .instance = static_cast<VkInstance>(state_->device_context_->GetInstance()),
-            .device = static_cast<VkDevice>(device),
-            .presentation_enabled = state_->device_context_->GetSurface() != nullptr,
-        };
-        ErrorHandling::Ensure(
-            ImGui_ImplVulkan_LoadFunctions(
-                [](const char* name, void* user_data)
-                {
-                    const auto& context = *static_cast<const ImGuiVulkanLoaderContext*>(user_data);
-                    if (std::strcmp(name, "vkCmdBeginRenderingKHR") == 0)
-                    {
-                        return reinterpret_cast<PFN_vkVoidFunction>(VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdBeginRendering);
-                    }
-                    if (std::strcmp(name, "vkCmdEndRenderingKHR") == 0)
-                    {
-                        return reinterpret_cast<PFN_vkVoidFunction>(VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdEndRendering);
-                    }
-                    if (const PFN_vkVoidFunction function =
-                            VULKAN_HPP_DEFAULT_DISPATCHER.vkGetInstanceProcAddr(context.instance, name))
-                    {
-                        return function;
-                    }
-                    const PFN_vkVoidFunction function =
-                        VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceProcAddr(context.device, name);
-                    if (function == nullptr && !context.presentation_enabled && IsImGuiPresentationFunction(name))
-                    {
-                        return reinterpret_cast<PFN_vkVoidFunction>(UnusedImGuiPresentationFunction);
-                    }
-                    return function;
-                },
-                &loader_context),
-            "Failed to load imgui Vulkan functions");
-        ImGui_ImplVulkan_InitInfo init_info{};
-        init_info.Instance = loader_context.instance;
-        init_info.PhysicalDevice = static_cast<VkPhysicalDevice>(state_->device_context_->GetPhysicalDevice());
-        init_info.Device = static_cast<VkDevice>(device);
-        init_info.QueueFamily = state_->device_context_->GetGraphicsQueueFamily();
-        init_info.Queue = static_cast<VkQueue>(state_->device_context_->GetGraphicsQueue());
-        init_info.DescriptorPool = static_cast<VkDescriptorPool>(state_->imgui_descriptor_pool_.get());
-        init_info.MinImageCount = 2;
-        init_info.ImageCount = static_cast<u32>(state_->render_target_->GetImageCount());
-        init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-        init_info.UseDynamicRendering = true;
-        init_info.PipelineRenderingCreateInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
-            .colorAttachmentCount = static_cast<u32>(color_formats.size()),
-            .pColorAttachmentFormats = color_formats.data(),
-        };
-        ErrorHandling::Ensure(ImGui_ImplVulkan_Init(&init_info), "Failed to initialize imgui vulkan backend");
-        state_->imgui_vulkan_initialized_ = true;
-    }
-
+    const std::optional<std::filesystem::path> imgui_ini_path =
+        state_->diagnostic_config_.has_value() ? std::nullopt : std::optional{state_->executable_dir_ / "imgui.ini"};
+    const auto font_path = GetContentDir() / "fonts" / "DejaVuSansMono.ttf";
     const edt::Vec2f content_scale =
         state_->offscreen_ ? edt::Vec2f{1.f, 1.f} : state_->glfw_.GetPrimaryMonitorContentScale();
     const edt::Vec2f framebuffer_scale =
         state_->offscreen_ ? edt::Vec2f{1.f, 1.f} : state_->window_->GetFramebufferScale();
-    const float layout_scale = content_scale.x() / framebuffer_scale.x();
-    ImGui::GetStyle().ScaleAllSizes(layout_scale);
-    ImGuiIO& io = ImGui::GetIO();
-
-    ImFontConfig font_config{};
-    font_config.SizePixels = 13 * content_scale.x();
-    const auto font_path = GetContentDir() / "fonts" / "DejaVuSansMono.ttf";
-    ImFont* font = io.Fonts->AddFontFromFileTTF(font_path.string().c_str(), font_config.SizePixels, &font_config);
-    ErrorHandling::Ensure(font != nullptr, "Failed to load ImGui font from {}", font_path.string());
-    font->Scale = layout_scale / content_scale.x();
+    state_->imgui_.Initialize(
+        *state_->device_context_,
+        *state_->render_target_,
+        state_->glfw_,
+        *state_->window_,
+        state_->offscreen_,
+        content_scale.x(),
+        content_scale.x() / framebuffer_scale.x(),
+        imgui_ini_path,
+        font_path);
 
     state_->InitTime();
 }
@@ -833,24 +608,12 @@ void Application::PreTick()
     const std::array scissors{vk::Rect2D{{0, 0}, extent}};
     frame.command_buffer.setScissor(0, scissors);
 
-    ImGui_ImplVulkan_NewFrame();
-    if (state_->offscreen_)
-    {
-        ImGui::GetIO().DisplaySize = {
-            static_cast<float>(extent.width),
-            static_cast<float>(extent.height),
-        };
-    }
-    else
-    {
-        state_->glfw_.BeginImGuiFrame();
-    }
+    state_->imgui_.PrepareFrame(state_->glfw_, state_->offscreen_, extent);
     if (state_->diagnostic_runner_)
     {
         state_->diagnostic_runner_->AdvanceInput(state_->completed_frames_ + 1, state_->GetElapsedTime());
     }
-    if (const auto step = state_->GetFixedStep()) ImGui::GetIO().DeltaTime = static_cast<float>(*step);
-    ImGui::NewFrame();
+    ApplicationImGui::BeginFrame(state_->GetFixedStepNanoseconds());
 }
 
 void Application::Tick() {}
@@ -897,8 +660,7 @@ void Application::PostTick()
         frame.command_buffer.beginRendering(rendering_info);
     }
 
-    ImGui::Render();
-    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), static_cast<VkCommandBuffer>(frame.command_buffer));
+    ApplicationImGui::Render(frame.command_buffer);
 
     frame.command_buffer.endRendering();
 
@@ -1095,17 +857,17 @@ float Application::GetCurrentFrameStartTime() const
 
 float Application::GetFramerate() const
 {
-    return state_->framerate_;
+    return state_->frame_clock_.GetFramerate();
 }
 
 float Application::GetLastFrameDurationSeconds() const
 {
-    return state_->last_frame_duration_seconds_;
+    return state_->frame_clock_.GetLastFrameDurationSeconds();
 }
 
 void Application::SetTargetFramerate(std::optional<float> framerate)
 {
-    state_->target_framerate_ = framerate;
+    state_->frame_clock_.SetTargetFramerate(framerate);
 }
 
 void Application::SetClearColor(const edt::Vec4f& color)

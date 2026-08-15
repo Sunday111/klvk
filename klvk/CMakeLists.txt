@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.20)
 include(set_compiler_options)
 set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application_frame_clock.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application_frame_clock.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application_imgui.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application_imgui.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/camera/camera_3d.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_events.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_run_config.cpp
@@ -34,10 +38,13 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_interface.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_interface_json.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_interface_json.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_reflection_json.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_reflection_json.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_stages.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/text/font_face.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/text/glyph_atlas.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/texture/procedural_texture_generator.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/timing/timer_duration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/timing/timer_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/imgui_texture_viewer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/ui/registered_imgui_texture.cpp
@@ -79,6 +86,7 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/mesh/procedural_mesh_generator.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/platform/file_dialog.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/platform/os/os.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ranges/vector_indices_2d.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/reflection/matrix_reflect.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/reflection/register_types.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/rendering/curve_renderer_2d.hpp

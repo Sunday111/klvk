@@ -157,7 +157,7 @@ public:
         return {};
     }
 
-    [[nodiscard]] static constexpr auto AllCoords() { return Make2dCoords(kSize); }
+    [[nodiscard]] static constexpr auto AllCoords() { return klvk::VectorIndices2d(kSize); }
     [[nodiscard]] TetrisCell& GetCell(edt::Vec2<size_t> coordinate)
     {
         return cells_[Coord2dToIndex(coordinate, kSize.x())];

@@ -4,8 +4,8 @@
 #include <vector>
 
 #include "edt/math/matrix.hpp"
-#include "edt/ranges/array_indices2d.hpp"
 #include "klvk/integral_aliases.hpp"
+#include "klvk/ranges/vector_indices_2d.hpp"
 
 namespace klvk
 {
@@ -19,9 +19,7 @@ public:
     // Accepts texture size as Vec2 and yields pixel indices as Vec2
     [[nodiscard]] static constexpr auto PixelIndices(const Vec2<size_t>& texture_size)
     {
-        return edt::ArrayIndices2d(texture_size.y(), texture_size.x()) |
-               std::views::transform([](std::pair<size_t, size_t> yx)
-                                     { return Vec2<size_t>{yx.second, yx.first}; });
+        return VectorIndices2d(texture_size);
     }
 
     // Same as PixelIndices but yields pairs of indices as floats

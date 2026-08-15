@@ -23,6 +23,7 @@
 #include "klvk/platform/os/os.hpp"
 #include "klvk/shader/shader_interface.hpp"
 #include "shader/shader_interface_json.hpp"
+#include "shader/shader_reflection_json.hpp"
 
 namespace klvk
 {
