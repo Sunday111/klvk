@@ -229,26 +229,10 @@ class FallingSandApp : public klvk::Application
 
         for (const RegionId& region_id : grid_.order)
         {
-            const auto [begin, end] = RegionRange(region_id);
+            const Vec2i begin = RegionRange(region_id).first;
             const Vec2f region_size = GridRegion::kSize.Cast<float>() * kParticleSize;
             const Vec2f region_center = begin.Cast<float>() * kParticleSize + region_size * 0.5f;
             AddRectOutline(*renderer_, region_center, region_size, 0.01f, kBlue);
-
-            const GridRegion& container = grid_.containers.at(region_id);
-            for (u32 y = 0; y != GridRegion::kSize.y(); ++y)
-            {
-                for (u32 x = 0; x != GridRegion::kSize.x(); ++x)
-                {
-                    if (container.bits[y].Get(x))
-                    {
-                        const Vec2i particle = begin + Vec2u32{x, y}.Cast<int>();
-                        renderer_->Add(
-                            particle.Cast<float>() * kParticleSize,
-                            kRed,
-                            Vec2f{kParticleSize, kParticleSize} * 0.5f);
-                    }
-                }
-            }
         }
 
         for (const auto& [id, data] : grid_.particles)
