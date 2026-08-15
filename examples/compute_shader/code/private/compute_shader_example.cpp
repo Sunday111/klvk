@@ -1,6 +1,7 @@
 #include <fmt/format.h>
 #include <imgui.h>
 
+#include <array>
 #include <edt/math/math.hpp>
 #include <optional>
 #include <string>
@@ -182,10 +183,10 @@ class ComputeShaderApp : public klvk::Application
         const vk::ComputePipelineCreateInfo compute_info = vk::ComputePipelineCreateInfo{}
                                                                .setStage(compute_stage.GetCreateInfos().front())
                                                                .setLayout(pipeline_layout_.GetHandle());
-        auto outcome = device.createComputePipelineUnique(nullptr, compute_info);
-        vk::UniquePipeline compute_pipeline = std::move(outcome.value);
-        klvk::VulkanCheck(outcome.result, "vkCreateComputePipelines");
-        compute_pipeline_ = std::move(compute_pipeline);
+        const std::array compute_infos{compute_info};
+        auto outcome = device.createComputePipelinesUnique(nullptr, compute_infos);
+        compute_pipeline_ = std::move(outcome.value.front());
+        klvk::VulkanCheck(outcome.result);
         bodies_pipeline_ = CreateGraphicsPipeline(context, bodies_vertex, fragment);
 
         klvk::Shader::shaders_dir_ = GetShaderDir();

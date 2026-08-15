@@ -237,20 +237,18 @@ struct Application::State
         {
             const auto pool_info =
                 vk::CommandPoolCreateInfo{}.setQueueFamilyIndex(device_context_->GetGraphicsQueueFamily());
-            frame.command_pool = VulkanValue(device.createCommandPoolUnique(pool_info), "vkCreateCommandPool");
+            frame.command_pool = device.createCommandPoolUnique(pool_info);
 
             const auto allocate_info = vk::CommandBufferAllocateInfo{}
                                            .setCommandPool(frame.command_pool.get())
                                            .setLevel(vk::CommandBufferLevel::ePrimary)
                                            .setCommandBufferCount(1);
-            frame.command_buffer =
-                VulkanValue(device.allocateCommandBuffers(allocate_info), "vkAllocateCommandBuffers").front();
+            frame.command_buffer = device.allocateCommandBuffers(allocate_info).front();
 
-            frame.image_available =
-                VulkanValue(device.createSemaphoreUnique(vk::SemaphoreCreateInfo{}), "vkCreateSemaphore");
+            frame.image_available = device.createSemaphoreUnique(vk::SemaphoreCreateInfo{});
 
             const auto fence_info = vk::FenceCreateInfo{}.setFlags(vk::FenceCreateFlagBits::eSignaled);
-            frame.in_flight = VulkanValue(device.createFenceUnique(fence_info), "vkCreateFence");
+            frame.in_flight = device.createFenceUnique(fence_info);
         }
 
         CreateRenderFinishedSemaphores();
@@ -264,8 +262,7 @@ struct Application::State
         vk::Device device = device_context_->GetDevice();
         for (size_t index = 0; index != render_target_->GetImageCount(); ++index)
         {
-            render_finished_.push_back(
-                VulkanValue(device.createSemaphoreUnique(vk::SemaphoreCreateInfo{}), "vkCreateSemaphore"));
+            render_finished_.push_back(device.createSemaphoreUnique(vk::SemaphoreCreateInfo{}));
         }
     }
 
@@ -472,8 +469,7 @@ void Application::Initialize()
                                    .setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet)
                                    .setMaxSets(16)
                                    .setPoolSizes(pool_sizes);
-        state_->imgui_descriptor_pool_ =
-            VulkanValue(device.createDescriptorPoolUnique(pool_info), "vkCreateDescriptorPool");
+        state_->imgui_descriptor_pool_ = device.createDescriptorPoolUnique(pool_info);
 
         const std::array<VkFormat, 1> color_formats{static_cast<VkFormat>(state_->render_target_->GetFormat())};
         struct ImGuiVulkanLoaderContext
@@ -696,7 +692,7 @@ void Application::PreTick()
     {
         ErrorHandling::Ensure(false, "Timed out waiting for the frame fence");
     }
-    VulkanCheck(wait_result, "vkWaitForFences");
+    VulkanCheck(wait_result);
     if (state_->diagnostic_runner_) state_->diagnostic_runner_->ProcessCompletedFrame(state_->frame_index_);
 
     // Acquire the next swapchain image. Offscreen images map one-to-one to
@@ -729,15 +725,15 @@ void Application::PreTick()
             ErrorHandling::Ensure(
                 outcome.result != vk::Result::eTimeout,
                 "Timed out acquiring a swapchain image despite an infinite timeout");
-            VulkanCheck(outcome.result, "vkAcquireNextImageKHR");
+            VulkanCheck(outcome.result);
         }
     }
 
-    VulkanValue(device.resetFences(fences), "vkResetFences");
-    VulkanValue(device.resetCommandPool(frame.command_pool.get()), "vkResetCommandPool");
+    device.resetFences(fences);
+    device.resetCommandPool(frame.command_pool.get());
 
     const auto begin_info = vk::CommandBufferBeginInfo{}.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-    VulkanValue(frame.command_buffer.begin(begin_info), "vkBeginCommandBuffer");
+    frame.command_buffer.begin(begin_info);
     state_->frame_active_ = true;
 
     BeforeSwapchainRender(frame.command_buffer);
@@ -939,7 +935,7 @@ void Application::PostTick()
         frame.command_buffer.pipelineBarrier2(vk::DependencyInfo{}.setImageMemoryBarriers(barriers));
     }
 
-    VulkanValue(frame.command_buffer.end(), "vkEndCommandBuffer");
+    frame.command_buffer.end();
     state_->frame_active_ = false;
 
     const std::array command_buffer_infos{vk::CommandBufferSubmitInfo{}.setCommandBuffer(frame.command_buffer)};
@@ -957,16 +953,12 @@ void Application::PostTick()
                                           .setWaitSemaphoreInfos(wait_infos)
                                           .setCommandBufferInfos(command_buffer_infos)
                                           .setSignalSemaphoreInfos(signal_infos)};
-        VulkanValue(
-            state_->device_context_->GetGraphicsQueue().submit2(submit_infos, frame.in_flight.get()),
-            "vkQueueSubmit2");
+        state_->device_context_->GetGraphicsQueue().submit2(submit_infos, frame.in_flight.get());
     }
     else
     {
         const std::array submit_infos{vk::SubmitInfo2{}.setCommandBufferInfos(command_buffer_infos)};
-        VulkanValue(
-            state_->device_context_->GetGraphicsQueue().submit2(submit_infos, frame.in_flight.get()),
-            "vkQueueSubmit2");
+        state_->device_context_->GetGraphicsQueue().submit2(submit_infos, frame.in_flight.get());
     }
 
     if (state_->swapchain_)
@@ -986,7 +978,7 @@ void Application::PostTick()
         }
         else
         {
-            VulkanCheck(result, "vkQueuePresentKHR");
+            VulkanCheck(result);
         }
     }
 

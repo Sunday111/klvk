@@ -54,7 +54,7 @@ class PostProcessingApp : public klvk::Application
                                                        .setAddressModeU(vk::SamplerAddressMode::eClampToEdge)
                                                        .setAddressModeV(vk::SamplerAddressMode::eClampToEdge)
                                                        .setAddressModeW(vk::SamplerAddressMode::eClampToEdge);
-        sampler_ = klvk::VulkanValue(device.createSamplerUnique(sampler_info), "vkCreateSampler");
+        sampler_ = device.createSamplerUnique(sampler_info);
 
         const vk::PushConstantRange scene_range =
             vk::PushConstantRange{}.setStageFlags(vk::ShaderStageFlagBits::eFragment).setSize(sizeof(PushConstants));
@@ -112,8 +112,7 @@ class PostProcessingApp : public klvk::Application
                     &allocation_info,
                     &raw_image,
                     &target.allocation,
-                    nullptr)),
-                "vmaCreateImage(post-processing)");
+                    nullptr)));
             target.image = raw_image;
             const vk::ImageSubresourceRange subresource_range = vk::ImageSubresourceRange{}
                                                                     .setAspectMask(vk::ImageAspectFlagBits::eColor)
@@ -124,7 +123,7 @@ class PostProcessingApp : public klvk::Application
                                                           .setViewType(vk::ImageViewType::e2D)
                                                           .setFormat(kTargetFormat)
                                                           .setSubresourceRange(subresource_range);
-            target.view = klvk::VulkanValue(context.GetDevice().createImageViewUnique(view_info), "vkCreateImageView");
+            target.view = context.GetDevice().createImageViewUnique(view_info);
             descriptor_sets_.WriteImage(i, 0, target.view.get(), sampler_.get());
         }
     }

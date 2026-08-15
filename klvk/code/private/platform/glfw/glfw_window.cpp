@@ -383,8 +383,7 @@ vk::UniqueSurfaceKHR Window::CreateVulkanSurface(vk::Instance instance) const
     VkSurfaceKHR surface = VK_NULL_HANDLE;
     VulkanCheck(
         static_cast<vk::Result>(
-            glfwCreateWindowSurface(static_cast<VkInstance>(instance), impl_->window, nullptr, &surface)),
-        "glfwCreateWindowSurface");
+            glfwCreateWindowSurface(static_cast<VkInstance>(instance), impl_->window, nullptr, &surface)));
     return vk::UniqueSurfaceKHR{vk::SurfaceKHR{surface}, {instance}};
 }
 

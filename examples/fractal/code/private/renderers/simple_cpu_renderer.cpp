@@ -24,7 +24,7 @@ SimpleCpuRenderer::SimpleCpuRenderer(klvk::Application& app, size_t max_iteratio
                                                    .setAddressModeU(vk::SamplerAddressMode::eClampToEdge)
                                                    .setAddressModeV(vk::SamplerAddressMode::eClampToEdge)
                                                    .setAddressModeW(vk::SamplerAddressMode::eClampToEdge);
-    sampler_ = klvk::VulkanValue(device.createSamplerUnique(sampler_info), "vkCreateSampler");
+    sampler_ = device.createSamplerUnique(sampler_info);
 
     const vk::DescriptorSetLayoutBinding binding = vk::DescriptorSetLayoutBinding{}
                                                        .setBinding(0)
@@ -33,16 +33,15 @@ SimpleCpuRenderer::SimpleCpuRenderer(klvk::Application& app, size_t max_iteratio
                                                        .setStageFlags(vk::ShaderStageFlagBits::eFragment);
     set_layout_description_.bindings = {binding};
     const vk::DescriptorSetLayoutCreateInfo layout_info = vk::DescriptorSetLayoutCreateInfo{}.setBindings(binding);
-    set_layout_ = klvk::VulkanValue(device.createDescriptorSetLayoutUnique(layout_info), "vkCreateDescriptorSetLayout");
+    set_layout_ = device.createDescriptorSetLayoutUnique(layout_info);
 
     const vk::DescriptorPoolSize pool_size =
         vk::DescriptorPoolSize{}.setType(vk::DescriptorType::eCombinedImageSampler).setDescriptorCount(1);
     const vk::DescriptorPoolCreateInfo pool_info = vk::DescriptorPoolCreateInfo{}.setMaxSets(1).setPoolSizes(pool_size);
-    descriptor_pool_ = klvk::VulkanValue(device.createDescriptorPoolUnique(pool_info), "vkCreateDescriptorPool");
+    descriptor_pool_ = device.createDescriptorPoolUnique(pool_info);
     const vk::DescriptorSetAllocateInfo allocate_info =
         vk::DescriptorSetAllocateInfo{}.setDescriptorPool(descriptor_pool_.get()).setSetLayouts(set_layout_.get());
-    descriptor_set_ =
-        klvk::VulkanValue(device.allocateDescriptorSets(allocate_info), "vkAllocateDescriptorSets").front();
+    descriptor_set_ = device.allocateDescriptorSets(allocate_info).front();
 
     const klvk::DescriptorSetLayoutView set_layout_view{
         .handle = set_layout_.get(),
@@ -108,8 +107,7 @@ void SimpleCpuRenderer::ApplySettings(const FractalSettings& settings)
                 &allocation_info,
                 &raw_image,
                 &image_allocation_,
-                nullptr)),
-            "vmaCreateImage");
+                nullptr)));
         image_ = raw_image;
 
         const vk::ImageSubresourceRange subresource_range = vk::ImageSubresourceRange{}
@@ -121,7 +119,7 @@ void SimpleCpuRenderer::ApplySettings(const FractalSettings& settings)
                                                       .setViewType(vk::ImageViewType::e2D)
                                                       .setFormat(vk::Format::eR8G8B8A8Unorm)
                                                       .setSubresourceRange(subresource_range);
-        image_view_ = klvk::VulkanValue(device.createImageViewUnique(view_info), "vkCreateImageView");
+        image_view_ = device.createImageViewUnique(view_info);
 
         for (auto& buffer : staging_buffers_)
         {

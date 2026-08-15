@@ -10,7 +10,7 @@
             "magic_enum",
             "unordered_dense",
             "nlohmann_json",
-            "vulkan_headers",
+            "vulkan_hpp_sunday",
             "vma",
             "imgui_vulkan"
         ],
@@ -24,7 +24,6 @@
     },
     "ExtraCMakeFiles": [
         "ffmpeg",
-        "vulkan_hpp",
         "warnings"
     ],
     "CopyDirectoriesAfterBuild": [

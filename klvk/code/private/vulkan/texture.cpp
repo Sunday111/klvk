@@ -127,8 +127,7 @@ std::unique_ptr<Texture> Texture::Create(
             &allocation_info,
             &raw_image,
             &texture->allocation_,
-            nullptr)),
-        "vmaCreateImage");
+            nullptr)));
     texture->image_ = raw_image;
 
     GpuBuffer staging(context, vk::BufferUsageFlagBits::eTransferSrc, pixels.size(), true);
@@ -181,7 +180,7 @@ std::unique_ptr<Texture> Texture::Create(
                                                   .setViewType(vk::ImageViewType::e2D)
                                                   .setFormat(format)
                                                   .setSubresourceRange(view_subresource_range);
-    texture->view_ = VulkanValue(context.GetDevice().createImageViewUnique(view_info), "vkCreateImageView");
+    texture->view_ = context.GetDevice().createImageViewUnique(view_info);
 
     // Same filtering verlet uses for the circle mask: nearest when minified, linear when magnified.
     const vk::SamplerCreateInfo sampler_info = vk::SamplerCreateInfo{}
@@ -192,7 +191,7 @@ std::unique_ptr<Texture> Texture::Create(
                                                    .setAddressModeV(vk::SamplerAddressMode::eRepeat)
                                                    .setAddressModeW(vk::SamplerAddressMode::eRepeat)
                                                    .setBorderColor(vk::BorderColor::eIntOpaqueBlack);
-    texture->sampler_ = VulkanValue(context.GetDevice().createSamplerUnique(sampler_info), "vkCreateSampler");
+    texture->sampler_ = context.GetDevice().createSamplerUnique(sampler_info);
 
     return texture;
 }

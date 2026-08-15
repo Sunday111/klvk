@@ -480,7 +480,6 @@ vk::UniquePipeline GraphicsPipelineBuilder::Build()
                                     .setStencilAttachmentFormat(stencil_format);
 
     const auto pipeline_info = vk::GraphicsPipelineCreateInfo{}
-                                   .setPNext(&rendering_info)
                                    .setStages(stages)
                                    .setPVertexInputState(&vertex_input)
                                    .setPInputAssemblyState(&input_assembly)
@@ -492,10 +491,14 @@ vk::UniquePipeline GraphicsPipelineBuilder::Build()
                                    .setPColorBlendState(&color_blend)
                                    .setPDynamicState(&dynamic_state)
                                    .setLayout(layout_);
+    const vk::StructureChain<vk::GraphicsPipelineCreateInfo, vk::PipelineRenderingCreateInfo> pipeline_chain{
+        pipeline_info,
+        rendering_info};
     const vk::Device device = context_->GetDevice();
-    auto outcome = device.createGraphicsPipelineUnique(nullptr, pipeline_info);
-    vk::UniquePipeline pipeline = std::move(outcome.value);
-    VulkanCheck(outcome.result, "vkCreateGraphicsPipelines");
+    const std::array pipeline_infos{pipeline_chain.get<vk::GraphicsPipelineCreateInfo>()};
+    auto outcome = device.createGraphicsPipelinesUnique(nullptr, pipeline_infos);
+    vk::UniquePipeline pipeline = std::move(outcome.value.front());
+    VulkanCheck(outcome.result);
     return pipeline;
 }
 

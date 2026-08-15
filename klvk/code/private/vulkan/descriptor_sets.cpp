@@ -26,9 +26,8 @@ DescriptorSets DescriptorSets::Builder::Build(u32 set_count)
     DeviceContext& context = *context_;
     const vk::Device device = context.GetDevice();
 
-    vk::UniqueDescriptorSetLayout layout = VulkanValue(
-        device.createDescriptorSetLayoutUnique(vk::DescriptorSetLayoutCreateInfo{}.setBindings(bindings_)),
-        "vkCreateDescriptorSetLayout");
+    vk::UniqueDescriptorSetLayout layout =
+        device.createDescriptorSetLayoutUnique(vk::DescriptorSetLayoutCreateInfo{}.setBindings(bindings_));
 
     // The pool must hold set_count copies of every binding, aggregated per type.
     std::vector<vk::DescriptorPoolSize> pool_sizes;
@@ -48,16 +47,12 @@ DescriptorSets DescriptorSets::Builder::Build(u32 set_count)
         }
     }
 
-    vk::UniqueDescriptorPool pool = VulkanValue(
-        device.createDescriptorPoolUnique(
-            vk::DescriptorPoolCreateInfo{}.setMaxSets(set_count).setPoolSizes(pool_sizes)),
-        "vkCreateDescriptorPool");
+    vk::UniqueDescriptorPool pool = device.createDescriptorPoolUnique(
+        vk::DescriptorPoolCreateInfo{}.setMaxSets(set_count).setPoolSizes(pool_sizes));
 
     const std::vector<vk::DescriptorSetLayout> layouts(set_count, layout.get());
-    std::vector<vk::DescriptorSet> sets = VulkanValue(
-        device.allocateDescriptorSets(
-            vk::DescriptorSetAllocateInfo{}.setDescriptorPool(pool.get()).setSetLayouts(layouts)),
-        "vkAllocateDescriptorSets");
+    std::vector<vk::DescriptorSet> sets = device.allocateDescriptorSets(
+        vk::DescriptorSetAllocateInfo{}.setDescriptorPool(pool.get()).setSetLayouts(layouts));
 
     return DescriptorSets{
         context,

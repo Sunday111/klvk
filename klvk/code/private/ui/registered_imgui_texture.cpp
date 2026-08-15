@@ -25,7 +25,7 @@ RegisteredImGuiTexture::RegisteredImGuiTexture(
     vk::ImageView image_view,
     const vk::SamplerCreateInfo& sampler_info)
 {
-    sampler_ = VulkanValue(context.GetDevice().createSamplerUnique(sampler_info), "vkCreateSampler");
+    sampler_ = context.GetDevice().createSamplerUnique(sampler_info);
     const VkDescriptorSet descriptor = ImGui_ImplVulkan_AddTexture(
         static_cast<VkSampler>(sampler_.get()),
         static_cast<VkImageView>(image_view),

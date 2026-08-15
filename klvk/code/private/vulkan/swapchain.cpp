@@ -24,8 +24,7 @@ bool IsDiagnosticCaptureFormat(vk::Format format)
 
 vk::SurfaceFormatKHR ChooseSurfaceFormat(vk::PhysicalDevice device, vk::SurfaceKHR surface, bool diagnostic_capture)
 {
-    const std::vector<vk::SurfaceFormatKHR> formats =
-        VulkanValue(device.getSurfaceFormatsKHR(surface), "vkGetPhysicalDeviceSurfaceFormatsKHR");
+    const std::vector<vk::SurfaceFormatKHR> formats = device.getSurfaceFormatsKHR(surface);
     ErrorHandling::Ensure(!formats.empty(), "Surface reports no formats");
 
     for (const auto& format : formats)
@@ -48,8 +47,7 @@ vk::SurfaceFormatKHR ChooseSurfaceFormat(vk::PhysicalDevice device, vk::SurfaceK
 
 vk::PresentModeKHR ChoosePresentMode(vk::PhysicalDevice device, vk::SurfaceKHR surface)
 {
-    const std::vector<vk::PresentModeKHR> modes =
-        VulkanValue(device.getSurfacePresentModesKHR(surface), "vkGetPhysicalDeviceSurfacePresentModesKHR");
+    const std::vector<vk::PresentModeKHR> modes = device.getSurfacePresentModesKHR(surface);
 
     // Application paces frames itself (SetTargetFramerate), so prefer modes that do not block on vsync
     // to mirror klgl's glfwSwapInterval(0) behavior.
@@ -90,8 +88,7 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, vk::SwapchainKHR old_swa
     vk::PhysicalDevice physical_device = context_->GetPhysicalDevice();
     vk::SurfaceKHR surface = context_->GetSurface();
 
-    const vk::SurfaceCapabilitiesKHR capabilities =
-        VulkanValue(physical_device.getSurfaceCapabilitiesKHR(surface), "vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
+    const vk::SurfaceCapabilitiesKHR capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
 
     format_ = ChooseSurfaceFormat(
         physical_device,
@@ -141,8 +138,8 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, vk::SwapchainKHR old_swa
                                                        .setClipped(true)
                                                        .setOldSwapchain(old_swapchain);
 
-    swapchain_ = VulkanValue(context_->GetDevice().createSwapchainKHRUnique(create_info), "vkCreateSwapchainKHR");
-    images_ = VulkanValue(context_->GetDevice().getSwapchainImagesKHR(swapchain_.get()), "vkGetSwapchainImagesKHR");
+    swapchain_ = context_->GetDevice().createSwapchainKHRUnique(create_info);
+    images_ = context_->GetDevice().getSwapchainImagesKHR(swapchain_.get());
 
     image_views_.clear();
     image_views_.reserve(images_.size());
@@ -157,8 +154,7 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, vk::SwapchainKHR old_swa
                                                       .setViewType(vk::ImageViewType::e2D)
                                                       .setFormat(format_.format)
                                                       .setSubresourceRange(subresource_range);
-        image_views_.push_back(
-            VulkanValue(context_->GetDevice().createImageViewUnique(view_info), "vkCreateImageView"));
+        image_views_.push_back(context_->GetDevice().createImageViewUnique(view_info));
     }
 
     depth_stencil_format_ = SelectDepthStencilFormat(context_->GetPhysicalDevice());
@@ -190,8 +186,7 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, vk::SwapchainKHR old_swa
                 &allocation_info,
                 &raw_depth_image,
                 &depth_allocations_[index],
-                nullptr)),
-            "vmaCreateImage(depth)");
+                nullptr)));
         depth_images_[index] = raw_depth_image;
 
         const vk::ImageSubresourceRange subresource_range =
@@ -201,8 +196,7 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, vk::SwapchainKHR old_swa
                                                       .setViewType(vk::ImageViewType::e2D)
                                                       .setFormat(depth_stencil_format_)
                                                       .setSubresourceRange(subresource_range);
-        depth_image_views_.push_back(
-            VulkanValue(context_->GetDevice().createImageViewUnique(view_info), "vkCreateImageView(depth)"));
+        depth_image_views_.push_back(context_->GetDevice().createImageViewUnique(view_info));
     }
 }
 

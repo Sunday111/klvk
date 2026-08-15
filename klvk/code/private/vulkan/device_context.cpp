@@ -42,7 +42,7 @@ vk::DebugUtilsMessengerCreateInfoEXT MakeDebugMessengerCreateInfo()
 
 bool HasLayer(std::string_view name)
 {
-    const auto layers = VulkanValue(vk::enumerateInstanceLayerProperties(), "vkEnumerateInstanceLayerProperties");
+    const auto layers = vk::enumerateInstanceLayerProperties();
     for (const auto& layer : layers)
     {
         if (name == layer.layerName) return true;
@@ -52,8 +52,7 @@ bool HasLayer(std::string_view name)
 
 bool HasDeviceExtension(vk::PhysicalDevice device, std::string_view name)
 {
-    const auto extensions =
-        VulkanValue(device.enumerateDeviceExtensionProperties(), "vkEnumerateDeviceExtensionProperties");
+    const auto extensions = device.enumerateDeviceExtensionProperties();
     for (const auto& extension : extensions)
     {
         if (name == extension.extensionName) return true;
@@ -78,13 +77,16 @@ DeviceContext::DeviceContext(Window* presentation_window, const Settings& settin
     const auto pool_info = vk::CommandPoolCreateInfo{}
                                .setFlags(vk::CommandPoolCreateFlagBits::eTransient)
                                .setQueueFamilyIndex(graphics_queue_family_);
-    one_time_pool_ = VulkanValue(GetDevice().createCommandPoolUnique(pool_info), "vkCreateCommandPool");
+    one_time_pool_ = GetDevice().createCommandPoolUnique(pool_info);
 }
 
 DeviceContext::~DeviceContext()
 {
     shader_cache_.reset();
-    if (device_) (void)GetDevice().waitIdle();
+    if (device_)
+    {
+        (void)VULKAN_HPP_DEFAULT_DISPATCHER.vkDeviceWaitIdle(static_cast<VkDevice>(GetDevice()));
+    }
     one_time_pool_.reset();
     if (allocator_) vmaDestroyAllocator(allocator_);
     allocator_ = nullptr;
@@ -160,26 +162,24 @@ void DeviceContext::CreateInstance(const Settings& settings, const Window* prese
             create_info,
             messenger_info};
         chain.get<vk::InstanceCreateInfo>().setPEnabledLayerNames(layers).setPEnabledExtensionNames(extensions);
-        instance_ = VulkanValue(vk::createInstanceUnique(chain.get<vk::InstanceCreateInfo>()), "vkCreateInstance");
+        instance_ = vk::createInstanceUnique(chain.get<vk::InstanceCreateInfo>());
     }
     else
     {
         create_info.setPEnabledLayerNames(layers).setPEnabledExtensionNames(extensions);
-        instance_ = VulkanValue(vk::createInstanceUnique(create_info), "vkCreateInstance");
+        instance_ = vk::createInstanceUnique(create_info);
     }
     InitializeVulkanDispatcher(instance_.get());
 
     if (validation)
     {
-        debug_messenger_ = VulkanValue(
-            instance_->createDebugUtilsMessengerEXTUnique(messenger_info),
-            "vkCreateDebugUtilsMessengerEXT");
+        debug_messenger_ = instance_->createDebugUtilsMessengerEXTUnique(messenger_info);
     }
 }
 
 void DeviceContext::PickPhysicalDevice()
 {
-    const auto devices = VulkanValue(instance_->enumeratePhysicalDevices(), "vkEnumeratePhysicalDevices");
+    const auto devices = instance_->enumeratePhysicalDevices();
     ErrorHandling::Ensure(!devices.empty(), "No Vulkan devices found");
 
     int best_score = -1;
@@ -205,9 +205,7 @@ void DeviceContext::PickPhysicalDevice()
         for (u32 family = 0; family != static_cast<u32>(families.size()); ++family)
         {
             if (!(families[family].queueFlags & vk::QueueFlagBits::eGraphics)) continue;
-            if (!presentation_enabled_ || VulkanValue(
-                                              device.getSurfaceSupportKHR(family, surface_.get()),
-                                              "vkGetPhysicalDeviceSurfaceSupportKHR"))
+            if (!presentation_enabled_ || device.getSurfaceSupportKHR(family, surface_.get()))
             {
                 graphics_family = family;
                 break;
@@ -282,7 +280,7 @@ void DeviceContext::CreateDevice()
         vk::PhysicalDeviceVulkan13Features>
         chain{create_info, features2, features11, features13};
 
-    device_ = VulkanValue(physical_device_.createDeviceUnique(chain.get<vk::DeviceCreateInfo>()), "vkCreateDevice");
+    device_ = physical_device_.createDeviceUnique(chain.get<vk::DeviceCreateInfo>());
     InitializeVulkanDispatcher(device_.get());
     graphics_queue_ = device_->getQueue(graphics_queue_family_, 0);
 }
@@ -300,12 +298,12 @@ void DeviceContext::CreateAllocator()
         .instance = static_cast<VkInstance>(instance_.get()),
         .vulkanApiVersion = vk::ApiVersion13,
     };
-    VulkanCheck(static_cast<vk::Result>(vmaCreateAllocator(&create_info, &allocator_)), "vmaCreateAllocator");
+    VulkanCheck(static_cast<vk::Result>(vmaCreateAllocator(&create_info, &allocator_)));
 }
 
 void DeviceContext::WaitIdle() const
 {
-    VulkanValue(GetDevice().waitIdle(), "vkDeviceWaitIdle");
+    GetDevice().waitIdle();
 }
 
 vk::CommandBuffer DeviceContext::BeginOneTimeCommands() const
@@ -314,23 +312,22 @@ vk::CommandBuffer DeviceContext::BeginOneTimeCommands() const
                                    .setCommandPool(one_time_pool_.get())
                                    .setLevel(vk::CommandBufferLevel::ePrimary)
                                    .setCommandBufferCount(1);
-    const auto command_buffers =
-        VulkanValue(GetDevice().allocateCommandBuffers(allocate_info), "vkAllocateCommandBuffers");
+    const auto command_buffers = GetDevice().allocateCommandBuffers(allocate_info);
     const vk::CommandBuffer command_buffer = command_buffers.front();
 
     const auto begin_info = vk::CommandBufferBeginInfo{}.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-    VulkanValue(command_buffer.begin(begin_info), "vkBeginCommandBuffer");
+    command_buffer.begin(begin_info);
     return command_buffer;
 }
 
 void DeviceContext::EndOneTimeCommands(vk::CommandBuffer command_buffer) const
 {
-    VulkanValue(command_buffer.end(), "vkEndCommandBuffer");
+    command_buffer.end();
 
     const std::array command_buffer_infos{vk::CommandBufferSubmitInfo{}.setCommandBuffer(command_buffer)};
     const std::array submit_infos{vk::SubmitInfo2{}.setCommandBufferInfos(command_buffer_infos)};
-    VulkanValue(graphics_queue_.submit2(submit_infos), "vkQueueSubmit2");
-    VulkanValue(graphics_queue_.waitIdle(), "vkQueueWaitIdle");
+    graphics_queue_.submit2(submit_infos);
+    graphics_queue_.waitIdle();
     const std::array command_buffers{command_buffer};
     GetDevice().freeCommandBuffers(one_time_pool_.get(), command_buffers);
 }
@@ -347,7 +344,7 @@ vk::UniqueShaderModule DeviceContext::CreateShaderModule(std::string_view spirv_
     const auto create_info = vk::ShaderModuleCreateInfo{}
                                  .setCodeSize(spirv_bytes.size())
                                  .setPCode(reinterpret_cast<const u32*>(spirv_bytes.data()));  // NOLINT
-    return VulkanValue(GetDevice().createShaderModuleUnique(create_info), "vkCreateShaderModule");
+    return GetDevice().createShaderModuleUnique(create_info);
 }
 
 }  // namespace klvk

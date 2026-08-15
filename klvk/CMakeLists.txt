@@ -128,7 +128,7 @@ target_link_libraries(klvk PUBLIC ass
                                   magic_enum
                                   unordered_dense
                                   nlohmann_json
-                                  Vulkan-Headers
+                                  VulkanHpp
                                   VulkanMemoryAllocator
                                   imgui_vulkan)
 target_link_libraries(klvk PRIVATE glfw
@@ -139,7 +139,6 @@ target_link_libraries(klvk PRIVATE glfw
 target_include_directories(klvk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/code/public)
 target_include_directories(klvk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/code/private)
 include(${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/vulkan_hpp.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/warnings.cmake)
 add_custom_target(klvk_copy_files ALL
     COMMAND ${Python3_EXECUTABLE} "${YAE_SUPPORT_ROOT}/scripts/stage_directories.py"

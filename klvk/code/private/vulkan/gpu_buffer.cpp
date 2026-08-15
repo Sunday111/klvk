@@ -47,8 +47,7 @@ GpuBuffer::GpuBuffer(
             &allocation_info,
             &buffer,
             &allocation_,
-            &result_info)),
-        "vmaCreateBuffer");
+            &result_info)));
     buffer_ = vk::Buffer{buffer};
     mapped_ = result_info.pMappedData;
 }
@@ -105,8 +104,7 @@ void GpuBuffer::Write(std::span<const std::byte> bytes, vk::DeviceSize offset)
     if (bytes.empty()) return;
     std::memcpy(static_cast<std::byte*>(mapped_) + offset, bytes.data(), bytes.size());
     VulkanCheck(
-        static_cast<vk::Result>(vmaFlushAllocation(context_->GetAllocator(), allocation_, offset, bytes.size())),
-        "vmaFlushAllocation");
+        static_cast<vk::Result>(vmaFlushAllocation(context_->GetAllocator(), allocation_, offset, bytes.size())));
 }
 
 void GpuBuffer::Read(std::span<std::byte> bytes, vk::DeviceSize offset) const
@@ -122,8 +120,7 @@ void GpuBuffer::Read(std::span<std::byte> bytes, vk::DeviceSize offset) const
         size_);
     if (bytes.empty()) return;
     VulkanCheck(
-        static_cast<vk::Result>(vmaInvalidateAllocation(context_->GetAllocator(), allocation_, offset, bytes.size())),
-        "vmaInvalidateAllocation");
+        static_cast<vk::Result>(vmaInvalidateAllocation(context_->GetAllocator(), allocation_, offset, bytes.size())));
     std::memcpy(bytes.data(), static_cast<const std::byte*>(mapped_) + offset, bytes.size());
 }
 

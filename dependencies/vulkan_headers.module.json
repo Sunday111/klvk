@@ -1,7 +1,7 @@
 {
     "ModuleType": "GitClone",
     "GitUrl": "https://github.com/KhronosGroup/Vulkan-Headers",
-    "GitTag": "vulkan-sdk-1.4.350.1",
+    "GitTag": "v1.4.359",
     "TargetName": "Vulkan-Headers",
     "CMakeOptions": {},
     "Dependencies": {

@@ -34,7 +34,7 @@ PipelineLayout::PipelineLayout(
     description_.push_constants.assign(push_constants.begin(), push_constants.end());
     const auto create_info =
         vk::PipelineLayoutCreateInfo{}.setSetLayouts(handles).setPushConstantRanges(description_.push_constants);
-    layout_ = VulkanValue(context.GetDevice().createPipelineLayoutUnique(create_info), "vkCreatePipelineLayout");
+    layout_ = context.GetDevice().createPipelineLayoutUnique(create_info);
 }
 
 ShaderProgramInterface PipelineLayout::Validate(const ShaderStages& stages) const

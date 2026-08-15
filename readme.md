@@ -3,7 +3,8 @@
 Vulkan rendering library. A Vulkan counterpart of [klgl](https://github.com/Sunday111/klgl) with the same high-level
 API (`Application`, `Window`, events, camera) built on Vulkan 1.3 with dynamic rendering.
 
-- Vulkan API types and dynamic dispatch via [Vulkan-Hpp](https://github.com/KhronosGroup/Vulkan-Hpp).
+- Vulkan API types, dynamic dispatch, and traced system exceptions via
+  [Vulkan-Hpp](https://github.com/Sunday111/Vulkan-Hpp/tree/cpptrace).
 - Memory management via [VulkanMemoryAllocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator).
 - Slang shaders are staged at build time and compiled to SPIR-V on demand, then cached on disk.
 - Slang shader files must currently be self-contained. Imports and includes fail explicitly until persistent shader
@@ -279,9 +280,9 @@ For repeatable main-versus-branch rendering checks, see the
 ## Vulkan API
 
 Include `klvk/vulkan/vulkan.hpp` for the project's Vulkan-Hpp configuration. It provides dynamic dispatch without
-Vulkan prototypes or Vulkan-Hpp exceptions and uses `std::expected` for enhanced calls.
+Vulkan prototypes. Enhanced calls throw Vulkan-Hpp exceptions that retain their `vk::Result` and capture a cpptrace
+stack trace.
 
-`VulkanCheck` checks a `vk::Result`, while `VulkanValue` unwraps enhanced calls returning
-`std::expected<T, vk::Result>`. Both throw `VulkanError` on failure with the `vk::Result`, operation context, and a
-captured stack trace. Operations with multiple ordinary outcomes, such as swapchain acquire and present, are handled
-directly from their Vulkan-Hpp results.
+`VulkanCheck` applies the same exception policy to raw `vk::Result` values returned at C API boundaries. Operations
+with multiple ordinary outcomes, such as swapchain acquire and present, are handled directly from their Vulkan-Hpp
+results.

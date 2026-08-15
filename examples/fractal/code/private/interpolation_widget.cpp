@@ -22,21 +22,20 @@ InterpolationWidget::InterpolationWidget(klvk::Application& app, size_t num_colo
                                                        .setStageFlags(vk::ShaderStageFlagBits::eFragment);
     set_layout_description_.bindings = {binding};
     const vk::DescriptorSetLayoutCreateInfo layout_info = vk::DescriptorSetLayoutCreateInfo{}.setBindings(binding);
-    set_layout_ = klvk::VulkanValue(device.createDescriptorSetLayoutUnique(layout_info), "vkCreateDescriptorSetLayout");
+    set_layout_ = device.createDescriptorSetLayoutUnique(layout_info);
 
     constexpr auto frames = static_cast<u32>(klvk::Application::kFramesInFlight);
     const vk::DescriptorPoolSize pool_size =
         vk::DescriptorPoolSize{}.setType(vk::DescriptorType::eStorageBuffer).setDescriptorCount(frames);
     const vk::DescriptorPoolCreateInfo pool_info =
         vk::DescriptorPoolCreateInfo{}.setMaxSets(frames).setPoolSizes(pool_size);
-    descriptor_pool_ = klvk::VulkanValue(device.createDescriptorPoolUnique(pool_info), "vkCreateDescriptorPool");
+    descriptor_pool_ = device.createDescriptorPoolUnique(pool_info);
 
     std::array<vk::DescriptorSetLayout, klvk::Application::kFramesInFlight> layouts{};
     layouts.fill(set_layout_.get());
     const vk::DescriptorSetAllocateInfo allocate_info =
         vk::DescriptorSetAllocateInfo{}.setDescriptorPool(descriptor_pool_.get()).setSetLayouts(layouts);
-    const std::vector<vk::DescriptorSet> sets =
-        klvk::VulkanValue(device.allocateDescriptorSets(allocate_info), "vkAllocateDescriptorSets");
+    const std::vector<vk::DescriptorSet> sets = device.allocateDescriptorSets(allocate_info);
 
     for (size_t index = 0; index != klvk::Application::kFramesInFlight; ++index)
     {

@@ -49,8 +49,7 @@ AllocatedImage CreateImage(
             &allocation_info,
             &image,
             &result.allocation,
-            nullptr)),
-        "vmaCreateImage(offscreen)");
+            nullptr)));
     result.image = vk::Image{image};
     try
     {
@@ -60,7 +59,7 @@ AllocatedImage CreateImage(
                                    .setViewType(vk::ImageViewType::e2D)
                                    .setFormat(format)
                                    .setSubresourceRange(range);
-        result.view = VulkanValue(context.GetDevice().createImageViewUnique(view_info), "vkCreateImageView");
+        result.view = context.GetDevice().createImageViewUnique(view_info);
     }
     catch (...)
     {

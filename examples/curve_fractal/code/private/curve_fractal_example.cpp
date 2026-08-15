@@ -261,7 +261,7 @@ class CurveFractalApp : public klvk::Application
                                                        .setAddressModeU(vk::SamplerAddressMode::eClampToBorder)
                                                        .setAddressModeV(vk::SamplerAddressMode::eClampToBorder)
                                                        .setAddressModeW(vk::SamplerAddressMode::eClampToBorder);
-        sampler_ = klvk::VulkanValue(device.createSamplerUnique(sampler_info), "vkCreateSampler");
+        sampler_ = device.createSamplerUnique(sampler_info);
         const auto set_layout = descriptor_sets_.GetLayoutView();
         pipeline_layout_ = klvk::PipelineLayout{context, std::span{&set_layout, 1}};
         pipeline_ = CreateDisplayPipeline(context);
@@ -302,8 +302,7 @@ class CurveFractalApp : public klvk::Application
                 &allocation_info,
                 &raw_image,
                 &target_.allocation,
-                nullptr)),
-            "vmaCreateImage(curve fractal accumulation)");
+                nullptr)));
         target_.image = raw_image;
         const vk::ImageSubresourceRange subresource_range = vk::ImageSubresourceRange{}
                                                                 .setAspectMask(vk::ImageAspectFlagBits::eColor)
@@ -314,7 +313,7 @@ class CurveFractalApp : public klvk::Application
                                                       .setViewType(vk::ImageViewType::e2D)
                                                       .setFormat(kOffscreenFormat)
                                                       .setSubresourceRange(subresource_range);
-        target_.view = klvk::VulkanValue(context.GetDevice().createImageViewUnique(view_info), "vkCreateImageView");
+        target_.view = context.GetDevice().createImageViewUnique(view_info);
         descriptor_sets_.WriteImage(0, 0, target_.view.get(), sampler_.get());
     }
 

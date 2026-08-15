@@ -1,5 +1,7 @@
 #include "counting_renderer.hpp"
 
+#include <array>
+
 #include "../fractal_settings.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
@@ -44,8 +46,7 @@ CountingRenderer::CountingRenderer(klvk::Application& app, size_t max_iterations
                                                            .setDescriptorCount(1)
                                                            .setStageFlags(vk::ShaderStageFlagBits::eCompute);
         const vk::DescriptorSetLayoutCreateInfo layout_info = vk::DescriptorSetLayoutCreateInfo{}.setBindings(binding);
-        compute_set_layout_ =
-            klvk::VulkanValue(device.createDescriptorSetLayoutUnique(layout_info), "vkCreateDescriptorSetLayout");
+        compute_set_layout_ = device.createDescriptorSetLayoutUnique(layout_info);
     }
 
     {
@@ -62,20 +63,18 @@ CountingRenderer::CountingRenderer(klvk::Application& app, size_t max_iterations
                 .setStageFlags(vk::ShaderStageFlagBits::eFragment),
         };
         const vk::DescriptorSetLayoutCreateInfo layout_info = vk::DescriptorSetLayoutCreateInfo{}.setBindings(bindings);
-        draw_set_layout_ =
-            klvk::VulkanValue(device.createDescriptorSetLayoutUnique(layout_info), "vkCreateDescriptorSetLayout");
+        draw_set_layout_ = device.createDescriptorSetLayoutUnique(layout_info);
     }
 
     const vk::DescriptorPoolSize pool_size =
         vk::DescriptorPoolSize{}.setType(vk::DescriptorType::eStorageBuffer).setDescriptorCount(3);
     const vk::DescriptorPoolCreateInfo pool_info = vk::DescriptorPoolCreateInfo{}.setMaxSets(2).setPoolSizes(pool_size);
-    descriptor_pool_ = klvk::VulkanValue(device.createDescriptorPoolUnique(pool_info), "vkCreateDescriptorPool");
+    descriptor_pool_ = device.createDescriptorPoolUnique(pool_info);
 
     const std::array layouts{compute_set_layout_.get(), draw_set_layout_.get()};
     const vk::DescriptorSetAllocateInfo allocate_info =
         vk::DescriptorSetAllocateInfo{}.setDescriptorPool(descriptor_pool_.get()).setSetLayouts(layouts);
-    const std::vector<vk::DescriptorSet> sets =
-        klvk::VulkanValue(device.allocateDescriptorSets(allocate_info), "vkAllocateDescriptorSets");
+    const std::vector<vk::DescriptorSet> sets = device.allocateDescriptorSets(allocate_info);
     compute_set_ = sets[0];
     draw_set_ = sets[1];
 
@@ -147,10 +146,10 @@ void CountingRenderer::ApplySettings(const FractalSettings& settings)
         const vk::ComputePipelineCreateInfo compute_info = vk::ComputePipelineCreateInfo{}
                                                                .setStage(compute_stages.GetCreateInfos().front())
                                                                .setLayout(compute_pipeline_layout_.GetHandle());
-        auto outcome = device.createComputePipelineUnique(nullptr, compute_info);
-        vk::UniquePipeline compute_pipeline = std::move(outcome.value);
-        klvk::VulkanCheck(outcome.result, "vkCreateComputePipelines");
-        compute_pipeline_ = std::move(compute_pipeline);
+        const std::array compute_infos{compute_info};
+        auto outcome = device.createComputePipelinesUnique(nullptr, compute_infos);
+        compute_pipeline_ = std::move(outcome.value.front());
+        klvk::VulkanCheck(outcome.result);
 
         auto stages = fullscreen_shader_.MakeStages();
         stages.Append(draw_shader_.MakeStages());

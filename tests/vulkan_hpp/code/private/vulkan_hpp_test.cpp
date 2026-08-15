@@ -1,6 +1,5 @@
 #include <fmt/core.h>
 
-#include <expected>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -78,10 +77,15 @@ using UniquePipelineResult = decltype(std::declval<vk::Device>().createGraphicsP
     vk::GraphicsPipelineCreateInfo{}));
 using WaitIdleResult = decltype(std::declval<vk::Device>().waitIdle());
 
-static_assert(std::same_as<SemaphoreResult, std::expected<vk::Semaphore, vk::Result>>);
-static_assert(std::same_as<UniqueSemaphoreResult, std::expected<vk::UniqueSemaphore, vk::Result>>);
+static_assert(std::same_as<SemaphoreResult, vk::Semaphore>);
+static_assert(std::same_as<UniqueSemaphoreResult, vk::UniqueSemaphore>);
 static_assert(std::same_as<UniquePipelineResult, vk::ResultValue<vk::UniquePipeline>>);
-static_assert(std::same_as<WaitIdleResult, std::expected<void, vk::Result>>);
+static_assert(std::same_as<WaitIdleResult, void>);
+static_assert(std::derived_from<vk::SystemError, std::system_error>);
+static_assert(std::derived_from<vk::DeviceLostError, vk::SystemError>);
+static_assert(requires(const vk::SystemError& error) {
+    { error.trace() } -> std::same_as<const cpptrace::stacktrace&>;
+});
 static_assert(std::same_as<decltype(std::declval<klvk::GraphicsPipelineBuilder&>().Build()), vk::UniquePipeline>);
 static_assert(!std::copy_constructible<vk::UniqueSemaphore>);
 static_assert(!std::is_copy_assignable_v<vk::UniqueSemaphore>);
@@ -96,48 +100,38 @@ void Ensure(bool condition, const char* message)
 }
 
 template <typename Function>
-klvk::VulkanError CaptureVulkanError(Function&& function)
+void EnsureVulkanException(Function&& function, vk::Result expected_result, std::string_view expected_frame = {})
 {
     try
     {
         function();
     }
-    catch (const klvk::VulkanError& error)
+    catch (const vk::SystemError& error)
     {
-        return error;
+        Ensure(error.code() == vk::make_error_code(expected_result), "Vulkan exception lost its result");
+        Ensure(!error.trace().frames.empty(), "Vulkan exception did not capture a stack trace");
+        if (!expected_frame.empty())
+        {
+            bool found_frame = false;
+            for (const auto& frame : error.trace().frames)
+            {
+                found_frame |= frame.symbol.contains(expected_frame);
+            }
+            Ensure(found_frame, error.what());
+        }
+        return;
     }
-    throw std::runtime_error("Expected VulkanError");
+    throw std::runtime_error("Expected vk::SystemError");
 }
 
 void TestResults()
 {
-    klvk::VulkanCheck(vk::Result::eSuccess, "vkSuccess");
-    Ensure(klvk::VulkanValue(std::expected<int, vk::Result>{42}, "vkValue") == 42, "Value was not returned");
-    klvk::VulkanValue(std::expected<void, vk::Result>{}, "vkVoid");
-
-    const klvk::VulkanError check_error =
-        CaptureVulkanError([] { klvk::VulkanCheck(vk::Result::eErrorDeviceLost, "vkCheckFailure"); });
-    Ensure(check_error.GetResult() == vk::Result::eErrorDeviceLost, "VulkanCheck lost the result");
-    Ensure(check_error.GetContext() == "vkCheckFailure", "VulkanCheck lost the operation context");
-    Ensure(!check_error.trace().frames.empty(), "VulkanCheck did not capture a stack trace");
-    Ensure(std::string{check_error.what()}.contains("ErrorDeviceLost"), "VulkanCheck did not format the result");
-
-    const klvk::VulkanError value_error = CaptureVulkanError(
-        []
-        {
-            (void)klvk::VulkanValue(
-                std::expected<int, vk::Result>{std::unexpected(vk::Result::eErrorOutOfHostMemory)},
-                "vkValueFailure");
-        });
-    Ensure(value_error.GetResult() == vk::Result::eErrorOutOfHostMemory, "VulkanValue lost the result");
-    Ensure(value_error.GetContext() == "vkValueFailure", "VulkanValue lost the operation context");
-
-    const klvk::VulkanError void_error = CaptureVulkanError(
-        []
-        {
-            klvk::VulkanValue(std::expected<void, vk::Result>{std::unexpected(vk::Result::eTimeout)}, "vkVoidFailure");
-        });
-    Ensure(void_error.GetResult() == vk::Result::eTimeout, "Void VulkanValue lost the result");
+    klvk::VulkanCheck(vk::Result::eSuccess);
+    EnsureVulkanException(
+        [] { klvk::VulkanCheck(vk::Result::eErrorDeviceLost); },
+        vk::Result::eErrorDeviceLost,
+        "main");
+    EnsureVulkanException([] { throw vk::OutOfHostMemoryError("vkCreateBuffer"); }, vk::Result::eErrorOutOfHostMemory);
 }
 
 void TestTypedVulkan()

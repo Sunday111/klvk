@@ -1,0 +1,23 @@
+{
+    "ModuleType": "GitClone",
+    "GitUrl": "https://github.com/Sunday111/Vulkan-Hpp",
+    "GitTag": "cpptrace",
+    "TargetName": "VulkanHpp",
+    "CMakeOptions": {
+        "VULKAN_HPP_BUILD_CXX_MODULE": false,
+        "VULKAN_HPP_BUILD_WITH_LOCAL_VULKAN_HPP": true,
+        "VULKAN_HPP_DISPATCH_LOADER_DYNAMIC": true,
+        "VULKAN_HPP_GENERATOR_BUILD": false,
+        "VULKAN_HPP_PRECOMPILE": false,
+        "VULKAN_HPP_SAMPLES_BUILD": false,
+        "VULKAN_HPP_TESTS_BUILD": false,
+        "VULKAN_HPP_USE_CPPTRACE": true
+    },
+    "Dependencies": {
+        "Public": [
+            "cpptrace",
+            "vulkan_headers"
+        ],
+        "Private": []
+    }
+}
