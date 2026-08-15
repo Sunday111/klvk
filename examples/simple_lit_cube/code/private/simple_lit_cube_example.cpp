@@ -60,7 +60,7 @@ class SimpleLitCubeApp : public klvk::Application
         GetWindow().SetTitle("Simple lit cubes");
 
         event_listener_ = klvk::events::EventListenerMethodCallbacks<&SimpleLitCubeApp::OnMouseMove>::CreatePtr(this);
-        GetEventManager().AddEventListener(*event_listener_);
+        event_subscription_ = GetEventManager().AddEventListener(*event_listener_);
 
         klvk::DeviceContext& context = GetDeviceContext();
         const auto mesh = klvk::ProceduralMeshGenerator::GenerateCubeMesh();
@@ -229,6 +229,7 @@ class SimpleLitCubeApp : public klvk::Application
 
 private:
     std::unique_ptr<klvk::events::IEventListener> event_listener_;
+    klvk::events::EventSubscription event_subscription_;
     klvk::GpuBuffer vertex_buffer_;
     klvk::GpuBuffer index_buffer_;
     std::array<klvk::GpuBuffer, kFramesInFlight> uniform_buffers_;

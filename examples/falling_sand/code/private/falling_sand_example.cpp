@@ -141,7 +141,7 @@ class FallingSandApp : public klvk::Application
     {
         klvk::Application::Initialize();
         listener_ = klvk::events::EventListenerMethodCallbacks<&FallingSandApp::OnMouseScroll>::CreatePtr(this);
-        GetEventManager().AddEventListener(*listener_);
+        listener_subscription_ = GetEventManager().AddEventListener(*listener_);
         SetClearColor({});
         GetWindow().SetSize(1000, 1000);
         GetWindow().SetTitle("Painter 2d");
@@ -332,6 +332,7 @@ private:
     std::unique_ptr<klvk::Texture> texture_;
     std::unique_ptr<klvk::InstancedSpriteRenderer2d> renderer_;
     std::unique_ptr<klvk::events::IEventListener> listener_;
+    klvk::events::EventSubscription listener_subscription_;
     klvk::Camera2d camera_{};
     klvk::RenderTransforms2d transforms_{};
     float move_speed_ = 0.5f;

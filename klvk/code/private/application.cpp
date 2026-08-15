@@ -65,6 +65,7 @@ struct Application::State
     SwapchainPresentMode present_mode_ = SwapchainPresentMode::PreferLowLatency;
     u64 completed_frames_ = 0;
     events::EventManager event_manager_;
+    events::EventSubscription quit_subscription_;
     std::optional<DiagnosticRunConfig> diagnostic_config_;
     std::unique_ptr<DiagnosticRunner> diagnostic_runner_;
     std::optional<std::filesystem::path> input_record_path_;
@@ -182,7 +183,7 @@ struct Application::State
 
     State()
     {
-        [[maybe_unused]] const events::IEventListener* quit_listener = event_manager_.AddEventListener(
+        quit_subscription_ = event_manager_.AddEventListener(
             events::EventListenerMethodCallbacks<&State::OnApplicationQuitRequested>::CreatePtr(this));
     }
 

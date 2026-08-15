@@ -1,0 +1,4 @@
+{
+    "ModuleType": "Executable",
+    "Dependencies": {"Public": ["klvk"]}
+}

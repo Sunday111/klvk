@@ -170,7 +170,7 @@ class CurveFractalApp : public klvk::Application
         GetWindow().SetSize(kFramebufferResolution.x(), kFramebufferResolution.y());
         GetWindow().SetTitle("Curve Fractal");
         listener_ = klvk::events::EventListenerMethodCallbacks<&CurveFractalApp::OnMouseScroll>::CreatePtr(this);
-        GetEventManager().AddEventListener(*listener_);
+        listener_subscription_ = GetEventManager().AddEventListener(*listener_);
 
         CreateDisplayResources();
         CreateOffscreenTarget();
@@ -472,6 +472,7 @@ public:
 
 private:
     std::unique_ptr<klvk::events::IEventListener> listener_;
+    klvk::events::EventSubscription listener_subscription_;
     klvk::Camera2d camera_{};
     klvk::RenderTransforms2d transforms_{};
     float move_speed_ = 0.5f;

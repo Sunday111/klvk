@@ -1,6 +1,7 @@
 #pragma once
 
 #include <klvk/events/event_listener_interface.hpp>
+#include <klvk/events/event_manager.hpp>
 
 #include "fractal_settings.hpp"
 #include "klvk/application.hpp"
@@ -36,6 +37,7 @@ public:
     std::unique_ptr<InterpolationWidget> interpolation_widget_;
 
     std::unique_ptr<klvk::events::IEventListener> event_listener_;
+    klvk::events::EventSubscription event_subscription_;
     float zoom_power_ = 0.f;
     float move_speed_ = 0.5f;
     FractalSettings settings_{10};

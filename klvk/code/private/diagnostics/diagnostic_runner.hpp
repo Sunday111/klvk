@@ -10,6 +10,7 @@
 #include "diagnostic_video_encoder.hpp"
 #include "klvk/diagnostics/diagnostic_run_config.hpp"
 #include "klvk/events/event_listener_interface.hpp"
+#include "klvk/events/event_manager.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/timing/timer_manager.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
@@ -19,11 +20,6 @@ namespace klvk
 
 class DeviceContext;
 class Window;
-namespace events
-{
-class EventManager;
-}
-
 class DiagnosticRunner
 {
 public:
@@ -116,6 +112,7 @@ private:
     events::EventManager& event_manager_;
     Window& window_;
     std::unique_ptr<events::IEventListener> event_listener_;
+    events::EventSubscription event_subscription_;
     std::unique_ptr<DiagnosticVideoEncoder> video_encoder_;
     bool video_includes_ui_ = true;
     u64 video_frame_count_ = 0;

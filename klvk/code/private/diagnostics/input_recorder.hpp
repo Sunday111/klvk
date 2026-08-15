@@ -8,17 +8,13 @@
 #include "edt/math/matrix.hpp"
 #include "klvk/diagnostics/diagnostic_run_config.hpp"
 #include "klvk/events/event_listener_interface.hpp"
+#include "klvk/events/event_manager.hpp"
 #include "klvk/events/keyboard_events.hpp"
 #include "klvk/events/mouse_events.hpp"
 #include "klvk/integral_aliases.hpp"
 
 namespace klvk
 {
-
-namespace events
-{
-class EventManager;
-}
 
 // Records real input into a diagnostic configuration that replays through
 // --klvk-diagnostics. It listens to the same four window entry points the replay
@@ -72,6 +68,7 @@ private:
     std::filesystem::path path_;
     events::EventManager& event_manager_;
     std::unique_ptr<events::IEventListener> event_listener_;
+    events::EventSubscription event_subscription_;
     std::vector<DiagnosticInputConfig> input_;
     std::vector<DiagnosticDialogConfig> dialogs_;
     std::optional<edt::Vec2f> last_recorded_position_;

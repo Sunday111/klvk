@@ -21,7 +21,7 @@ void FractalApp::Initialize()
 {
     klvk::Application::Initialize();
     event_listener_ = klvk::events::EventListenerMethodCallbacks<&FractalApp::OnMouseScroll>::CreatePtr(this);
-    GetEventManager().AddEventListener(*event_listener_);
+    event_subscription_ = GetEventManager().AddEventListener(*event_listener_);
 
     SetClearColor({});
     GetWindow().SetSize(1000, 1000);
