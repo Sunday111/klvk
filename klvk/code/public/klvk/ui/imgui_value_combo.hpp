@@ -46,6 +46,7 @@ public:
     }
 
     [[nodiscard]] std::optional<size_t> GetSelectedIndex() const noexcept { return combo_.GetSelected(); }
+    void SetSelectedIndex(size_t index) { combo_.SetSelected(index); }
 
     [[nodiscard]] T* TryGetSelectedItem() noexcept
     {

@@ -33,11 +33,14 @@ CountingRenderer::CountingRenderer(klvk::Application& app, size_t max_iterations
     compute_shader_.SetDefineValue(compute_shader_.GetDefine("MAX_ITERATIONS"), iterations);
     def_compute_inside_out_space_ = compute_shader_.GetDefine("INSIDE_OUT_SPACE");
 
-    color_table_ = klvk::GpuBuffer(
-        context,
-        vk::BufferUsageFlagBits::eStorageBuffer,
-        (max_iterations + 1) * sizeof(edt::Vec4f),
-        true);
+    for (FrameResources& frame : frames_)
+    {
+        frame.color_table = klvk::GpuBuffer(
+            context,
+            vk::BufferUsageFlagBits::eStorageBuffer,
+            (max_iterations + 1) * sizeof(edt::Vec4f),
+            true);
+    }
 
     {
         const vk::DescriptorSetLayoutBinding binding = vk::DescriptorSetLayoutBinding{}
@@ -66,17 +69,27 @@ CountingRenderer::CountingRenderer(klvk::Application& app, size_t max_iterations
         draw_set_layout_ = device.createDescriptorSetLayoutUnique(layout_info);
     }
 
-    const vk::DescriptorPoolSize pool_size =
-        vk::DescriptorPoolSize{}.setType(vk::DescriptorType::eStorageBuffer).setDescriptorCount(3);
-    const vk::DescriptorPoolCreateInfo pool_info = vk::DescriptorPoolCreateInfo{}.setMaxSets(2).setPoolSizes(pool_size);
+    const vk::DescriptorPoolSize pool_size = vk::DescriptorPoolSize{}
+                                                 .setType(vk::DescriptorType::eStorageBuffer)
+                                                 .setDescriptorCount(static_cast<u32>(3 * frames_.size()));
+    const vk::DescriptorPoolCreateInfo pool_info =
+        vk::DescriptorPoolCreateInfo{}.setMaxSets(static_cast<u32>(2 * frames_.size())).setPoolSizes(pool_size);
     descriptor_pool_ = device.createDescriptorPoolUnique(pool_info);
 
-    const std::array layouts{compute_set_layout_.get(), draw_set_layout_.get()};
+    std::array<vk::DescriptorSetLayout, 2 * klvk::Application::kFramesInFlight> layouts;
+    for (size_t index = 0; index != frames_.size(); ++index)
+    {
+        layouts[index * 2] = compute_set_layout_.get();
+        layouts[index * 2 + 1] = draw_set_layout_.get();
+    }
     const vk::DescriptorSetAllocateInfo allocate_info =
         vk::DescriptorSetAllocateInfo{}.setDescriptorPool(descriptor_pool_.get()).setSetLayouts(layouts);
     const std::vector<vk::DescriptorSet> sets = device.allocateDescriptorSets(allocate_info);
-    compute_set_ = sets[0];
-    draw_set_ = sets[1];
+    for (size_t index = 0; index != frames_.size(); ++index)
+    {
+        frames_[index].compute_set = sets[index * 2];
+        frames_[index].draw_set = sets[index * 2 + 1];
+    }
 
     {
         const klvk::DescriptorSetLayoutDescription set_description{
@@ -158,50 +171,62 @@ void CountingRenderer::ApplySettings(const FractalSettings& settings)
     }
 
     const auto resolution = settings.viewport.size.Cast<size_t>();
-    const size_t num_pixels = resolution.x() * resolution.y();
-    if (current_counters_size_ != num_pixels)
-    {
-        counters_ = klvk::GpuBuffer(
-            app_->GetDeviceContext(),
-            vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
-            num_pixels * sizeof(u32),
-            false);
-        current_counters_size_ = num_pixels;
-    }
-
-    const vk::DescriptorBufferInfo counters_info =
-        vk::DescriptorBufferInfo{}.setBuffer(counters_.GetHandle()).setRange(vk::WholeSize);
-    const vk::DescriptorBufferInfo colors_info =
-        vk::DescriptorBufferInfo{}.setBuffer(color_table_.GetHandle()).setRange(vk::WholeSize);
-    const std::array<vk::WriteDescriptorSet, 3> writes{
-        vk::WriteDescriptorSet{}
-            .setDstSet(compute_set_)
-            .setDstBinding(0)
-            .setDescriptorType(vk::DescriptorType::eStorageBuffer)
-            .setBufferInfo(counters_info),
-        vk::WriteDescriptorSet{}
-            .setDstSet(draw_set_)
-            .setDstBinding(0)
-            .setDescriptorType(vk::DescriptorType::eStorageBuffer)
-            .setBufferInfo(counters_info),
-        vk::WriteDescriptorSet{}
-            .setDstSet(draw_set_)
-            .setDstBinding(1)
-            .setDescriptorType(vk::DescriptorType::eStorageBuffer)
-            .setBufferInfo(colors_info),
-    };
-    device.updateDescriptorSets(writes, {});
-
-    std::vector<edt::Vec4f> colors(max_iterations + 1);
+    counters_size_ = resolution.x() * resolution.y();
+    colors_.resize(max_iterations + 1);
     settings.ComputeColors(
-        colors.size(),
-        [&](size_t index, const edt::Vec3f& color) { colors[index] = edt::Vec4f{color, 1.f}; });
-    color_table_.Write(std::as_bytes(std::span{colors}));
+        colors_.size(),
+        [&](size_t index, const edt::Vec3f& color) { colors_[index] = edt::Vec4f{color, 1.f}; });
+    ++color_version_;
 }
 
 void CountingRenderer::PrepareFrame(vk::CommandBuffer command_buffer, const FractalSettings& settings)
 {
-    if (!compute_pipeline_ || !counters_.IsValid()) return;
+    active_frame_ = nullptr;
+    if (!compute_pipeline_ || counters_size_ == 0) return;
+
+    FrameResources& frame = frames_[app_->GetFrameInFlightIndex()];
+    active_frame_ = &frame;
+    bool update_descriptors = false;
+    if (frame.counters_size != counters_size_)
+    {
+        frame.counters = klvk::GpuBuffer(
+            app_->GetDeviceContext(),
+            vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+            counters_size_ * sizeof(u32),
+            false);
+        frame.counters_size = counters_size_;
+        update_descriptors = true;
+    }
+    if (frame.color_version != color_version_)
+    {
+        frame.color_table.Write(std::as_bytes(std::span{colors_}));
+        frame.color_version = color_version_;
+    }
+    if (update_descriptors)
+    {
+        const vk::DescriptorBufferInfo counters_info =
+            vk::DescriptorBufferInfo{}.setBuffer(frame.counters.GetHandle()).setRange(vk::WholeSize);
+        const vk::DescriptorBufferInfo colors_info =
+            vk::DescriptorBufferInfo{}.setBuffer(frame.color_table.GetHandle()).setRange(vk::WholeSize);
+        const std::array<vk::WriteDescriptorSet, 3> writes{
+            vk::WriteDescriptorSet{}
+                .setDstSet(frame.compute_set)
+                .setDstBinding(0)
+                .setDescriptorType(vk::DescriptorType::eStorageBuffer)
+                .setBufferInfo(counters_info),
+            vk::WriteDescriptorSet{}
+                .setDstSet(frame.draw_set)
+                .setDstBinding(0)
+                .setDescriptorType(vk::DescriptorType::eStorageBuffer)
+                .setBufferInfo(counters_info),
+            vk::WriteDescriptorSet{}
+                .setDstSet(frame.draw_set)
+                .setDstBinding(1)
+                .setDescriptorType(vk::DescriptorType::eStorageBuffer)
+                .setBufferInfo(colors_info),
+        };
+        app_->GetDeviceContext().GetDevice().updateDescriptorSets(writes, {});
+    }
 
     render_transforms_.Update(settings.camera, settings.viewport);
 
@@ -219,13 +244,7 @@ void CountingRenderer::PrepareFrame(vk::CommandBuffer command_buffer, const Frac
         command_buffer.pipelineBarrier2(dependency);
     };
 
-    // Previous frame's fragment reads must finish before the counters are cleared.
-    global_barrier(
-        vk::PipelineStageFlagBits2::eFragmentShader,
-        vk::AccessFlagBits2::eShaderStorageRead,
-        vk::PipelineStageFlagBits2::eClear,
-        vk::AccessFlagBits2::eTransferWrite);
-    command_buffer.fillBuffer(counters_.GetHandle(), 0, vk::WholeSize, 0);
+    command_buffer.fillBuffer(frame.counters.GetHandle(), 0, vk::WholeSize, 0);
     global_barrier(
         vk::PipelineStageFlagBits2::eClear,
         vk::AccessFlagBits2::eTransferWrite,
@@ -237,7 +256,7 @@ void CountingRenderer::PrepareFrame(vk::CommandBuffer command_buffer, const Frac
         vk::PipelineBindPoint::eCompute,
         compute_pipeline_layout_.GetHandle(),
         0,
-        std::span{&compute_set_, 1},
+        std::span{&frame.compute_set, 1},
         {});
 
     const FractalPushConstants push_constants = MakeFractalPushConstants(settings, render_transforms_.screen_to_world);
@@ -264,7 +283,7 @@ void CountingRenderer::PrepareFrame(vk::CommandBuffer command_buffer, const Frac
 
 void CountingRenderer::Render(vk::CommandBuffer command_buffer, const FractalSettings& settings)
 {
-    if (!draw_pipeline_) return;
+    if (!draw_pipeline_ || active_frame_ == nullptr) return;
 
     CmdSetGlStyleViewport(command_buffer, settings.viewport, app_->GetWindow().GetSize());
     command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, draw_pipeline_.get());
@@ -272,7 +291,7 @@ void CountingRenderer::Render(vk::CommandBuffer command_buffer, const FractalSet
         vk::PipelineBindPoint::eGraphics,
         draw_pipeline_layout_.GetHandle(),
         0,
-        std::span{&draw_set_, 1},
+        std::span{&active_frame_->draw_set, 1},
         {});
 
     const DrawPushConstants push_constants{.resolution = settings.viewport.size.Cast<float>()};

@@ -31,6 +31,7 @@ public:
     {
         std::string app_name = "klvk";
         bool enable_validation = kDebugBuild;
+        bool enable_synchronization_validation = kDebugBuild;
     };
 
     explicit DeviceContext(Window* presentation_window);
