@@ -20,7 +20,7 @@ FractalPushConstants MakeFractalPushConstants(const FractalSettings& settings, c
     return push_constants;
 }
 
-vk::Pipeline CreateFullscreenPipeline(
+vk::UniquePipeline CreateFullscreenPipeline(
     klvk::Application& app,
     const klvk::PipelineLayout& pipeline_layout,
     const klvk::ShaderStages& stages)

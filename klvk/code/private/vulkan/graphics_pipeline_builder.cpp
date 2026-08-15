@@ -331,7 +331,7 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::ColorFormat(vk::Format format)
     return *this;
 }
 
-vk::Pipeline GraphicsPipelineBuilder::Build()
+vk::UniquePipeline GraphicsPipelineBuilder::Build()
 {
     ErrorHandling::Ensure(layout_ != nullptr, "GraphicsPipelineBuilder: pipeline layout was not set");
 
@@ -479,30 +479,24 @@ vk::Pipeline GraphicsPipelineBuilder::Build()
                                     .setDepthAttachmentFormat(depth_format)
                                     .setStencilAttachmentFormat(stencil_format);
 
-    const std::array pipeline_infos{vk::GraphicsPipelineCreateInfo{}
-                                        .setPNext(&rendering_info)
-                                        .setStages(stages)
-                                        .setPVertexInputState(&vertex_input)
-                                        .setPInputAssemblyState(&input_assembly)
-                                        .setPTessellationState(has_tessellation ? &tessellation : nullptr)
-                                        .setPViewportState(&viewport_state)
-                                        .setPRasterizationState(&rasterization)
-                                        .setPMultisampleState(&multisample)
-                                        .setPDepthStencilState(&depth_stencil)
-                                        .setPColorBlendState(&color_blend)
-                                        .setPDynamicState(&dynamic_state)
-                                        .setLayout(layout_)};
+    const auto pipeline_info = vk::GraphicsPipelineCreateInfo{}
+                                   .setPNext(&rendering_info)
+                                   .setStages(stages)
+                                   .setPVertexInputState(&vertex_input)
+                                   .setPInputAssemblyState(&input_assembly)
+                                   .setPTessellationState(has_tessellation ? &tessellation : nullptr)
+                                   .setPViewportState(&viewport_state)
+                                   .setPRasterizationState(&rasterization)
+                                   .setPMultisampleState(&multisample)
+                                   .setPDepthStencilState(&depth_stencil)
+                                   .setPColorBlendState(&color_blend)
+                                   .setPDynamicState(&dynamic_state)
+                                   .setLayout(layout_);
     const vk::Device device = context_->GetDevice();
-    std::array<vk::Pipeline, 1> pipelines{};
-    const vk::Result result = device.createGraphicsPipelines(
-        nullptr,
-        static_cast<u32>(pipeline_infos.size()),
-        pipeline_infos.data(),
-        nullptr,
-        pipelines.data());
-    VulkanObject<vk::Pipeline> pipeline{device, pipelines.front()};
-    VulkanCheck(result, "vkCreateGraphicsPipelines");
-    return pipeline.Release();
+    auto outcome = device.createGraphicsPipelineUnique(nullptr, pipeline_info);
+    vk::UniquePipeline pipeline = std::move(outcome.value);
+    VulkanCheck(outcome.result, "vkCreateGraphicsPipelines");
+    return pipeline;
 }
 
 }  // namespace klvk

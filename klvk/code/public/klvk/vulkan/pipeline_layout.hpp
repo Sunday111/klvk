@@ -5,7 +5,7 @@
 
 #include "klvk/shader/shader_interface.hpp"
 #include "klvk/shader/shader_stages.hpp"
-#include "klvk/vulkan/vulkan_object.hpp"
+#include "klvk/vulkan/vulkan.hpp"
 
 namespace klvk
 {
@@ -44,13 +44,13 @@ public:
     PipelineLayout& operator=(const PipelineLayout&) = delete;
     PipelineLayout& operator=(PipelineLayout&&) noexcept = default;
 
-    [[nodiscard]] vk::PipelineLayout GetHandle() const noexcept { return layout_.GetHandle(); }
+    [[nodiscard]] vk::PipelineLayout GetHandle() const noexcept { return layout_.get(); }
     [[nodiscard]] const PipelineLayoutDescription& GetDescription() const noexcept { return description_; }
 
     [[nodiscard]] ShaderProgramInterface Validate(const ShaderStages& stages) const;
 
 private:
-    VulkanObject<vk::PipelineLayout> layout_;
+    vk::UniquePipelineLayout layout_;
     PipelineLayoutDescription description_;
 };
 

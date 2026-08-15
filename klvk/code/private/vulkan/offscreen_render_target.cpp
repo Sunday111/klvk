@@ -17,7 +17,7 @@ struct AllocatedImage
 {
     vk::Image image = nullptr;
     VmaAllocation allocation = nullptr;
-    vk::ImageView view = nullptr;
+    vk::UniqueImageView view;
 };
 
 AllocatedImage CreateImage(
@@ -60,7 +60,7 @@ AllocatedImage CreateImage(
                                    .setViewType(vk::ImageViewType::e2D)
                                    .setFormat(format)
                                    .setSubresourceRange(range);
-        result.view = VulkanValue(context.GetDevice().createImageView(view_info), "vkCreateImageView");
+        result.view = VulkanValue(context.GetDevice().createImageViewUnique(view_info), "vkCreateImageView");
     }
     catch (...)
     {
@@ -99,7 +99,7 @@ void OffscreenRenderTarget::CreateImages(size_t image_count)
     {
         for (size_t index = 0; index != image_count; ++index)
         {
-            const AllocatedImage color = CreateImage(
+            AllocatedImage color = CreateImage(
                 *context_,
                 extent_,
                 kColorFormat,
@@ -107,9 +107,9 @@ void OffscreenRenderTarget::CreateImages(size_t image_count)
                 vk::ImageAspectFlagBits::eColor);
             color_images_.push_back(color.image);
             color_allocations_.push_back(color.allocation);
-            color_image_views_.push_back(color.view);
+            color_image_views_.push_back(std::move(color.view));
 
-            const AllocatedImage depth = CreateImage(
+            AllocatedImage depth = CreateImage(
                 *context_,
                 extent_,
                 depth_stencil_format_,
@@ -117,7 +117,7 @@ void OffscreenRenderTarget::CreateImages(size_t image_count)
                 DepthStencilAspectMask(depth_stencil_format_));
             depth_images_.push_back(depth.image);
             depth_allocations_.push_back(depth.allocation);
-            depth_image_views_.push_back(depth.view);
+            depth_image_views_.push_back(std::move(depth.view));
         }
     }
     catch (...)
@@ -129,8 +129,8 @@ void OffscreenRenderTarget::CreateImages(size_t image_count)
 
 void OffscreenRenderTarget::DestroyImages()
 {
-    for (vk::ImageView view : color_image_views_) context_->GetDevice().destroy(view);
-    for (vk::ImageView view : depth_image_views_) context_->GetDevice().destroy(view);
+    color_image_views_.clear();
+    depth_image_views_.clear();
     for (size_t index = 0; index != color_images_.size(); ++index)
     {
         vmaDestroyImage(
@@ -147,10 +147,8 @@ void OffscreenRenderTarget::DestroyImages()
     }
     color_images_.clear();
     color_allocations_.clear();
-    color_image_views_.clear();
     depth_images_.clear();
     depth_allocations_.clear();
-    depth_image_views_.clear();
 }
 
 }  // namespace klvk

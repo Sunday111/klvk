@@ -17,8 +17,8 @@
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
+#include "klvk/vulkan/vulkan.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
-#include "klvk/vulkan/vulkan_object.hpp"
 #include "klvk/window.hpp"
 
 using namespace edt::lazy_matrix_aliases;  // NOLINT
@@ -118,26 +118,23 @@ class SimpleLitCubeApp : public klvk::Application
 
     void CreatePipeline(klvk::DeviceContext& context, vk::PrimitiveTopology topology)
     {
-        vk::Device device = context.GetDevice();
         const vk::PushConstantRange push_constant_range =
             vk::PushConstantRange{}.setStageFlags(vk::ShaderStageFlagBits::eVertex).setSize(sizeof(ModelPushConstants));
         const auto set_layout = descriptor_sets_.GetLayoutView();
         pipeline_layout_ = klvk::PipelineLayout{context, std::span{&set_layout, 1}, std::span{&push_constant_range, 1}};
 
         const std::filesystem::path shader_dir = GetShaderDir() / "basic_light_3d";
-        pipeline_ = klvk::VulkanObject<vk::Pipeline>{
-            device,
-            klvk::GraphicsPipelineBuilder(*this)
-                .Layout(pipeline_layout_)
-                .VertexShaderFile(shader_dir / "basic_light_3d.vert.slang")
-                .FragmentShaderFile(shader_dir / "basic_light_3d.frag.slang")
-                .Topology(topology)
-                .CullMode(vk::CullModeFlagBits::eBack, vk::FrontFace::eClockwise)
-                .VertexBinding(0, sizeof(Vertex), vk::VertexInputRate::eVertex)
-                .VertexAttribute(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, position))
-                .VertexAttribute(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, normal))
-                .DepthTest()
-                .Build()};
+        pipeline_ = klvk::GraphicsPipelineBuilder(*this)
+                        .Layout(pipeline_layout_)
+                        .VertexShaderFile(shader_dir / "basic_light_3d.vert.slang")
+                        .FragmentShaderFile(shader_dir / "basic_light_3d.frag.slang")
+                        .Topology(topology)
+                        .CullMode(vk::CullModeFlagBits::eBack, vk::FrontFace::eClockwise)
+                        .VertexBinding(0, sizeof(Vertex), vk::VertexInputRate::eVertex)
+                        .VertexAttribute(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, position))
+                        .VertexAttribute(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, normal))
+                        .DepthTest()
+                        .Build();
     }
 
     void Tick() override
@@ -165,7 +162,7 @@ class SimpleLitCubeApp : public klvk::Application
         const vk::Buffer vertex_buffer = vertex_buffer_.GetHandle();
         constexpr vk::DeviceSize offset = 0;
         const vk::DescriptorSet descriptor_set = descriptor_sets_.Get(frame_index);
-        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
         command_buffer.bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics,
             pipeline_layout_.GetHandle(),
@@ -237,7 +234,7 @@ private:
     std::array<klvk::GpuBuffer, kFramesInFlight> uniform_buffers_;
     klvk::DescriptorSets descriptor_sets_;
     klvk::PipelineLayout pipeline_layout_;
-    klvk::VulkanObject<vk::Pipeline> pipeline_;
+    vk::UniquePipeline pipeline_;
     u32 index_count_ = 0;
     float move_speed_ = 5.f;
     std::vector<edt::Mat4f> cubes_;

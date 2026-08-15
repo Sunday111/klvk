@@ -5,8 +5,8 @@
 #include "klvk/filesystem/filesystem.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
+#include "klvk/vulkan/vulkan.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
-#include "klvk/vulkan/vulkan_object.hpp"
 #include "klvk/window.hpp"
 
 // Matches the push constant block in just_color_2d.vert.
@@ -27,20 +27,17 @@ class QuadApp : public klvk::Application
         GetWindow().SetTitle("Quad");
 
         klvk::DeviceContext& context = GetDeviceContext();
-        vk::Device device = context.GetDevice();
 
         const vk::PushConstantRange push_constant_range =
             vk::PushConstantRange{}.setStageFlags(vk::ShaderStageFlagBits::eVertex).setSize(sizeof(PushConstants));
         pipeline_layout_ = klvk::PipelineLayout{context, {}, std::span{&push_constant_range, 1}};
 
         const std::filesystem::path shader_dir = GetShaderDir() / "just_color_2d";
-        pipeline_ = klvk::VulkanObject<vk::Pipeline>{
-            device,
-            klvk::GraphicsPipelineBuilder(*this)
-                .Layout(pipeline_layout_)
-                .VertexShaderFile(shader_dir / "just_color_2d.vert.slang")
-                .FragmentShaderFile(shader_dir / "just_color_2d.frag.slang")
-                .Build()};
+        pipeline_ = klvk::GraphicsPipelineBuilder(*this)
+                        .Layout(pipeline_layout_)
+                        .VertexShaderFile(shader_dir / "just_color_2d.vert.slang")
+                        .FragmentShaderFile(shader_dir / "just_color_2d.frag.slang")
+                        .Build();
     }
 
     void Tick() override
@@ -61,7 +58,7 @@ class QuadApp : public klvk::Application
         }
 
         vk::CommandBuffer command_buffer = GetCurrentCommandBuffer();
-        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
         command_buffer.pushConstants(
             pipeline_layout_.GetHandle(),
             vk::ShaderStageFlagBits::eVertex,
@@ -73,7 +70,7 @@ class QuadApp : public klvk::Application
 
 private:
     klvk::PipelineLayout pipeline_layout_;
-    klvk::VulkanObject<vk::Pipeline> pipeline_;
+    vk::UniquePipeline pipeline_;
 };
 
 void Main(int argc, char** argv)

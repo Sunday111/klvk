@@ -39,10 +39,10 @@ public:
     DeviceContext(DeviceContext&&) = delete;
     ~DeviceContext();
 
-    [[nodiscard]] vk::Instance GetInstance() const noexcept { return instance_; }
-    [[nodiscard]] vk::SurfaceKHR GetSurface() const noexcept { return surface_; }
+    [[nodiscard]] vk::Instance GetInstance() const noexcept { return instance_.get(); }
+    [[nodiscard]] vk::SurfaceKHR GetSurface() const noexcept { return surface_.get(); }
     [[nodiscard]] vk::PhysicalDevice GetPhysicalDevice() const noexcept { return physical_device_; }
-    [[nodiscard]] vk::Device GetDevice() const noexcept { return device_; }
+    [[nodiscard]] vk::Device GetDevice() const noexcept { return device_.get(); }
     [[nodiscard]] vk::Queue GetGraphicsQueue() const noexcept { return graphics_queue_; }
     [[nodiscard]] u32 GetGraphicsQueueFamily() const noexcept { return graphics_queue_family_; }
     [[nodiscard]] VmaAllocator GetAllocator() const noexcept { return allocator_; }
@@ -68,10 +68,11 @@ public:
         EndOneTimeCommands(command_buffer);
     }
 
-    [[nodiscard]] vk::ShaderModule CreateShaderModule(std::string_view spirv_bytes, std::string_view debug_name) const;
+    [[nodiscard]] vk::UniqueShaderModule CreateShaderModule(std::string_view spirv_bytes, std::string_view debug_name)
+        const;
     void InitializeShaderCache(const std::filesystem::path& source_root, const std::filesystem::path& cache_root = {});
     [[nodiscard]] ShaderModule LoadShaderModule(const std::filesystem::path& source_path) const;
-    [[nodiscard]] vk::ShaderModule CreateShaderModuleFromSourceUnchecked(
+    [[nodiscard]] vk::UniqueShaderModule CreateShaderModuleFromSourceUnchecked(
         const std::filesystem::path& source_path) const;
     [[nodiscard]] ShaderCacheManager& GetShaderCacheManager() const;
 
@@ -85,15 +86,15 @@ private:
     void CreateDevice();
     void CreateAllocator();
 
-    vk::Instance instance_ = nullptr;
-    vk::DebugUtilsMessengerEXT debug_messenger_ = nullptr;
-    vk::SurfaceKHR surface_ = nullptr;
+    vk::UniqueInstance instance_;
+    vk::UniqueDebugUtilsMessengerEXT debug_messenger_;
+    vk::UniqueSurfaceKHR surface_;
     vk::PhysicalDevice physical_device_ = nullptr;
-    vk::Device device_ = nullptr;
+    vk::UniqueDevice device_;
     vk::Queue graphics_queue_ = nullptr;
     u32 graphics_queue_family_ = 0;
     VmaAllocator allocator_ = nullptr;
-    vk::CommandPool one_time_pool_ = nullptr;
+    vk::UniqueCommandPool one_time_pool_;
     bool geometry_shader_enabled_ = false;
     bool tessellation_shader_enabled_ = false;
     bool external_memory_fd_enabled_ = false;

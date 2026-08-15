@@ -97,23 +97,21 @@ CurveRenderer2d::CurveRenderer2d(Application& app, vk::Format color_format, Comp
         vk::ShaderStageFlagBits::eTessellationEvaluation | vk::ShaderStageFlagBits::eGeometry;
     const std::array push_ranges{vk::PushConstantRange{push_stages, 0, sizeof(PushConstants)}};
     pipeline_layout_ = PipelineLayout{context, {}, push_ranges};
-    pipeline_ = VulkanObject<vk::Pipeline>{
-        context.GetDevice(),
-        GraphicsPipelineBuilder(app)
-            .Layout(pipeline_layout_)
-            .VertexShaderFile(app.GetShaderDir() / "klvk/curve2d.vert.slang")
-            .TessellationControlShaderFile(app.GetShaderDir() / "klvk/curve2d.hull.slang")
-            .TessellationEvaluationShaderFile(app.GetShaderDir() / "klvk/curve2d.domain.slang")
-            .GeometryShaderFile(app.GetShaderDir() / "klvk/curve2d.geom.slang")
-            .FragmentShaderFile(app.GetShaderDir() / "klvk/curve2d.frag.slang")
-            .Topology(vk::PrimitiveTopology::ePatchList)
-            .PatchControlPoints(6)
-            .VertexBinding(0, sizeof(ControlPoint), vk::VertexInputRate::eVertex)
-            .VertexAttribute(0, 0, vk::Format::eR32G32Sfloat, offsetof(ControlPoint, position))
-            .VertexAttribute(1, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(ControlPoint, color))
-            .Blend(composite == CompositeMode::Accumulate ? kAccumulateBlend : kUnionBlend)
-            .ColorFormat(color_format)
-            .Build()};
+    pipeline_ = GraphicsPipelineBuilder(app)
+                    .Layout(pipeline_layout_)
+                    .VertexShaderFile(app.GetShaderDir() / "klvk/curve2d.vert.slang")
+                    .TessellationControlShaderFile(app.GetShaderDir() / "klvk/curve2d.hull.slang")
+                    .TessellationEvaluationShaderFile(app.GetShaderDir() / "klvk/curve2d.domain.slang")
+                    .GeometryShaderFile(app.GetShaderDir() / "klvk/curve2d.geom.slang")
+                    .FragmentShaderFile(app.GetShaderDir() / "klvk/curve2d.frag.slang")
+                    .Topology(vk::PrimitiveTopology::ePatchList)
+                    .PatchControlPoints(6)
+                    .VertexBinding(0, sizeof(ControlPoint), vk::VertexInputRate::eVertex)
+                    .VertexAttribute(0, 0, vk::Format::eR32G32Sfloat, offsetof(ControlPoint, position))
+                    .VertexAttribute(1, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(ControlPoint, color))
+                    .Blend(composite == CompositeMode::Accumulate ? kAccumulateBlend : kUnionBlend)
+                    .ColorFormat(color_format)
+                    .Build();
 }
 
 CurveRenderer2d::~CurveRenderer2d()
@@ -199,7 +197,7 @@ void CurveRenderer2d::Draw(
     const vk::CommandBuffer command_buffer = app_->GetCurrentCommandBuffer();
     const std::array vertex_buffers{vertex_buffers_[frame].GetHandle()};
     constexpr std::array<vk::DeviceSize, 1> offsets{0};
-    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
     command_buffer.bindVertexBuffers(0, vertex_buffers, offsets);
     command_buffer.bindIndexBuffer(index_buffers_[frame].GetHandle(), 0, vk::IndexType::eUint32);
     command_buffer.pushConstants<PushConstants>(

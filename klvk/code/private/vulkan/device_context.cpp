@@ -70,7 +70,7 @@ DeviceContext::DeviceContext(Window* presentation_window, const Settings& settin
     InitializeVulkanDispatcher();
     presentation_enabled_ = presentation_window != nullptr;
     CreateInstance(settings, presentation_window);
-    if (presentation_window) surface_ = presentation_window->CreateVulkanSurface(instance_);
+    if (presentation_window) surface_ = presentation_window->CreateVulkanSurface(instance_.get());
     PickPhysicalDevice();
     CreateDevice();
     CreateAllocator();
@@ -78,19 +78,20 @@ DeviceContext::DeviceContext(Window* presentation_window, const Settings& settin
     const auto pool_info = vk::CommandPoolCreateInfo{}
                                .setFlags(vk::CommandPoolCreateFlagBits::eTransient)
                                .setQueueFamilyIndex(graphics_queue_family_);
-    one_time_pool_ = VulkanValue(device_.createCommandPool(pool_info), "vkCreateCommandPool");
+    one_time_pool_ = VulkanValue(GetDevice().createCommandPoolUnique(pool_info), "vkCreateCommandPool");
 }
 
 DeviceContext::~DeviceContext()
 {
     shader_cache_.reset();
-    if (device_) (void)device_.waitIdle();
-    if (one_time_pool_) device_.destroy(one_time_pool_);
+    if (device_) (void)GetDevice().waitIdle();
+    one_time_pool_.reset();
     if (allocator_) vmaDestroyAllocator(allocator_);
-    if (device_) device_.destroy();
-    if (surface_) instance_.destroy(surface_);
-    if (debug_messenger_) instance_.destroy(debug_messenger_);
-    if (instance_) instance_.destroy();
+    allocator_ = nullptr;
+    device_.reset();
+    surface_.reset();
+    debug_messenger_.reset();
+    instance_.reset();
 }
 
 void DeviceContext::InitializeShaderCache(
@@ -114,16 +115,14 @@ ShaderModule DeviceContext::LoadShaderModule(const std::filesystem::path& source
         shader->interface != nullptr,
         "Shader '{}' has no reflection; use CreateShaderModuleFromSourceUnchecked for legacy GLSL",
         source_path.string());
-    vk::ShaderModule module = CreateShaderModule(
+    vk::UniqueShaderModule module = CreateShaderModule(
         std::string_view(reinterpret_cast<const char*>(shader->spirv->data()), shader->spirv->size() * sizeof(u32)),
         source_path.filename().string());
-    return ShaderModule{
-        VulkanObject<vk::ShaderModule>{device_, module},
-        shader->interface,
-    };
+    return ShaderModule{std::move(module), shader->interface};
 }
 
-vk::ShaderModule DeviceContext::CreateShaderModuleFromSourceUnchecked(const std::filesystem::path& source_path) const
+vk::UniqueShaderModule DeviceContext::CreateShaderModuleFromSourceUnchecked(
+    const std::filesystem::path& source_path) const
 {
     const auto shader = GetShaderCacheManager().GetOrCompile(source_path);
     return CreateShaderModule(
@@ -161,25 +160,26 @@ void DeviceContext::CreateInstance(const Settings& settings, const Window* prese
             create_info,
             messenger_info};
         chain.get<vk::InstanceCreateInfo>().setPEnabledLayerNames(layers).setPEnabledExtensionNames(extensions);
-        instance_ = VulkanValue(vk::createInstance(chain.get<vk::InstanceCreateInfo>()), "vkCreateInstance");
+        instance_ = VulkanValue(vk::createInstanceUnique(chain.get<vk::InstanceCreateInfo>()), "vkCreateInstance");
     }
     else
     {
         create_info.setPEnabledLayerNames(layers).setPEnabledExtensionNames(extensions);
-        instance_ = VulkanValue(vk::createInstance(create_info), "vkCreateInstance");
+        instance_ = VulkanValue(vk::createInstanceUnique(create_info), "vkCreateInstance");
     }
-    InitializeVulkanDispatcher(instance_);
+    InitializeVulkanDispatcher(instance_.get());
 
     if (validation)
     {
-        debug_messenger_ =
-            VulkanValue(instance_.createDebugUtilsMessengerEXT(messenger_info), "vkCreateDebugUtilsMessengerEXT");
+        debug_messenger_ = VulkanValue(
+            instance_->createDebugUtilsMessengerEXTUnique(messenger_info),
+            "vkCreateDebugUtilsMessengerEXT");
     }
 }
 
 void DeviceContext::PickPhysicalDevice()
 {
-    const auto devices = VulkanValue(instance_.enumeratePhysicalDevices(), "vkEnumeratePhysicalDevices");
+    const auto devices = VulkanValue(instance_->enumeratePhysicalDevices(), "vkEnumeratePhysicalDevices");
     ErrorHandling::Ensure(!devices.empty(), "No Vulkan devices found");
 
     int best_score = -1;
@@ -205,8 +205,9 @@ void DeviceContext::PickPhysicalDevice()
         for (u32 family = 0; family != static_cast<u32>(families.size()); ++family)
         {
             if (!(families[family].queueFlags & vk::QueueFlagBits::eGraphics)) continue;
-            if (!presentation_enabled_ ||
-                VulkanValue(device.getSurfaceSupportKHR(family, surface_), "vkGetPhysicalDeviceSurfaceSupportKHR"))
+            if (!presentation_enabled_ || VulkanValue(
+                                              device.getSurfaceSupportKHR(family, surface_.get()),
+                                              "vkGetPhysicalDeviceSurfaceSupportKHR"))
             {
                 graphics_family = family;
                 break;
@@ -281,9 +282,9 @@ void DeviceContext::CreateDevice()
         vk::PhysicalDeviceVulkan13Features>
         chain{create_info, features2, features11, features13};
 
-    device_ = VulkanValue(physical_device_.createDevice(chain.get<vk::DeviceCreateInfo>()), "vkCreateDevice");
-    InitializeVulkanDispatcher(device_);
-    graphics_queue_ = device_.getQueue(graphics_queue_family_, 0);
+    device_ = VulkanValue(physical_device_.createDeviceUnique(chain.get<vk::DeviceCreateInfo>()), "vkCreateDevice");
+    InitializeVulkanDispatcher(device_.get());
+    graphics_queue_ = device_->getQueue(graphics_queue_family_, 0);
 }
 
 void DeviceContext::CreateAllocator()
@@ -294,9 +295,9 @@ void DeviceContext::CreateAllocator()
     };
     const VmaAllocatorCreateInfo create_info{
         .physicalDevice = static_cast<VkPhysicalDevice>(physical_device_),
-        .device = static_cast<VkDevice>(device_),
+        .device = static_cast<VkDevice>(device_.get()),
         .pVulkanFunctions = &functions,
-        .instance = static_cast<VkInstance>(instance_),
+        .instance = static_cast<VkInstance>(instance_.get()),
         .vulkanApiVersion = vk::ApiVersion13,
     };
     VulkanCheck(static_cast<vk::Result>(vmaCreateAllocator(&create_info, &allocator_)), "vmaCreateAllocator");
@@ -304,16 +305,17 @@ void DeviceContext::CreateAllocator()
 
 void DeviceContext::WaitIdle() const
 {
-    VulkanValue(device_.waitIdle(), "vkDeviceWaitIdle");
+    VulkanValue(GetDevice().waitIdle(), "vkDeviceWaitIdle");
 }
 
 vk::CommandBuffer DeviceContext::BeginOneTimeCommands() const
 {
     const auto allocate_info = vk::CommandBufferAllocateInfo{}
-                                   .setCommandPool(one_time_pool_)
+                                   .setCommandPool(one_time_pool_.get())
                                    .setLevel(vk::CommandBufferLevel::ePrimary)
                                    .setCommandBufferCount(1);
-    const auto command_buffers = VulkanValue(device_.allocateCommandBuffers(allocate_info), "vkAllocateCommandBuffers");
+    const auto command_buffers =
+        VulkanValue(GetDevice().allocateCommandBuffers(allocate_info), "vkAllocateCommandBuffers");
     const vk::CommandBuffer command_buffer = command_buffers.front();
 
     const auto begin_info = vk::CommandBufferBeginInfo{}.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
@@ -330,10 +332,11 @@ void DeviceContext::EndOneTimeCommands(vk::CommandBuffer command_buffer) const
     VulkanValue(graphics_queue_.submit2(submit_infos), "vkQueueSubmit2");
     VulkanValue(graphics_queue_.waitIdle(), "vkQueueWaitIdle");
     const std::array command_buffers{command_buffer};
-    device_.freeCommandBuffers(one_time_pool_, command_buffers);
+    GetDevice().freeCommandBuffers(one_time_pool_.get(), command_buffers);
 }
 
-vk::ShaderModule DeviceContext::CreateShaderModule(std::string_view spirv_bytes, std::string_view debug_name) const
+vk::UniqueShaderModule DeviceContext::CreateShaderModule(std::string_view spirv_bytes, std::string_view debug_name)
+    const
 {
     ErrorHandling::Ensure(
         spirv_bytes.size() % sizeof(u32) == 0 && !spirv_bytes.empty(),
@@ -344,7 +347,7 @@ vk::ShaderModule DeviceContext::CreateShaderModule(std::string_view spirv_bytes,
     const auto create_info = vk::ShaderModuleCreateInfo{}
                                  .setCodeSize(spirv_bytes.size())
                                  .setPCode(reinterpret_cast<const u32*>(spirv_bytes.data()));  // NOLINT
-    return VulkanValue(device_.createShaderModule(create_info), "vkCreateShaderModule");
+    return VulkanValue(GetDevice().createShaderModuleUnique(create_info), "vkCreateShaderModule");
 }
 
 }  // namespace klvk

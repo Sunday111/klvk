@@ -64,8 +64,8 @@ public:
     Texture(Texture&&) = delete;
     ~Texture();
 
-    [[nodiscard]] vk::ImageView GetView() const noexcept { return view_; }
-    [[nodiscard]] vk::Sampler GetSampler() const noexcept { return sampler_; }
+    [[nodiscard]] vk::ImageView GetView() const noexcept { return view_.get(); }
+    [[nodiscard]] vk::Sampler GetSampler() const noexcept { return sampler_.get(); }
     [[nodiscard]] edt::Vec2<u32> GetSize() const noexcept { return size_; }
 
 private:
@@ -81,8 +81,8 @@ private:
     DeviceContext* context_ = nullptr;
     vk::Image image_ = nullptr;
     VmaAllocation allocation_ = nullptr;
-    vk::ImageView view_ = nullptr;
-    vk::Sampler sampler_ = nullptr;
+    vk::UniqueImageView view_;
+    vk::UniqueSampler sampler_;
     edt::Vec2<u32> size_{};
 };
 

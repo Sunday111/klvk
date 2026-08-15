@@ -66,23 +66,29 @@
 #include "klvk/vulkan/texture.hpp"
 #include "klvk/vulkan/vulkan.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
-#include "klvk/vulkan/vulkan_object.hpp"
 #include "klvk/window.hpp"
 
 namespace
 {
 
 using SemaphoreResult = decltype(std::declval<vk::Device>().createSemaphore(vk::SemaphoreCreateInfo{}));
+using UniqueSemaphoreResult = decltype(std::declval<vk::Device>().createSemaphoreUnique(vk::SemaphoreCreateInfo{}));
+using UniquePipelineResult = decltype(std::declval<vk::Device>().createGraphicsPipelineUnique(
+    vk::PipelineCache{},
+    vk::GraphicsPipelineCreateInfo{}));
 using WaitIdleResult = decltype(std::declval<vk::Device>().waitIdle());
 
 static_assert(std::same_as<SemaphoreResult, std::expected<vk::Semaphore, vk::Result>>);
+static_assert(std::same_as<UniqueSemaphoreResult, std::expected<vk::UniqueSemaphore, vk::Result>>);
+static_assert(std::same_as<UniquePipelineResult, vk::ResultValue<vk::UniquePipeline>>);
 static_assert(std::same_as<WaitIdleResult, std::expected<void, vk::Result>>);
-static_assert(!std::copy_constructible<klvk::VulkanObject<vk::Semaphore>>);
-static_assert(!std::is_copy_assignable_v<klvk::VulkanObject<vk::Semaphore>>);
-static_assert(std::move_constructible<klvk::VulkanObject<vk::Semaphore>>);
-static_assert(std::is_move_assignable_v<klvk::VulkanObject<vk::Semaphore>>);
-static_assert(std::convertible_to<klvk::VulkanObject<vk::Semaphore>, vk::Semaphore>);
-static_assert(std::same_as<decltype(std::declval<klvk::VulkanObject<vk::Semaphore>>().GetHandle()), vk::Semaphore>);
+static_assert(std::same_as<decltype(std::declval<klvk::GraphicsPipelineBuilder&>().Build()), vk::UniquePipeline>);
+static_assert(!std::copy_constructible<vk::UniqueSemaphore>);
+static_assert(!std::is_copy_assignable_v<vk::UniqueSemaphore>);
+static_assert(std::move_constructible<vk::UniqueSemaphore>);
+static_assert(std::is_move_assignable_v<vk::UniqueSemaphore>);
+static_assert(!std::convertible_to<vk::UniqueSemaphore, vk::Semaphore>);
+static_assert(std::same_as<std::remove_cvref_t<decltype(std::declval<vk::UniqueSemaphore>().get())>, vk::Semaphore>);
 
 void Ensure(bool condition, const char* message)
 {

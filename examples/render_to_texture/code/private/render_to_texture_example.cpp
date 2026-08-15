@@ -13,8 +13,8 @@
 #include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
+#include "klvk/vulkan/vulkan.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
-#include "klvk/vulkan/vulkan_object.hpp"
 #include "klvk/window.hpp"
 
 struct ColorPushConstants
@@ -31,7 +31,7 @@ class RenderToTextureApp : public klvk::Application
     {
         vk::Image image = nullptr;
         VmaAllocation allocation = nullptr;
-        vk::ImageView view = nullptr;
+        vk::UniqueImageView view;
     };
 
     void Initialize() override
@@ -55,29 +55,24 @@ class RenderToTextureApp : public klvk::Application
                                                        .setAddressModeU(vk::SamplerAddressMode::eClampToEdge)
                                                        .setAddressModeV(vk::SamplerAddressMode::eClampToEdge)
                                                        .setAddressModeW(vk::SamplerAddressMode::eClampToEdge);
-        sampler_ = klvk::VulkanObject<vk::Sampler>{
-            device,
-            klvk::VulkanValue(device.createSampler(sampler_info), "vkCreateSampler")};
+        sampler_ = klvk::VulkanValue(device.createSamplerUnique(sampler_info), "vkCreateSampler");
 
         const vk::PushConstantRange push_constant_range =
             vk::PushConstantRange{}.setStageFlags(vk::ShaderStageFlagBits::eVertex).setSize(sizeof(ColorPushConstants));
         color_pipeline_layout_ = klvk::PipelineLayout{context, {}, std::span{&push_constant_range, 1}};
         const auto set_layout = descriptor_sets_.GetLayoutView();
         texture_pipeline_layout_ = klvk::PipelineLayout{context, std::span{&set_layout, 1}};
-        color_pipeline_ = klvk::VulkanObject<vk::Pipeline>{
-            device,
-            CreatePipeline(context, "color.vert.slang", "color.frag.slang", color_pipeline_layout_, kOffscreenFormat)};
-        texture_pipeline_ = klvk::VulkanObject<vk::Pipeline>{
-            device,
-            CreatePipeline(
-                context,
-                "textured_quad.vert.slang",
-                "textured_quad.frag.slang",
-                texture_pipeline_layout_,
-                GetSwapchainFormat())};
+        color_pipeline_ =
+            CreatePipeline(context, "color.vert.slang", "color.frag.slang", color_pipeline_layout_, kOffscreenFormat);
+        texture_pipeline_ = CreatePipeline(
+            context,
+            "textured_quad.vert.slang",
+            "textured_quad.frag.slang",
+            texture_pipeline_layout_,
+            GetSwapchainFormat());
     }
 
-    [[nodiscard]] vk::Pipeline CreatePipeline(
+    [[nodiscard]] vk::UniquePipeline CreatePipeline(
         klvk::DeviceContext& context,
         const char* vertex_name,
         const char* fragment_name,
@@ -139,9 +134,9 @@ class RenderToTextureApp : public klvk::Application
                                                           .setViewType(vk::ImageViewType::e2D)
                                                           .setFormat(kOffscreenFormat)
                                                           .setSubresourceRange(subresource_range);
-            target.view = klvk::VulkanValue(context.GetDevice().createImageView(view_info), "vkCreateImageView");
+            target.view = klvk::VulkanValue(context.GetDevice().createImageViewUnique(view_info), "vkCreateImageView");
 
-            descriptor_sets_.WriteImage(index, 0, target.view, sampler_);
+            descriptor_sets_.WriteImage(index, 0, target.view.get(), sampler_.get());
         }
     }
 
@@ -169,7 +164,7 @@ class RenderToTextureApp : public klvk::Application
         command_buffer.pipelineBarrier2(dependency);
 
         const vk::RenderingAttachmentInfo attachment = vk::RenderingAttachmentInfo{}
-                                                           .setImageView(target.view)
+                                                           .setImageView(target.view.get())
                                                            .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
                                                            .setLoadOp(vk::AttachmentLoadOp::eClear)
                                                            .setStoreOp(vk::AttachmentStoreOp::eStore);
@@ -199,7 +194,7 @@ class RenderToTextureApp : public klvk::Application
             const edt::Vec3f value = transform.GetColumn(column);
             push_constants.transform_columns[column] = {value, 0.f};
         }
-        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, color_pipeline_);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, color_pipeline_.get());
         command_buffer.pushConstants(
             color_pipeline_layout_.GetHandle(),
             vk::ShaderStageFlagBits::eVertex,
@@ -223,7 +218,7 @@ class RenderToTextureApp : public klvk::Application
         klvk::Application::Tick();
         vk::CommandBuffer command_buffer = GetCurrentCommandBuffer();
         const vk::DescriptorSet descriptor_set = descriptor_sets_.Get(GetFrameInFlightIndex());
-        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, texture_pipeline_);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, texture_pipeline_.get());
         command_buffer.bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics,
             texture_pipeline_layout_.GetHandle(),
@@ -237,11 +232,7 @@ class RenderToTextureApp : public klvk::Application
     {
         for (OffscreenTarget& target : targets_)
         {
-            if (target.view)
-            {
-                GetDeviceContext().GetDevice().destroyImageView(target.view);
-                target.view = nullptr;
-            }
+            target.view.reset();
             if (target.image)
             {
                 const VkImage raw_image = target.image;
@@ -256,19 +247,19 @@ public:
     ~RenderToTextureApp() override
     {
         // The offscreen images are raw VMA allocations with no RAII wrapper; the
-        // sampler, pipelines, layouts and descriptor sets are VulkanObject and
-        // DescriptorSets members that clean up themselves. Application::Run has
+        // sampler, pipelines, layouts and descriptor sets are owning members
+        // that clean up themselves. Application::Run has
         // already waited for the device to go idle.
         DestroyOffscreenTargets();
     }
 
 private:
     klvk::DescriptorSets descriptor_sets_;
-    klvk::VulkanObject<vk::Sampler> sampler_;
+    vk::UniqueSampler sampler_;
     klvk::PipelineLayout color_pipeline_layout_;
     klvk::PipelineLayout texture_pipeline_layout_;
-    klvk::VulkanObject<vk::Pipeline> color_pipeline_;
-    klvk::VulkanObject<vk::Pipeline> texture_pipeline_;
+    vk::UniquePipeline color_pipeline_;
+    vk::UniquePipeline texture_pipeline_;
     std::array<OffscreenTarget, kFramesInFlight> targets_{};
     edt::Vec2<u32> target_size_{};
 };

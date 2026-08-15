@@ -28,9 +28,12 @@ public:
     [[nodiscard]] vk::Extent2D GetExtent() const noexcept override { return extent_; }
     [[nodiscard]] size_t GetImageCount() const noexcept override { return color_images_.size(); }
     [[nodiscard]] vk::Image GetImage(size_t index) const override { return color_images_[index]; }
-    [[nodiscard]] vk::ImageView GetImageView(size_t index) const override { return color_image_views_[index]; }
+    [[nodiscard]] vk::ImageView GetImageView(size_t index) const override { return color_image_views_[index].get(); }
     [[nodiscard]] vk::Image GetDepthImage(size_t index) const override { return depth_images_[index]; }
-    [[nodiscard]] vk::ImageView GetDepthImageView(size_t index) const override { return depth_image_views_[index]; }
+    [[nodiscard]] vk::ImageView GetDepthImageView(size_t index) const override
+    {
+        return depth_image_views_[index].get();
+    }
 
 private:
     void CreateImages(size_t image_count);
@@ -41,10 +44,10 @@ private:
     vk::Extent2D extent_{};
     std::vector<vk::Image> color_images_;
     std::vector<VmaAllocation> color_allocations_;
-    std::vector<vk::ImageView> color_image_views_;
+    std::vector<vk::UniqueImageView> color_image_views_;
     std::vector<vk::Image> depth_images_;
     std::vector<VmaAllocation> depth_allocations_;
-    std::vector<vk::ImageView> depth_image_views_;
+    std::vector<vk::UniqueImageView> depth_image_views_;
 };
 
 }  // namespace klvk

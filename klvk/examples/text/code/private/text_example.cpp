@@ -19,8 +19,8 @@
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
 #include "klvk/vulkan/texture.hpp"
+#include "klvk/vulkan/vulkan.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
-#include "klvk/vulkan/vulkan_object.hpp"
 #include "klvk/window.hpp"
 
 namespace
@@ -74,8 +74,6 @@ class TextApp : public klvk::Application
         font_ = klvk::FontFace::FromFile(GetContentDir() / "fonts" / "DejaVuSansMono.ttf");
 
         klvk::DeviceContext& context = GetDeviceContext();
-        vk::Device device = context.GetDevice();
-
         descriptor_sets_ =
             klvk::DescriptorSets::Builder(context)
                 .Binding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
@@ -90,17 +88,15 @@ class TextApp : public klvk::Application
         pipeline_layout_ = klvk::PipelineLayout{context, set_layouts, std::span{&push_constant_range, 1}};
 
         const std::filesystem::path shader_dir = GetShaderDir() / "text";
-        pipeline_ = klvk::VulkanObject<vk::Pipeline>{
-            device,
-            klvk::GraphicsPipelineBuilder(*this)
-                .Layout(pipeline_layout_)
-                .VertexShaderFile(shader_dir / "glyph.vert.slang")
-                .FragmentShaderFile(shader_dir / "glyph.frag.slang")
-                .VertexBinding(0, sizeof(GlyphVertex), vk::VertexInputRate::eVertex)
-                .VertexAttribute(0, 0, vk::Format::eR32G32Sfloat, 0)
-                .VertexAttribute(1, 0, vk::Format::eR32G32Sfloat, sizeof(Vec2f))
-                .AlphaBlend()
-                .Build()};
+        pipeline_ = klvk::GraphicsPipelineBuilder(*this)
+                        .Layout(pipeline_layout_)
+                        .VertexShaderFile(shader_dir / "glyph.vert.slang")
+                        .FragmentShaderFile(shader_dir / "glyph.frag.slang")
+                        .VertexBinding(0, sizeof(GlyphVertex), vk::VertexInputRate::eVertex)
+                        .VertexAttribute(0, 0, vk::Format::eR32G32Sfloat, 0)
+                        .VertexAttribute(1, 0, vk::Format::eR32G32Sfloat, sizeof(Vec2f))
+                        .AlphaBlend()
+                        .Build();
 
         // A seed from the diagnostic config keeps a scripted run reproducible.
         const nlohmann::json* config = GetDiagnosticApplicationConfig();
@@ -263,7 +259,7 @@ class TextApp : public klvk::Application
         const std::array buffers{vertex_buffers_[frame_index].GetHandle()};
         const std::array<vk::DeviceSize, 1> offsets{0};
 
-        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
         command_buffer
             .bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout_.GetHandle(), 0, descriptor_set, {});
         command_buffer.bindVertexBuffers(0, buffers, offsets);
@@ -305,7 +301,7 @@ private:
     std::unique_ptr<klvk::events::IEventListener> key_listener_;
     klvk::DescriptorSets descriptor_sets_;
     klvk::PipelineLayout pipeline_layout_;
-    klvk::VulkanObject<vk::Pipeline> pipeline_;
+    vk::UniquePipeline pipeline_;
     std::array<klvk::GpuBuffer, kFramesInFlight> vertex_buffers_{};
 
     std::mt19937 random_{7};

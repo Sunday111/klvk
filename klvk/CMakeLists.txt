@@ -116,7 +116,6 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/texture.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan_common.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan_object.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/window.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/text/code/private/text_example.cpp)
 add_library(klvk STATIC ${module_source_files})

@@ -26,11 +26,9 @@ DescriptorSets DescriptorSets::Builder::Build(u32 set_count)
     DeviceContext& context = *context_;
     const vk::Device device = context.GetDevice();
 
-    VulkanObject<vk::DescriptorSetLayout> layout{
-        device,
-        VulkanValue(
-            device.createDescriptorSetLayout(vk::DescriptorSetLayoutCreateInfo{}.setBindings(bindings_)),
-            "vkCreateDescriptorSetLayout")};
+    vk::UniqueDescriptorSetLayout layout = VulkanValue(
+        device.createDescriptorSetLayoutUnique(vk::DescriptorSetLayoutCreateInfo{}.setBindings(bindings_)),
+        "vkCreateDescriptorSetLayout");
 
     // The pool must hold set_count copies of every binding, aggregated per type.
     std::vector<vk::DescriptorPoolSize> pool_sizes;
@@ -50,16 +48,15 @@ DescriptorSets DescriptorSets::Builder::Build(u32 set_count)
         }
     }
 
-    VulkanObject<vk::DescriptorPool> pool{
-        device,
-        VulkanValue(
-            device.createDescriptorPool(vk::DescriptorPoolCreateInfo{}.setMaxSets(set_count).setPoolSizes(pool_sizes)),
-            "vkCreateDescriptorPool")};
+    vk::UniqueDescriptorPool pool = VulkanValue(
+        device.createDescriptorPoolUnique(
+            vk::DescriptorPoolCreateInfo{}.setMaxSets(set_count).setPoolSizes(pool_sizes)),
+        "vkCreateDescriptorPool");
 
-    const std::vector<vk::DescriptorSetLayout> layouts(set_count, layout.GetHandle());
+    const std::vector<vk::DescriptorSetLayout> layouts(set_count, layout.get());
     std::vector<vk::DescriptorSet> sets = VulkanValue(
         device.allocateDescriptorSets(
-            vk::DescriptorSetAllocateInfo{}.setDescriptorPool(pool.GetHandle()).setSetLayouts(layouts)),
+            vk::DescriptorSetAllocateInfo{}.setDescriptorPool(pool.get()).setSetLayouts(layouts)),
         "vkAllocateDescriptorSets");
 
     return DescriptorSets{
@@ -72,8 +69,8 @@ DescriptorSets DescriptorSets::Builder::Build(u32 set_count)
 
 DescriptorSets::DescriptorSets(
     DeviceContext& context,
-    VulkanObject<vk::DescriptorSetLayout> layout,
-    VulkanObject<vk::DescriptorPool> pool,
+    vk::UniqueDescriptorSetLayout layout,
+    vk::UniqueDescriptorPool pool,
     std::vector<vk::DescriptorSet> sets,
     DescriptorSetLayoutDescription layout_description)
     : context_(&context),

@@ -22,19 +22,19 @@ InterpolationWidget::InterpolationWidget(klvk::Application& app, size_t num_colo
                                                        .setStageFlags(vk::ShaderStageFlagBits::eFragment);
     set_layout_description_.bindings = {binding};
     const vk::DescriptorSetLayoutCreateInfo layout_info = vk::DescriptorSetLayoutCreateInfo{}.setBindings(binding);
-    set_layout_ = klvk::VulkanValue(device.createDescriptorSetLayout(layout_info), "vkCreateDescriptorSetLayout");
+    set_layout_ = klvk::VulkanValue(device.createDescriptorSetLayoutUnique(layout_info), "vkCreateDescriptorSetLayout");
 
     constexpr auto frames = static_cast<u32>(klvk::Application::kFramesInFlight);
     const vk::DescriptorPoolSize pool_size =
         vk::DescriptorPoolSize{}.setType(vk::DescriptorType::eStorageBuffer).setDescriptorCount(frames);
     const vk::DescriptorPoolCreateInfo pool_info =
         vk::DescriptorPoolCreateInfo{}.setMaxSets(frames).setPoolSizes(pool_size);
-    descriptor_pool_ = klvk::VulkanValue(device.createDescriptorPool(pool_info), "vkCreateDescriptorPool");
+    descriptor_pool_ = klvk::VulkanValue(device.createDescriptorPoolUnique(pool_info), "vkCreateDescriptorPool");
 
     std::array<vk::DescriptorSetLayout, klvk::Application::kFramesInFlight> layouts{};
-    layouts.fill(set_layout_);
+    layouts.fill(set_layout_.get());
     const vk::DescriptorSetAllocateInfo allocate_info =
-        vk::DescriptorSetAllocateInfo{}.setDescriptorPool(descriptor_pool_).setSetLayouts(layouts);
+        vk::DescriptorSetAllocateInfo{}.setDescriptorPool(descriptor_pool_.get()).setSetLayouts(layouts);
     const std::vector<vk::DescriptorSet> sets =
         klvk::VulkanValue(device.allocateDescriptorSets(allocate_info), "vkAllocateDescriptorSets");
 
@@ -55,7 +55,7 @@ InterpolationWidget::InterpolationWidget(klvk::Application& app, size_t num_colo
     }
 
     const klvk::DescriptorSetLayoutView set_layout_view{
-        .handle = set_layout_,
+        .handle = set_layout_.get(),
         .description = &set_layout_description_,
     };
     pipeline_layout_ = klvk::PipelineLayout{context, std::span{&set_layout_view, 1}};
@@ -69,10 +69,6 @@ InterpolationWidget::~InterpolationWidget() noexcept
 {
     klvk::DeviceContext& context = app_->GetDeviceContext();
     context.WaitIdle();
-    vk::Device device = context.GetDevice();
-    device.destroyPipeline(pipeline_);
-    device.destroyDescriptorPool(descriptor_pool_);
-    device.destroyDescriptorSetLayout(set_layout_);
 }
 
 void InterpolationWidget::Render(
@@ -89,7 +85,7 @@ void InterpolationWidget::Render(
     color_buffers_[frame_index].Write(std::as_bytes(std::span{colors}));
 
     CmdSetGlStyleViewport(command_buffer, viewport, app_->GetWindow().GetSize());
-    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
     command_buffer.bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
         pipeline_layout_.GetHandle(),

@@ -75,16 +75,14 @@ Swapchain::Swapchain(
 Swapchain::~Swapchain()
 {
     DestroyImageViews();
-    if (swapchain_) context_->GetDevice().destroySwapchainKHR(swapchain_);
 }
 
 void Swapchain::Recreate(edt::Vec2<u32> framebuffer_size)
 {
     context_->WaitIdle();
+    vk::UniqueSwapchainKHR old_swapchain = std::move(swapchain_);
     DestroyImageViews();
-    vk::SwapchainKHR old_swapchain = swapchain_;
-    Create(framebuffer_size, old_swapchain);
-    if (old_swapchain) context_->GetDevice().destroySwapchainKHR(old_swapchain);
+    Create(framebuffer_size, old_swapchain.get());
 }
 
 void Swapchain::Create(edt::Vec2<u32> framebuffer_size, vk::SwapchainKHR old_swapchain)
@@ -143,8 +141,8 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, vk::SwapchainKHR old_swa
                                                        .setClipped(true)
                                                        .setOldSwapchain(old_swapchain);
 
-    swapchain_ = VulkanValue(context_->GetDevice().createSwapchainKHR(create_info), "vkCreateSwapchainKHR");
-    images_ = VulkanValue(context_->GetDevice().getSwapchainImagesKHR(swapchain_), "vkGetSwapchainImagesKHR");
+    swapchain_ = VulkanValue(context_->GetDevice().createSwapchainKHRUnique(create_info), "vkCreateSwapchainKHR");
+    images_ = VulkanValue(context_->GetDevice().getSwapchainImagesKHR(swapchain_.get()), "vkGetSwapchainImagesKHR");
 
     image_views_.clear();
     image_views_.reserve(images_.size());
@@ -159,7 +157,8 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, vk::SwapchainKHR old_swa
                                                       .setViewType(vk::ImageViewType::e2D)
                                                       .setFormat(format_.format)
                                                       .setSubresourceRange(subresource_range);
-        image_views_.push_back(VulkanValue(context_->GetDevice().createImageView(view_info), "vkCreateImageView"));
+        image_views_.push_back(
+            VulkanValue(context_->GetDevice().createImageViewUnique(view_info), "vkCreateImageView"));
     }
 
     depth_stencil_format_ = SelectDepthStencilFormat(context_->GetPhysicalDevice());
@@ -203,22 +202,14 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, vk::SwapchainKHR old_swa
                                                       .setFormat(depth_stencil_format_)
                                                       .setSubresourceRange(subresource_range);
         depth_image_views_.push_back(
-            VulkanValue(context_->GetDevice().createImageView(view_info), "vkCreateImageView(depth)"));
+            VulkanValue(context_->GetDevice().createImageViewUnique(view_info), "vkCreateImageView(depth)"));
     }
 }
 
 void Swapchain::DestroyImageViews()
 {
-    for (vk::ImageView view : image_views_)
-    {
-        context_->GetDevice().destroyImageView(view);
-    }
     image_views_.clear();
 
-    for (vk::ImageView view : depth_image_views_)
-    {
-        context_->GetDevice().destroyImageView(view);
-    }
     depth_image_views_.clear();
     for (size_t index = 0; index != depth_images_.size(); ++index)
     {

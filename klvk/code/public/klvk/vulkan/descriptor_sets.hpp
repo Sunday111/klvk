@@ -5,7 +5,7 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/shader/shader_interface.hpp"
 #include "klvk/vulkan/pipeline_layout.hpp"
-#include "klvk/vulkan/vulkan_object.hpp"
+#include "klvk/vulkan/vulkan.hpp"
 
 namespace klvk
 {
@@ -14,7 +14,7 @@ class DeviceContext;
 
 // One descriptor set layout replicated across N identical sets - the shape every
 // example hand-rolled as layout -> pool -> allocate -> write (~40-60 lines). The
-// layout and pool are owned as VulkanObject instances, so a DescriptorSets member needs no
+// layout and pool are uniquely owned, so a DescriptorSets member needs no
 // teardown. Build it once from the bindings, then fill each set with
 // WriteBuffer/WriteImage.
 //
@@ -41,7 +41,7 @@ public:
 
     DescriptorSets() = default;
 
-    [[nodiscard]] vk::DescriptorSetLayout GetLayout() const noexcept { return layout_.GetHandle(); }
+    [[nodiscard]] vk::DescriptorSetLayout GetLayout() const noexcept { return layout_.get(); }
     [[nodiscard]] const DescriptorSetLayoutDescription& GetLayoutDescription() const noexcept
     {
         return layout_description_;
@@ -72,16 +72,16 @@ public:
 private:
     DescriptorSets(
         DeviceContext& context,
-        VulkanObject<vk::DescriptorSetLayout> layout,
-        VulkanObject<vk::DescriptorPool> pool,
+        vk::UniqueDescriptorSetLayout layout,
+        vk::UniqueDescriptorPool pool,
         std::vector<vk::DescriptorSet> sets,
         DescriptorSetLayoutDescription layout_description);
 
     [[nodiscard]] vk::DescriptorType TypeOfBinding(u32 binding) const;
 
     DeviceContext* context_ = nullptr;
-    VulkanObject<vk::DescriptorSetLayout> layout_;
-    VulkanObject<vk::DescriptorPool> pool_;
+    vk::UniqueDescriptorSetLayout layout_;
+    vk::UniqueDescriptorPool pool_;
     std::vector<vk::DescriptorSet> sets_;
     DescriptorSetLayoutDescription layout_description_;
 };

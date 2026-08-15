@@ -377,7 +377,7 @@ std::vector<const char*> Window::GetRequiredVulkanInstanceExtensions() const
     return {extensions, extensions + extension_count};
 }
 
-vk::SurfaceKHR Window::CreateVulkanSurface(vk::Instance instance) const
+vk::UniqueSurfaceKHR Window::CreateVulkanSurface(vk::Instance instance) const
 {
     ErrorHandling::Ensure(impl_->window != nullptr, "Cannot create a Vulkan surface for an offscreen window");
     VkSurfaceKHR surface = VK_NULL_HANDLE;
@@ -385,7 +385,7 @@ vk::SurfaceKHR Window::CreateVulkanSurface(vk::Instance instance) const
         static_cast<vk::Result>(
             glfwCreateWindowSurface(static_cast<VkInstance>(instance), impl_->window, nullptr, &surface)),
         "glfwCreateWindowSurface");
-    return vk::SurfaceKHR{surface};
+    return vk::UniqueSurfaceKHR{vk::SurfaceKHR{surface}, {instance}};
 }
 
 }  // namespace klvk

@@ -87,7 +87,7 @@ public:
     // Defaults to the swapchain format. Set explicitly for offscreen targets.
     GraphicsPipelineBuilder& ColorFormat(vk::Format format);
 
-    [[nodiscard]] vk::Pipeline Build();
+    [[nodiscard]] vk::UniquePipeline Build();
 
 private:
     GraphicsPipelineBuilder& ShaderFile(vk::ShaderStageFlagBits stage, const std::filesystem::path& path);

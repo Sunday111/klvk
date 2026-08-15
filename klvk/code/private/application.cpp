@@ -68,10 +68,10 @@ struct Application::State
 
     struct FrameInFlight
     {
-        vk::CommandPool command_pool = nullptr;
+        vk::UniqueCommandPool command_pool;
         vk::CommandBuffer command_buffer = nullptr;
-        vk::Semaphore image_available = nullptr;
-        vk::Fence in_flight = nullptr;
+        vk::UniqueSemaphore image_available;
+        vk::UniqueFence in_flight;
     };
 
     GlfwState glfw_;
@@ -81,8 +81,8 @@ struct Application::State
     Swapchain* swapchain_ = nullptr;
     std::array<FrameInFlight, kFramesInFlight> frames_{};
     // One per swapchain image: signaled by the last submit that rendered to the image.
-    std::vector<vk::Semaphore> render_finished_;
-    vk::DescriptorPool imgui_descriptor_pool_ = nullptr;
+    std::vector<vk::UniqueSemaphore> render_finished_;
+    vk::UniqueDescriptorPool imgui_descriptor_pool_;
 
     std::filesystem::path executable_dir_;
     std::string imgui_ini_filename_;
@@ -237,19 +237,20 @@ struct Application::State
         {
             const auto pool_info =
                 vk::CommandPoolCreateInfo{}.setQueueFamilyIndex(device_context_->GetGraphicsQueueFamily());
-            frame.command_pool = VulkanValue(device.createCommandPool(pool_info), "vkCreateCommandPool");
+            frame.command_pool = VulkanValue(device.createCommandPoolUnique(pool_info), "vkCreateCommandPool");
 
             const auto allocate_info = vk::CommandBufferAllocateInfo{}
-                                           .setCommandPool(frame.command_pool)
+                                           .setCommandPool(frame.command_pool.get())
                                            .setLevel(vk::CommandBufferLevel::ePrimary)
                                            .setCommandBufferCount(1);
             frame.command_buffer =
                 VulkanValue(device.allocateCommandBuffers(allocate_info), "vkAllocateCommandBuffers").front();
 
-            frame.image_available = VulkanValue(device.createSemaphore(vk::SemaphoreCreateInfo{}), "vkCreateSemaphore");
+            frame.image_available =
+                VulkanValue(device.createSemaphoreUnique(vk::SemaphoreCreateInfo{}), "vkCreateSemaphore");
 
             const auto fence_info = vk::FenceCreateInfo{}.setFlags(vk::FenceCreateFlagBits::eSignaled);
-            frame.in_flight = VulkanValue(device.createFence(fence_info), "vkCreateFence");
+            frame.in_flight = VulkanValue(device.createFenceUnique(fence_info), "vkCreateFence");
         }
 
         CreateRenderFinishedSemaphores();
@@ -257,33 +258,22 @@ struct Application::State
 
     void CreateRenderFinishedSemaphores()
     {
-        vk::Device device = device_context_->GetDevice();
-        for (vk::Semaphore semaphore : render_finished_)
-        {
-            device.destroy(semaphore);
-        }
         render_finished_.clear();
         if (!swapchain_) return;
-        render_finished_.assign(render_target_->GetImageCount(), nullptr);
-        for (vk::Semaphore& semaphore : render_finished_)
+        render_finished_.reserve(render_target_->GetImageCount());
+        vk::Device device = device_context_->GetDevice();
+        for (size_t index = 0; index != render_target_->GetImageCount(); ++index)
         {
-            semaphore = VulkanValue(device.createSemaphore(vk::SemaphoreCreateInfo{}), "vkCreateSemaphore");
+            render_finished_.push_back(
+                VulkanValue(device.createSemaphoreUnique(vk::SemaphoreCreateInfo{}), "vkCreateSemaphore"));
         }
     }
 
     void DestroyFrames()
     {
-        vk::Device device = device_context_->GetDevice();
-        for (vk::Semaphore semaphore : render_finished_)
-        {
-            device.destroy(semaphore);
-        }
         render_finished_.clear();
         for (FrameInFlight& frame : frames_)
         {
-            if (frame.in_flight) device.destroy(frame.in_flight);
-            if (frame.image_available) device.destroy(frame.image_available);
-            if (frame.command_pool) device.destroy(frame.command_pool);
             frame = {};
         }
     }
@@ -351,10 +341,7 @@ Application::~Application()
     }
     if (state_->device_context_)
     {
-        if (state_->imgui_descriptor_pool_)
-        {
-            state_->device_context_->GetDevice().destroy(state_->imgui_descriptor_pool_);
-        }
+        state_->imgui_descriptor_pool_.reset();
         state_->DestroyFrames();
         state_->swapchain_ = nullptr;
         state_->render_target_.reset();
@@ -485,7 +472,8 @@ void Application::Initialize()
                                    .setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet)
                                    .setMaxSets(16)
                                    .setPoolSizes(pool_sizes);
-        state_->imgui_descriptor_pool_ = VulkanValue(device.createDescriptorPool(pool_info), "vkCreateDescriptorPool");
+        state_->imgui_descriptor_pool_ =
+            VulkanValue(device.createDescriptorPoolUnique(pool_info), "vkCreateDescriptorPool");
 
         const std::array<VkFormat, 1> color_formats{static_cast<VkFormat>(state_->render_target_->GetFormat())};
         struct ImGuiVulkanLoaderContext
@@ -533,7 +521,7 @@ void Application::Initialize()
         init_info.Device = static_cast<VkDevice>(device);
         init_info.QueueFamily = state_->device_context_->GetGraphicsQueueFamily();
         init_info.Queue = static_cast<VkQueue>(state_->device_context_->GetGraphicsQueue());
-        init_info.DescriptorPool = static_cast<VkDescriptorPool>(state_->imgui_descriptor_pool_);
+        init_info.DescriptorPool = static_cast<VkDescriptorPool>(state_->imgui_descriptor_pool_.get());
         init_info.MinImageCount = 2;
         init_info.ImageCount = static_cast<u32>(state_->render_target_->GetImageCount());
         init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
@@ -612,8 +600,8 @@ void Application::RunImpl()
 
     // Make the device idle before returning, while the application object - and
     // any Vulkan resources it owns as members - are still alive. This is what
-    // lets applications keep pipelines, layouts and descriptor sets as VulkanObject and
-    // DescriptorSets members and rely on their destructors instead of writing an
+    // lets applications keep pipelines, layouts and descriptor sets as owning members
+    // and rely on their destructors instead of writing an
     // explicit teardown that waits and destroys each handle by hand.
     if (state_->device_context_)
     {
@@ -702,7 +690,7 @@ void Application::PreTick()
     auto& frame = state_->CurrentFrame();
     vk::Device device = state_->device_context_->GetDevice();
 
-    const std::array fences{frame.in_flight};
+    const std::array fences{frame.in_flight.get()};
     const vk::Result wait_result = device.waitForFences(fences, true, std::numeric_limits<u64>::max());
     if (wait_result == vk::Result::eTimeout)
     {
@@ -724,7 +712,7 @@ void Application::PreTick()
             const auto outcome = device.acquireNextImageKHR(
                 state_->swapchain_->GetHandle(),
                 std::numeric_limits<u64>::max(),
-                frame.image_available);
+                frame.image_available.get());
             if (outcome.result == vk::Result::eSuccess || outcome.result == vk::Result::eSuboptimalKHR)
             {
                 state_->image_index_ = outcome.value;
@@ -746,7 +734,7 @@ void Application::PreTick()
     }
 
     VulkanValue(device.resetFences(fences), "vkResetFences");
-    VulkanValue(device.resetCommandPool(frame.command_pool), "vkResetCommandPool");
+    VulkanValue(device.resetCommandPool(frame.command_pool.get()), "vkResetCommandPool");
 
     const auto begin_info = vk::CommandBufferBeginInfo{}.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
     VulkanValue(frame.command_buffer.begin(begin_info), "vkBeginCommandBuffer");
@@ -958,9 +946,9 @@ void Application::PostTick()
     vk::Semaphore render_finished = nullptr;
     if (state_->swapchain_)
     {
-        render_finished = state_->render_finished_[state_->image_index_];
+        render_finished = state_->render_finished_[state_->image_index_].get();
         const std::array wait_infos{vk::SemaphoreSubmitInfo{}
-                                        .setSemaphore(frame.image_available)
+                                        .setSemaphore(frame.image_available.get())
                                         .setStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput)};
         const std::array signal_infos{vk::SemaphoreSubmitInfo{}
                                           .setSemaphore(render_finished)
@@ -970,14 +958,14 @@ void Application::PostTick()
                                           .setCommandBufferInfos(command_buffer_infos)
                                           .setSignalSemaphoreInfos(signal_infos)};
         VulkanValue(
-            state_->device_context_->GetGraphicsQueue().submit2(submit_infos, frame.in_flight),
+            state_->device_context_->GetGraphicsQueue().submit2(submit_infos, frame.in_flight.get()),
             "vkQueueSubmit2");
     }
     else
     {
         const std::array submit_infos{vk::SubmitInfo2{}.setCommandBufferInfos(command_buffer_infos)};
         VulkanValue(
-            state_->device_context_->GetGraphicsQueue().submit2(submit_infos, frame.in_flight),
+            state_->device_context_->GetGraphicsQueue().submit2(submit_infos, frame.in_flight.get()),
             "vkQueueSubmit2");
     }
 

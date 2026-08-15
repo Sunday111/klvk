@@ -32,14 +32,14 @@ private:
     klvk::DefineHandle def_compute_inside_out_space_;
     size_t pipelines_shader_version_ = 0;
 
-    vk::DescriptorSetLayout compute_set_layout_ = nullptr;
-    vk::DescriptorSetLayout draw_set_layout_ = nullptr;
-    vk::DescriptorPool descriptor_pool_ = nullptr;
+    vk::UniqueDescriptorSetLayout compute_set_layout_;
+    vk::UniqueDescriptorSetLayout draw_set_layout_;
+    vk::UniqueDescriptorPool descriptor_pool_;
     vk::DescriptorSet compute_set_ = nullptr;
     vk::DescriptorSet draw_set_ = nullptr;
 
     klvk::PipelineLayout compute_pipeline_layout_;
     klvk::PipelineLayout draw_pipeline_layout_;
-    vk::Pipeline compute_pipeline_ = nullptr;
-    vk::Pipeline draw_pipeline_ = nullptr;
+    vk::UniquePipeline compute_pipeline_;
+    vk::UniquePipeline draw_pipeline_;
 };

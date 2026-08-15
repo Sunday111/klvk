@@ -34,18 +34,18 @@ private:
     edt::Vec2<size_t> image_size_{};
     vk::Image image_ = nullptr;
     VmaAllocation image_allocation_ = nullptr;
-    vk::ImageView image_view_ = nullptr;
-    vk::Sampler sampler_ = nullptr;
+    vk::UniqueImageView image_view_;
+    vk::UniqueSampler sampler_;
     bool image_initialized_ = false;
 
     std::array<klvk::GpuBuffer, klvk::Application::kFramesInFlight> staging_buffers_{};
 
     klvk::Shader fullscreen_shader_;
     klvk::Shader textured_quad_shader_;
-    vk::DescriptorSetLayout set_layout_ = nullptr;
+    vk::UniqueDescriptorSetLayout set_layout_;
     klvk::DescriptorSetLayoutDescription set_layout_description_;
-    vk::DescriptorPool descriptor_pool_ = nullptr;
+    vk::UniqueDescriptorPool descriptor_pool_;
     vk::DescriptorSet descriptor_set_ = nullptr;
     klvk::PipelineLayout pipeline_layout_;
-    vk::Pipeline pipeline_ = nullptr;
+    vk::UniquePipeline pipeline_;
 };

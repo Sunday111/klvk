@@ -24,11 +24,10 @@ RegisteredImGuiTexture::RegisteredImGuiTexture(
     DeviceContext& context,
     vk::ImageView image_view,
     const vk::SamplerCreateInfo& sampler_info)
-    : context_{&context}
 {
-    sampler_ = VulkanValue(context_->GetDevice().createSampler(sampler_info), "vkCreateSampler");
+    sampler_ = VulkanValue(context.GetDevice().createSamplerUnique(sampler_info), "vkCreateSampler");
     const VkDescriptorSet descriptor = ImGui_ImplVulkan_AddTexture(
-        static_cast<VkSampler>(sampler_),
+        static_cast<VkSampler>(sampler_.get()),
         static_cast<VkImageView>(image_view),
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     descriptor_ = vk::DescriptorSet{descriptor};
@@ -37,7 +36,6 @@ RegisteredImGuiTexture::RegisteredImGuiTexture(
 RegisteredImGuiTexture::~RegisteredImGuiTexture()
 {
     if (descriptor_ != nullptr) ImGui_ImplVulkan_RemoveTexture(static_cast<VkDescriptorSet>(descriptor_));
-    if (sampler_ != nullptr) context_->GetDevice().destroy(sampler_);
 }
 
 }  // namespace klvk

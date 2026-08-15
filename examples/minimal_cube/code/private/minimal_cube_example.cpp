@@ -16,8 +16,8 @@
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
+#include "klvk/vulkan/vulkan.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
-#include "klvk/vulkan/vulkan_object.hpp"
 #include "klvk/window.hpp"
 
 using namespace edt::lazy_matrix_aliases;  // NOLINT
@@ -42,7 +42,6 @@ class CubeApp : public klvk::Application
         GetWindow().SetTitle("Cube");
 
         klvk::DeviceContext& context = GetDeviceContext();
-        vk::Device device = context.GetDevice();
         const auto mesh = klvk::ProceduralMeshGenerator::GenerateCubeMesh();
         index_count_ = static_cast<u32>(mesh.indices.size());
         vertex_buffer_ = klvk::GpuBuffer(
@@ -63,17 +62,15 @@ class CubeApp : public klvk::Application
         pipeline_layout_ = klvk::PipelineLayout{context, {}, std::span{&push_constant_range, 1}};
 
         const std::filesystem::path shader_dir = GetShaderDir() / "just_color_3d";
-        pipeline_ = klvk::VulkanObject<vk::Pipeline>{
-            device,
-            klvk::GraphicsPipelineBuilder(*this)
-                .Layout(pipeline_layout_)
-                .VertexShaderFile(shader_dir / "just_color_3d.vert.slang")
-                .FragmentShaderFile(shader_dir / "just_color_3d.frag.slang")
-                .Topology(mesh.topology)
-                .CullMode(vk::CullModeFlagBits::eBack, vk::FrontFace::eClockwise)
-                .VertexBinding(0, sizeof(edt::Vec3f), vk::VertexInputRate::eVertex)
-                .VertexAttribute(0, 0, vk::Format::eR32G32B32Sfloat, 0)
-                .Build()};
+        pipeline_ = klvk::GraphicsPipelineBuilder(*this)
+                        .Layout(pipeline_layout_)
+                        .VertexShaderFile(shader_dir / "just_color_3d.vert.slang")
+                        .FragmentShaderFile(shader_dir / "just_color_3d.frag.slang")
+                        .Topology(mesh.topology)
+                        .CullMode(vk::CullModeFlagBits::eBack, vk::FrontFace::eClockwise)
+                        .VertexBinding(0, sizeof(edt::Vec3f), vk::VertexInputRate::eVertex)
+                        .VertexAttribute(0, 0, vk::Format::eR32G32B32Sfloat, 0)
+                        .Build();
     }
 
     void Tick() override
@@ -96,7 +93,7 @@ class CubeApp : public klvk::Application
         vk::CommandBuffer command_buffer = GetCurrentCommandBuffer();
         const vk::Buffer vertex_buffer = vertex_buffer_.GetHandle();
         constexpr vk::DeviceSize offset = 0;
-        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
         command_buffer.bindVertexBuffers(0, std::span{&vertex_buffer, 1}, std::span{&offset, 1});
         command_buffer.bindIndexBuffer(index_buffer_.GetHandle(), 0, vk::IndexType::eUint32);
         command_buffer.pushConstants(
@@ -153,7 +150,7 @@ private:
     klvk::GpuBuffer vertex_buffer_;
     klvk::GpuBuffer index_buffer_;
     klvk::PipelineLayout pipeline_layout_;
-    klvk::VulkanObject<vk::Pipeline> pipeline_;
+    vk::UniquePipeline pipeline_;
     u32 index_count_ = 0;
     float move_speed_ = 5.f;
     edt::Transform cube_transform_{.translation = {6, 6, 0}};

@@ -28,8 +28,7 @@ public:
     }
 
 private:
-    DeviceContext* context_ = nullptr;
-    vk::Sampler sampler_ = nullptr;
+    vk::UniqueSampler sampler_;
     vk::DescriptorSet descriptor_ = nullptr;
 };
 

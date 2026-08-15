@@ -9,8 +9,8 @@
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
 #include "klvk/vulkan/texture.hpp"
+#include "klvk/vulkan/vulkan.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
-#include "klvk/vulkan/vulkan_object.hpp"
 #include "klvk/window.hpp"
 
 // Matches the push constant block in two_textures_2d.vert.
@@ -74,7 +74,6 @@ class TwoTexturesApp : public klvk::Application
     void PreparePipeline()
     {
         klvk::DeviceContext& context = GetDeviceContext();
-        vk::Device device = context.GetDevice();
 
         const vk::PushConstantRange push_constant_range =
             vk::PushConstantRange{}.setStageFlags(vk::ShaderStageFlagBits::eVertex).setSize(sizeof(PushConstants));
@@ -82,14 +81,12 @@ class TwoTexturesApp : public klvk::Application
         pipeline_layout_ = klvk::PipelineLayout{context, std::span{&set_layout, 1}, std::span{&push_constant_range, 1}};
 
         const std::filesystem::path shader_dir = GetShaderDir() / "two_textures_2d";
-        pipeline_ = klvk::VulkanObject<vk::Pipeline>{
-            device,
-            klvk::GraphicsPipelineBuilder(*this)
-                .Layout(pipeline_layout_)
-                .VertexShaderFile(shader_dir / "two_textures_2d.vert.slang")
-                .FragmentShaderFile(shader_dir / "two_textures_2d.frag.slang")
-                .AlphaBlend()
-                .Build()};
+        pipeline_ = klvk::GraphicsPipelineBuilder(*this)
+                        .Layout(pipeline_layout_)
+                        .VertexShaderFile(shader_dir / "two_textures_2d.vert.slang")
+                        .FragmentShaderFile(shader_dir / "two_textures_2d.frag.slang")
+                        .AlphaBlend()
+                        .Build();
     }
 
     void Tick() override
@@ -97,7 +94,7 @@ class TwoTexturesApp : public klvk::Application
         klvk::Application::Tick();
 
         vk::CommandBuffer command_buffer = GetCurrentCommandBuffer();
-        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
 
         PushConstants push_constants{
             .color = edt::Math::GetRainbowColorsA(GetTimeSeconds()).Cast<float>() / 255.f,
@@ -134,7 +131,7 @@ private:
     std::unique_ptr<klvk::Texture> left_triangle_texture_;
     klvk::DescriptorSets descriptor_sets_;
     klvk::PipelineLayout pipeline_layout_;
-    klvk::VulkanObject<vk::Pipeline> pipeline_;
+    vk::UniquePipeline pipeline_;
 };
 
 void Main(int argc, char** argv)

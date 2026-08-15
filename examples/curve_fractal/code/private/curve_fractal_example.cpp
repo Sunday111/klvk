@@ -24,8 +24,8 @@
 #include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
+#include "klvk/vulkan/vulkan.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
-#include "klvk/vulkan/vulkan_object.hpp"
 #include "klvk/window.hpp"
 
 namespace
@@ -159,7 +159,7 @@ class CurveFractalApp : public klvk::Application
     {
         vk::Image image = nullptr;
         VmaAllocation allocation = nullptr;
-        vk::ImageView view = nullptr;
+        vk::UniqueImageView view;
         bool initialized = false;
     };
 
@@ -261,15 +261,13 @@ class CurveFractalApp : public klvk::Application
                                                        .setAddressModeU(vk::SamplerAddressMode::eClampToBorder)
                                                        .setAddressModeV(vk::SamplerAddressMode::eClampToBorder)
                                                        .setAddressModeW(vk::SamplerAddressMode::eClampToBorder);
-        sampler_ = klvk::VulkanObject<vk::Sampler>{
-            device,
-            klvk::VulkanValue(device.createSampler(sampler_info), "vkCreateSampler")};
+        sampler_ = klvk::VulkanValue(device.createSamplerUnique(sampler_info), "vkCreateSampler");
         const auto set_layout = descriptor_sets_.GetLayoutView();
         pipeline_layout_ = klvk::PipelineLayout{context, std::span{&set_layout, 1}};
-        pipeline_ = klvk::VulkanObject<vk::Pipeline>{device, CreateDisplayPipeline(context)};
+        pipeline_ = CreateDisplayPipeline(context);
     }
 
-    [[nodiscard]] vk::Pipeline CreateDisplayPipeline(klvk::DeviceContext&)
+    [[nodiscard]] vk::UniquePipeline CreateDisplayPipeline(klvk::DeviceContext&)
     {
         const std::filesystem::path shader_dir = GetShaderDir() / "curve_fractal";
         return klvk::GraphicsPipelineBuilder(*this)
@@ -316,8 +314,8 @@ class CurveFractalApp : public klvk::Application
                                                       .setViewType(vk::ImageViewType::e2D)
                                                       .setFormat(kOffscreenFormat)
                                                       .setSubresourceRange(subresource_range);
-        target_.view = klvk::VulkanValue(context.GetDevice().createImageView(view_info), "vkCreateImageView");
-        descriptor_sets_.WriteImage(0, 0, target_.view, sampler_);
+        target_.view = klvk::VulkanValue(context.GetDevice().createImageViewUnique(view_info), "vkCreateImageView");
+        descriptor_sets_.WriteImage(0, 0, target_.view.get(), sampler_.get());
     }
 
     size_t DrainProducedCurves()
@@ -360,7 +358,7 @@ class CurveFractalApp : public klvk::Application
         command_buffer.pipelineBarrier2(dependency);
         const vk::RenderingAttachmentInfo attachment =
             vk::RenderingAttachmentInfo{}
-                .setImageView(target_.view)
+                .setImageView(target_.view.get())
                 .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
                 .setLoadOp(target_.initialized ? vk::AttachmentLoadOp::eLoad : vk::AttachmentLoadOp::eClear)
                 .setStoreOp(vk::AttachmentStoreOp::eStore);
@@ -420,7 +418,7 @@ class CurveFractalApp : public klvk::Application
         klvk::Application::Tick();
         const vk::CommandBuffer command_buffer = GetCurrentCommandBuffer();
         const vk::DescriptorSet descriptor_set = descriptor_sets_.Get(0);
-        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
         command_buffer.bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics,
             pipeline_layout_.GetHandle(),
@@ -462,14 +460,12 @@ public:
         producers_.clear();
         renderers_.clear();
 
-        // The offscreen accumulation image is a raw VMA allocation, so it and its
-        // view still need manual teardown; the sampler, pipeline, layout and
-        // descriptor sets are VulkanObject and DescriptorSets members that clean up
-        // themselves. Application::Run already waited for the device to go idle.
+        // The offscreen accumulation image is VMA-owned, so reset its view before
+        // destroying the image. Application::Run already waited for the device to go idle.
         if (target_.image)
         {
             auto& context = GetDeviceContext();
-            context.GetDevice().destroyImageView(target_.view);
+            target_.view.reset();
             const VkImage raw_image = target_.image;
             vmaDestroyImage(context.GetAllocator(), raw_image, target_.allocation);
         }
@@ -489,9 +485,9 @@ private:
     std::vector<std::unique_ptr<klvk::CurveRenderer2d>> renderers_;
     OffscreenTarget target_{};
     klvk::DescriptorSets descriptor_sets_;
-    klvk::VulkanObject<vk::Sampler> sampler_;
+    vk::UniqueSampler sampler_;
     klvk::PipelineLayout pipeline_layout_;
-    klvk::VulkanObject<vk::Pipeline> pipeline_;
+    vk::UniquePipeline pipeline_;
 };
 
 void Main(int argc, char** argv)

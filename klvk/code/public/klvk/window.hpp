@@ -92,7 +92,7 @@ private:
 
     [[nodiscard]] void* GetPlatformHandle() const noexcept;
     [[nodiscard]] std::vector<const char*> GetRequiredVulkanInstanceExtensions() const;
-    [[nodiscard]] vk::SurfaceKHR CreateVulkanSurface(vk::Instance instance) const;
+    [[nodiscard]] vk::UniqueSurfaceKHR CreateVulkanSurface(vk::Instance instance) const;
 
     struct Impl;
     Application* app_ = nullptr;

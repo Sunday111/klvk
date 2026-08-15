@@ -27,10 +27,10 @@ private:
     klvk::DefineHandle def_inside_out_space_;
     klvk::DefineHandle def_color_mode_;
     size_t pipeline_shader_version_ = 0;
-    vk::DescriptorSetLayout set_layout_ = nullptr;
+    vk::UniqueDescriptorSetLayout set_layout_;
     klvk::DescriptorSetLayoutDescription set_layout_description_;
-    vk::DescriptorPool descriptor_pool_ = nullptr;
+    vk::UniqueDescriptorPool descriptor_pool_;
     vk::DescriptorSet descriptor_set_ = nullptr;
     klvk::PipelineLayout pipeline_layout_;
-    vk::Pipeline pipeline_ = nullptr;
+    vk::UniquePipeline pipeline_;
 };

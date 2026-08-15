@@ -9,7 +9,7 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/pipeline_layout.hpp"
-#include "klvk/vulkan/vulkan_object.hpp"
+#include "klvk/vulkan/vulkan.hpp"
 
 namespace klvk
 {
@@ -59,7 +59,7 @@ private:
     Application* app_ = nullptr;
     CompositeMode composite_ = CompositeMode::Union;
     PipelineLayout pipeline_layout_;
-    VulkanObject<vk::Pipeline> pipeline_;
+    vk::UniquePipeline pipeline_;
     std::array<GpuBuffer, Application::kFramesInFlight> vertex_buffers_{};
     std::array<GpuBuffer, Application::kFramesInFlight> index_buffers_{};
     std::vector<u32> indices_;

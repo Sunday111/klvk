@@ -181,7 +181,7 @@ std::unique_ptr<Texture> Texture::Create(
                                                   .setViewType(vk::ImageViewType::e2D)
                                                   .setFormat(format)
                                                   .setSubresourceRange(view_subresource_range);
-    texture->view_ = VulkanValue(context.GetDevice().createImageView(view_info), "vkCreateImageView");
+    texture->view_ = VulkanValue(context.GetDevice().createImageViewUnique(view_info), "vkCreateImageView");
 
     // Same filtering verlet uses for the circle mask: nearest when minified, linear when magnified.
     const vk::SamplerCreateInfo sampler_info = vk::SamplerCreateInfo{}
@@ -192,7 +192,7 @@ std::unique_ptr<Texture> Texture::Create(
                                                    .setAddressModeV(vk::SamplerAddressMode::eRepeat)
                                                    .setAddressModeW(vk::SamplerAddressMode::eRepeat)
                                                    .setBorderColor(vk::BorderColor::eIntOpaqueBlack);
-    texture->sampler_ = VulkanValue(context.GetDevice().createSampler(sampler_info), "vkCreateSampler");
+    texture->sampler_ = VulkanValue(context.GetDevice().createSamplerUnique(sampler_info), "vkCreateSampler");
 
     return texture;
 }
@@ -200,8 +200,8 @@ std::unique_ptr<Texture> Texture::Create(
 Texture::~Texture()
 {
     if (!context_) return;
-    if (sampler_) context_->GetDevice().destroySampler(sampler_);
-    if (view_) context_->GetDevice().destroyImageView(view_);
+    sampler_.reset();
+    view_.reset();
     if (image_)
     {
         const VkImage raw_image = image_;

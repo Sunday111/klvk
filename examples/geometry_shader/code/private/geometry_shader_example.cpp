@@ -10,8 +10,8 @@
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
+#include "klvk/vulkan/vulkan.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
-#include "klvk/vulkan/vulkan_object.hpp"
 #include "klvk/window.hpp"
 
 // The shader ABI stores this beside u32 padding; shrinking it would break Object's std430 layout.
@@ -50,7 +50,6 @@ class GeometryShaderApp : public klvk::Application
         klvk::ErrorHandling::Ensure(
             context.IsGeometryShaderEnabled(),
             "This example requires a device with geometry shader support");
-        vk::Device device = context.GetDevice();
 
         objects_.resize(kMaxObjects);
         std::mt19937 rnd;  // NOLINT
@@ -80,16 +79,14 @@ class GeometryShaderApp : public klvk::Application
                 klvk::PipelineLayout{context, std::span{&set_layout, 1}, std::span{&push_constant_range, 1}};
 
             const std::filesystem::path shader_dir = GetShaderDir() / "points_to_quads_2d";
-            pipeline_ = klvk::VulkanObject<vk::Pipeline>{
-                device,
-                klvk::GraphicsPipelineBuilder(*this)
-                    .Layout(pipeline_layout_)
-                    .VertexShaderFile(shader_dir / "points_to_quads_2d.vert.slang")
-                    .GeometryShaderFile(shader_dir / "points_to_quads_2d.geom.slang")
-                    .FragmentShaderFile(shader_dir / "points_to_quads_2d.frag.slang")
-                    .Topology(vk::PrimitiveTopology::ePointList)
-                    .AlphaBlend()
-                    .Build()};
+            pipeline_ = klvk::GraphicsPipelineBuilder(*this)
+                            .Layout(pipeline_layout_)
+                            .VertexShaderFile(shader_dir / "points_to_quads_2d.vert.slang")
+                            .GeometryShaderFile(shader_dir / "points_to_quads_2d.geom.slang")
+                            .FragmentShaderFile(shader_dir / "points_to_quads_2d.frag.slang")
+                            .Topology(vk::PrimitiveTopology::ePointList)
+                            .AlphaBlend()
+                            .Build();
         }
     }
 
@@ -134,7 +131,7 @@ class GeometryShaderApp : public klvk::Application
 
         vk::CommandBuffer command_buffer = GetCurrentCommandBuffer();
         const vk::DescriptorSet descriptor_set = descriptor_sets_.Get(frame_index);
-        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
         command_buffer.bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics,
             pipeline_layout_.GetHandle(),
@@ -156,7 +153,7 @@ private:
     klvk::DescriptorSets descriptor_sets_;
     std::array<klvk::GpuBuffer, kFramesInFlight> object_buffers_{};
     klvk::PipelineLayout pipeline_layout_;
-    klvk::VulkanObject<vk::Pipeline> pipeline_;
+    vk::UniquePipeline pipeline_;
 };
 
 void Main(int argc, char** argv)

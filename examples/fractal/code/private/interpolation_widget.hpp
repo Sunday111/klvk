@@ -25,9 +25,9 @@ private:
 
     klvk::Shader fullscreen_shader_;
     klvk::Shader widget_shader_;
-    vk::DescriptorSetLayout set_layout_ = nullptr;
+    vk::UniqueDescriptorSetLayout set_layout_;
     klvk::DescriptorSetLayoutDescription set_layout_description_;
-    vk::DescriptorPool descriptor_pool_ = nullptr;
+    vk::UniqueDescriptorPool descriptor_pool_;
     klvk::PipelineLayout pipeline_layout_;
-    vk::Pipeline pipeline_ = nullptr;
+    vk::UniquePipeline pipeline_;
 };

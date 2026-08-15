@@ -21,8 +21,8 @@
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
+#include "klvk/vulkan/vulkan.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
-#include "klvk/vulkan/vulkan_object.hpp"
 #include "klvk/window.hpp"
 
 namespace
@@ -135,7 +135,7 @@ class ComputeShaderApp : public klvk::Application
         return context.LoadShaderModule(GetShaderDir() / "compute_shader" / name);
     }
 
-    vk::Pipeline CreateGraphicsPipeline(
+    vk::UniquePipeline CreateGraphicsPipeline(
         klvk::DeviceContext& context,
         const klvk::ShaderModule& vertex,
         const klvk::ShaderModule& fragment)
@@ -145,7 +145,7 @@ class ComputeShaderApp : public klvk::Application
         return CreateGraphicsPipeline(context, stages);
     }
 
-    vk::Pipeline CreateGraphicsPipeline(klvk::DeviceContext& context, const klvk::ShaderStages& stages)
+    vk::UniquePipeline CreateGraphicsPipeline(klvk::DeviceContext& context, const klvk::ShaderStages& stages)
     {
         // Straight-alpha color blend but with the destination alpha left untouched
         // (dstAlpha = ZERO), so this needs an explicit attachment rather than the
@@ -182,13 +182,11 @@ class ComputeShaderApp : public klvk::Application
         const vk::ComputePipelineCreateInfo compute_info = vk::ComputePipelineCreateInfo{}
                                                                .setStage(compute_stage.GetCreateInfos().front())
                                                                .setLayout(pipeline_layout_.GetHandle());
-        std::array<vk::Pipeline, 1> pipelines{};
-        const vk::Result result = device.createComputePipelines(nullptr, 1, &compute_info, nullptr, pipelines.data());
-        klvk::VulkanObject<vk::Pipeline> compute_pipeline{device, pipelines.front()};
-        klvk::VulkanCheck(result, "vkCreateComputePipelines");
+        auto outcome = device.createComputePipelineUnique(nullptr, compute_info);
+        vk::UniquePipeline compute_pipeline = std::move(outcome.value);
+        klvk::VulkanCheck(outcome.result, "vkCreateComputePipelines");
         compute_pipeline_ = std::move(compute_pipeline);
-        bodies_pipeline_ =
-            klvk::VulkanObject<vk::Pipeline>{device, CreateGraphicsPipeline(context, bodies_vertex, fragment)};
+        bodies_pipeline_ = CreateGraphicsPipeline(context, bodies_vertex, fragment);
 
         klvk::Shader::shaders_dir_ = GetShaderDir();
         particles_shader_ = std::make_unique<klvk::Shader>(context, "compute_shader/particles");
@@ -203,13 +201,12 @@ class ComputeShaderApp : public klvk::Application
 
         // The old pipeline may still be referenced by an in-flight frame, so wait
         // before the move-assign below destroys it.
-        if (particles_pipeline_.IsValid()) context.WaitIdle();
+        if (particles_pipeline_) context.WaitIdle();
 
         // The .comp stage belongs to the simulation pipeline, not this one.
         const auto stages =
             particles_shader_->MakeStages(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
-        particles_pipeline_ =
-            klvk::VulkanObject<vk::Pipeline>{context.GetDevice(), CreateGraphicsPipeline(context, stages)};
+        particles_pipeline_ = CreateGraphicsPipeline(context, stages);
         particles_pipeline_shader_version_ = particles_shader_->GetVersion();
     }
 
@@ -256,7 +253,7 @@ class ComputeShaderApp : public klvk::Application
         const vk::DescriptorSet set = descriptor_sets_.Get(0);
         const vk::CommandBuffer command_buffer = GetCurrentCommandBuffer();
         std::array<Vec4f, 2> bodies{};
-        command_buffer.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline_);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline_.get());
         command_buffer.bindDescriptorSets(
             vk::PipelineBindPoint::eCompute,
             pipeline_layout_.GetHandle(),
@@ -300,7 +297,7 @@ class ComputeShaderApp : public klvk::Application
         if (time_steps_per_frame_ == 0) bodies = UpdateBodies();
 
         GraphicsPushConstants graphics = MakeGraphicsConstants(bodies);
-        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, particles_pipeline_);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, particles_pipeline_.get());
         command_buffer.bindDescriptorSets(
             vk::PipelineBindPoint::eGraphics,
             pipeline_layout_.GetHandle(),
@@ -315,7 +312,7 @@ class ComputeShaderApp : public klvk::Application
             &graphics);
         command_buffer.draw(kParticleCount, 1, 0, 0);
         graphics.color = {1.f, 0.f, 0.f, 1.f};
-        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, bodies_pipeline_);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, bodies_pipeline_.get());
         command_buffer.pushConstants(
             pipeline_layout_.GetHandle(),
             vk::ShaderStageFlagBits::eVertex,
@@ -407,9 +404,9 @@ class ComputeShaderApp : public klvk::Application
 private:
     klvk::DescriptorSets descriptor_sets_;
     klvk::PipelineLayout pipeline_layout_;
-    klvk::VulkanObject<vk::Pipeline> compute_pipeline_;
-    klvk::VulkanObject<vk::Pipeline> particles_pipeline_;
-    klvk::VulkanObject<vk::Pipeline> bodies_pipeline_;
+    vk::UniquePipeline compute_pipeline_;
+    vk::UniquePipeline particles_pipeline_;
+    vk::UniquePipeline bodies_pipeline_;
     klvk::GpuBuffer buffer_;
     std::unique_ptr<klvk::events::IEventListener> listener_;
     klvk::Camera3d camera_{Vec3f{0.f, 15.f, 0.f}, {.yaw = -90.f}};

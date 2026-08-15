@@ -24,7 +24,7 @@ SimpleCpuRenderer::SimpleCpuRenderer(klvk::Application& app, size_t max_iteratio
                                                    .setAddressModeU(vk::SamplerAddressMode::eClampToEdge)
                                                    .setAddressModeV(vk::SamplerAddressMode::eClampToEdge)
                                                    .setAddressModeW(vk::SamplerAddressMode::eClampToEdge);
-    sampler_ = klvk::VulkanValue(device.createSampler(sampler_info), "vkCreateSampler");
+    sampler_ = klvk::VulkanValue(device.createSamplerUnique(sampler_info), "vkCreateSampler");
 
     const vk::DescriptorSetLayoutBinding binding = vk::DescriptorSetLayoutBinding{}
                                                        .setBinding(0)
@@ -33,19 +33,19 @@ SimpleCpuRenderer::SimpleCpuRenderer(klvk::Application& app, size_t max_iteratio
                                                        .setStageFlags(vk::ShaderStageFlagBits::eFragment);
     set_layout_description_.bindings = {binding};
     const vk::DescriptorSetLayoutCreateInfo layout_info = vk::DescriptorSetLayoutCreateInfo{}.setBindings(binding);
-    set_layout_ = klvk::VulkanValue(device.createDescriptorSetLayout(layout_info), "vkCreateDescriptorSetLayout");
+    set_layout_ = klvk::VulkanValue(device.createDescriptorSetLayoutUnique(layout_info), "vkCreateDescriptorSetLayout");
 
     const vk::DescriptorPoolSize pool_size =
         vk::DescriptorPoolSize{}.setType(vk::DescriptorType::eCombinedImageSampler).setDescriptorCount(1);
     const vk::DescriptorPoolCreateInfo pool_info = vk::DescriptorPoolCreateInfo{}.setMaxSets(1).setPoolSizes(pool_size);
-    descriptor_pool_ = klvk::VulkanValue(device.createDescriptorPool(pool_info), "vkCreateDescriptorPool");
+    descriptor_pool_ = klvk::VulkanValue(device.createDescriptorPoolUnique(pool_info), "vkCreateDescriptorPool");
     const vk::DescriptorSetAllocateInfo allocate_info =
-        vk::DescriptorSetAllocateInfo{}.setDescriptorPool(descriptor_pool_).setSetLayouts(set_layout_);
+        vk::DescriptorSetAllocateInfo{}.setDescriptorPool(descriptor_pool_.get()).setSetLayouts(set_layout_.get());
     descriptor_set_ =
         klvk::VulkanValue(device.allocateDescriptorSets(allocate_info), "vkAllocateDescriptorSets").front();
 
     const klvk::DescriptorSetLayoutView set_layout_view{
-        .handle = set_layout_,
+        .handle = set_layout_.get(),
         .description = &set_layout_description_,
     };
     pipeline_layout_ = klvk::PipelineLayout{context, std::span{&set_layout_view, 1}};
@@ -58,24 +58,18 @@ SimpleCpuRenderer::~SimpleCpuRenderer() noexcept
 {
     klvk::DeviceContext& context = app_->GetDeviceContext();
     context.WaitIdle();
-    vk::Device device = context.GetDevice();
     DestroyImage();
-    device.destroyPipeline(pipeline_);
-    device.destroyDescriptorPool(descriptor_pool_);
-    device.destroyDescriptorSetLayout(set_layout_);
-    device.destroySampler(sampler_);
 }
 
 void SimpleCpuRenderer::DestroyImage()
 {
     klvk::DeviceContext& context = app_->GetDeviceContext();
-    if (image_view_) context.GetDevice().destroyImageView(image_view_);
+    image_view_.reset();
     if (image_)
     {
         const VkImage raw_image = image_;
         vmaDestroyImage(context.GetAllocator(), raw_image, image_allocation_);
     }
-    image_view_ = nullptr;
     image_ = nullptr;
     image_allocation_ = nullptr;
     image_initialized_ = false;
@@ -127,7 +121,7 @@ void SimpleCpuRenderer::ApplySettings(const FractalSettings& settings)
                                                       .setViewType(vk::ImageViewType::e2D)
                                                       .setFormat(vk::Format::eR8G8B8A8Unorm)
                                                       .setSubresourceRange(subresource_range);
-        image_view_ = klvk::VulkanValue(device.createImageView(view_info), "vkCreateImageView");
+        image_view_ = klvk::VulkanValue(device.createImageViewUnique(view_info), "vkCreateImageView");
 
         for (auto& buffer : staging_buffers_)
         {
@@ -140,8 +134,8 @@ void SimpleCpuRenderer::ApplySettings(const FractalSettings& settings)
 
         const vk::DescriptorImageInfo descriptor_image_info =
             vk::DescriptorImageInfo{}
-                .setSampler(sampler_)
-                .setImageView(image_view_)
+                .setSampler(sampler_.get())
+                .setImageView(image_view_.get())
                 .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
         const vk::WriteDescriptorSet write = vk::WriteDescriptorSet{}
                                                  .setDstSet(descriptor_set_)
@@ -234,7 +228,7 @@ void SimpleCpuRenderer::Render(vk::CommandBuffer command_buffer, const FractalSe
     if (!image_initialized_) return;
 
     CmdSetGlStyleViewport(command_buffer, settings.viewport, app_->GetWindow().GetSize());
-    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
     command_buffer.bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
         pipeline_layout_.GetHandle(),

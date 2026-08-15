@@ -30,14 +30,14 @@ SimpleGpuRenderer::SimpleGpuRenderer(klvk::Application& app, size_t max_iteratio
                                                        .setStageFlags(vk::ShaderStageFlagBits::eFragment);
     set_layout_description_.bindings = {binding};
     const vk::DescriptorSetLayoutCreateInfo layout_info = vk::DescriptorSetLayoutCreateInfo{}.setBindings(binding);
-    set_layout_ = klvk::VulkanValue(device.createDescriptorSetLayout(layout_info), "vkCreateDescriptorSetLayout");
+    set_layout_ = klvk::VulkanValue(device.createDescriptorSetLayoutUnique(layout_info), "vkCreateDescriptorSetLayout");
 
     const vk::DescriptorPoolSize pool_size =
         vk::DescriptorPoolSize{}.setType(vk::DescriptorType::eStorageBuffer).setDescriptorCount(1);
     const vk::DescriptorPoolCreateInfo pool_info = vk::DescriptorPoolCreateInfo{}.setMaxSets(1).setPoolSizes(pool_size);
-    descriptor_pool_ = klvk::VulkanValue(device.createDescriptorPool(pool_info), "vkCreateDescriptorPool");
+    descriptor_pool_ = klvk::VulkanValue(device.createDescriptorPoolUnique(pool_info), "vkCreateDescriptorPool");
     const vk::DescriptorSetAllocateInfo allocate_info =
-        vk::DescriptorSetAllocateInfo{}.setDescriptorPool(descriptor_pool_).setSetLayouts(set_layout_);
+        vk::DescriptorSetAllocateInfo{}.setDescriptorPool(descriptor_pool_.get()).setSetLayouts(set_layout_.get());
     descriptor_set_ =
         klvk::VulkanValue(device.allocateDescriptorSets(allocate_info), "vkAllocateDescriptorSets").front();
 
@@ -53,7 +53,7 @@ SimpleGpuRenderer::SimpleGpuRenderer(klvk::Application& app, size_t max_iteratio
     const vk::PushConstantRange push_constant_range =
         vk::PushConstantRange{}.setStageFlags(vk::ShaderStageFlagBits::eFragment).setSize(sizeof(FractalPushConstants));
     const klvk::DescriptorSetLayoutView set_layout_view{
-        .handle = set_layout_,
+        .handle = set_layout_.get(),
         .description = &set_layout_description_,
     };
     pipeline_layout_ =
@@ -64,10 +64,6 @@ SimpleGpuRenderer::~SimpleGpuRenderer() noexcept
 {
     klvk::DeviceContext& context = app_->GetDeviceContext();
     context.WaitIdle();
-    vk::Device device = context.GetDevice();
-    device.destroyPipeline(pipeline_);
-    device.destroyDescriptorPool(descriptor_pool_);
-    device.destroyDescriptorSetLayout(set_layout_);
 }
 
 void SimpleGpuRenderer::ApplySettings(const FractalSettings& settings)
@@ -76,11 +72,11 @@ void SimpleGpuRenderer::ApplySettings(const FractalSettings& settings)
     fractal_shader_.SetDefineValue(def_color_mode_, settings.color_mode);
 
     // Rebuild only when a define actually changed - color edits skip the wait.
-    if (pipeline_ == nullptr || pipeline_shader_version_ != fractal_shader_.GetVersion())
+    if (!pipeline_ || pipeline_shader_version_ != fractal_shader_.GetVersion())
     {
         klvk::DeviceContext& context = app_->GetDeviceContext();
         context.WaitIdle();  // the old pipeline may still be referenced by the frame in flight
-        context.GetDevice().destroyPipeline(pipeline_);
+        pipeline_.reset();
 
         auto stages = fullscreen_shader_.MakeStages();
         stages.Append(fractal_shader_.MakeStages());
@@ -100,7 +96,7 @@ void SimpleGpuRenderer::Render(vk::CommandBuffer command_buffer, const FractalSe
     render_transforms_.Update(settings.camera, settings.viewport);
 
     CmdSetGlStyleViewport(command_buffer, settings.viewport, app_->GetWindow().GetSize());
-    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
     command_buffer.bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
         pipeline_layout_.GetHandle(),

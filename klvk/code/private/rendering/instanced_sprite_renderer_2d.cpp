@@ -24,8 +24,6 @@ struct PushConstants
 InstancedSpriteRenderer2d::InstancedSpriteRenderer2d(Application& app, const Texture& texture) : app_(&app)
 {
     DeviceContext& context = app.GetDeviceContext();
-    vk::Device device = context.GetDevice();
-
     descriptor_sets_ = DescriptorSets::Builder(context)
                            .Binding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
                            .Binding(1, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eVertex)
@@ -42,19 +40,17 @@ InstancedSpriteRenderer2d::InstancedSpriteRenderer2d(Application& app, const Tex
         pipeline_layout_ = PipelineLayout{context, set_layouts, push_constant_ranges};
     }
 
-    pipeline_ = VulkanObject<vk::Pipeline>{
-        device,
-        GraphicsPipelineBuilder(app)
-            .Layout(pipeline_layout_)
-            .VertexShaderFile(app.GetShaderDir() / "klvk/instanced_sprite.vert.slang")
-            .FragmentShaderFile(app.GetShaderDir() / "klvk/instanced_sprite.frag.slang")
-            .AlphaBlend()
-            .Build()};
+    pipeline_ = GraphicsPipelineBuilder(app)
+                    .Layout(pipeline_layout_)
+                    .VertexShaderFile(app.GetShaderDir() / "klvk/instanced_sprite.vert.slang")
+                    .FragmentShaderFile(app.GetShaderDir() / "klvk/instanced_sprite.frag.slang")
+                    .AlphaBlend()
+                    .Build();
 }
 
 InstancedSpriteRenderer2d::~InstancedSpriteRenderer2d()
 {
-    // The pipeline, layout and descriptor sets are VulkanObject/DescriptorSets members
+    // The pipeline, layout and descriptor sets are owning members
     // that destroy themselves; wait first in case a runtime destruction races
     // in-flight frames (at shutdown Application::Run has already waited).
     app_->GetDeviceContext().WaitIdle();
@@ -85,7 +81,7 @@ void InstancedSpriteRenderer2d::Render(const Mat3f& world_to_view)
     instance_buffers_[frame_index].Write(std::as_bytes(std::span{instances_}));
 
     const std::array descriptor_sets{descriptor_sets_.Get(frame_index)};
-    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
+    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
     command_buffer
         .bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout_.GetHandle(), 0, descriptor_sets, {});
 

@@ -5,8 +5,8 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
+#include "klvk/vulkan/vulkan.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
-#include "klvk/vulkan/vulkan_object.hpp"
 #include "klvk/window.hpp"
 
 namespace
@@ -47,7 +47,6 @@ class StencilApp : public klvk::Application
         GetWindow().SetTitle("Stencil");
 
         klvk::DeviceContext& context = GetDeviceContext();
-        vk::Device device = context.GetDevice();
 
         const vk::PushConstantRange push_constant_range =
             vk::PushConstantRange{}.setStageFlags(vk::ShaderStageFlagBits::eVertex).setSize(sizeof(PushConstants));
@@ -67,16 +66,14 @@ class StencilApp : public klvk::Application
                                                 .setPassOp(back_pass_op)
                                                 .setDepthFailOp(vk::StencilOp::eKeep)
                                                 .setCompareOp(vk::CompareOp::eAlways);
-            return klvk::VulkanObject<vk::Pipeline>{
-                device,
-                klvk::GraphicsPipelineBuilder(*this)
-                    .Layout(pipeline_layout_)
-                    .VertexShaderFile(shader_dir / "star_winding.vert.slang")
-                    .FragmentShaderFile(shader_dir / "star_winding.frag.slang")
-                    .StencilTest(front, back)
-                    .DynamicStencilMasks()
-                    .ColorWriteMask({})
-                    .Build()};
+            return klvk::GraphicsPipelineBuilder(*this)
+                .Layout(pipeline_layout_)
+                .VertexShaderFile(shader_dir / "star_winding.vert.slang")
+                .FragmentShaderFile(shader_dir / "star_winding.frag.slang")
+                .StencilTest(front, back)
+                .DynamicStencilMasks()
+                .ColorWriteMask({})
+                .Build();
         };
 
         // Front and back faces cancel, so the sum over overlapping loops is the
@@ -91,15 +88,13 @@ class StencilApp : public klvk::Application
                                              .setPassOp(vk::StencilOp::eZero)
                                              .setDepthFailOp(vk::StencilOp::eZero)
                                              .setCompareOp(vk::CompareOp::eNotEqual);
-        cover_pipeline_ = klvk::VulkanObject<vk::Pipeline>{
-            device,
-            klvk::GraphicsPipelineBuilder(*this)
-                .Layout(pipeline_layout_)
-                .VertexShaderFile(shader_dir / "cover.vert.slang")
-                .FragmentShaderFile(shader_dir / "cover.frag.slang")
-                .StencilTest(cover, cover)
-                .DynamicStencilMasks()
-                .Build()};
+        cover_pipeline_ = klvk::GraphicsPipelineBuilder(*this)
+                              .Layout(pipeline_layout_)
+                              .VertexShaderFile(shader_dir / "cover.vert.slang")
+                              .FragmentShaderFile(shader_dir / "cover.frag.slang")
+                              .StencilTest(cover, cover)
+                              .DynamicStencilMasks()
+                              .Build();
     }
 
     void DrawStar(const PushConstants& push_constants, vk::Pipeline winding_pipeline, u32 winding_write_mask)
@@ -118,7 +113,7 @@ class StencilApp : public klvk::Application
         command_buffer.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, 0);
         command_buffer.draw(kWindingVertexCount, 1, 0, 0);
 
-        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, cover_pipeline_);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, cover_pipeline_.get());
         command_buffer.setStencilCompareMask(vk::StencilFaceFlagBits::eFrontAndBack, winding_write_mask);
         command_buffer.setStencilWriteMask(vk::StencilFaceFlagBits::eFrontAndBack, 0xFF);
         command_buffer.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, 0);
@@ -131,19 +126,19 @@ class StencilApp : public klvk::Application
 
         DrawStar(
             {.translation = {-0.5f, 0.f}, .scale = 0.4f, .color = {0.35f, 0.75f, 1.f, 1.f}},
-            non_zero_pipeline_,
+            non_zero_pipeline_.get(),
             kNonZeroWriteMask);
         DrawStar(
             {.translation = {0.5f, 0.f}, .scale = 0.4f, .color = {1.f, 0.6f, 0.25f, 1.f}},
-            even_odd_pipeline_,
+            even_odd_pipeline_.get(),
             kEvenOddWriteMask);
     }
 
 private:
     klvk::PipelineLayout pipeline_layout_;
-    klvk::VulkanObject<vk::Pipeline> non_zero_pipeline_;
-    klvk::VulkanObject<vk::Pipeline> even_odd_pipeline_;
-    klvk::VulkanObject<vk::Pipeline> cover_pipeline_;
+    vk::UniquePipeline non_zero_pipeline_;
+    vk::UniquePipeline even_odd_pipeline_;
+    vk::UniquePipeline cover_pipeline_;
 };
 
 void Main(int argc, char** argv)

@@ -25,7 +25,7 @@ static_assert(sizeof(FractalPushConstants) == 72);
 // Fullscreen triangle list (6 vertices, no vertex buffers), no blending, dynamic
 // viewport and scissor, targeting the swapchain format. Stages usually come from
 // klvk::Shader::MakeStages.
-[[nodiscard]] vk::Pipeline CreateFullscreenPipeline(
+[[nodiscard]] vk::UniquePipeline CreateFullscreenPipeline(
     klvk::Application& app,
     const klvk::PipelineLayout& pipeline_layout,
     const klvk::ShaderStages& stages);

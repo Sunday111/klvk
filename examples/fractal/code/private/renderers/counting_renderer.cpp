@@ -3,7 +3,7 @@
 #include "../fractal_settings.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
-#include "klvk/vulkan/vulkan_object.hpp"
+#include "klvk/vulkan/vulkan.hpp"
 
 namespace
 {
@@ -45,7 +45,7 @@ CountingRenderer::CountingRenderer(klvk::Application& app, size_t max_iterations
                                                            .setStageFlags(vk::ShaderStageFlagBits::eCompute);
         const vk::DescriptorSetLayoutCreateInfo layout_info = vk::DescriptorSetLayoutCreateInfo{}.setBindings(binding);
         compute_set_layout_ =
-            klvk::VulkanValue(device.createDescriptorSetLayout(layout_info), "vkCreateDescriptorSetLayout");
+            klvk::VulkanValue(device.createDescriptorSetLayoutUnique(layout_info), "vkCreateDescriptorSetLayout");
     }
 
     {
@@ -63,17 +63,17 @@ CountingRenderer::CountingRenderer(klvk::Application& app, size_t max_iterations
         };
         const vk::DescriptorSetLayoutCreateInfo layout_info = vk::DescriptorSetLayoutCreateInfo{}.setBindings(bindings);
         draw_set_layout_ =
-            klvk::VulkanValue(device.createDescriptorSetLayout(layout_info), "vkCreateDescriptorSetLayout");
+            klvk::VulkanValue(device.createDescriptorSetLayoutUnique(layout_info), "vkCreateDescriptorSetLayout");
     }
 
     const vk::DescriptorPoolSize pool_size =
         vk::DescriptorPoolSize{}.setType(vk::DescriptorType::eStorageBuffer).setDescriptorCount(3);
     const vk::DescriptorPoolCreateInfo pool_info = vk::DescriptorPoolCreateInfo{}.setMaxSets(2).setPoolSizes(pool_size);
-    descriptor_pool_ = klvk::VulkanValue(device.createDescriptorPool(pool_info), "vkCreateDescriptorPool");
+    descriptor_pool_ = klvk::VulkanValue(device.createDescriptorPoolUnique(pool_info), "vkCreateDescriptorPool");
 
-    const std::array layouts{compute_set_layout_, draw_set_layout_};
+    const std::array layouts{compute_set_layout_.get(), draw_set_layout_.get()};
     const vk::DescriptorSetAllocateInfo allocate_info =
-        vk::DescriptorSetAllocateInfo{}.setDescriptorPool(descriptor_pool_).setSetLayouts(layouts);
+        vk::DescriptorSetAllocateInfo{}.setDescriptorPool(descriptor_pool_.get()).setSetLayouts(layouts);
     const std::vector<vk::DescriptorSet> sets =
         klvk::VulkanValue(device.allocateDescriptorSets(allocate_info), "vkAllocateDescriptorSets");
     compute_set_ = sets[0];
@@ -87,7 +87,7 @@ CountingRenderer::CountingRenderer(klvk::Application& app, size_t max_iterations
                              .setDescriptorCount(1)
                              .setStageFlags(vk::ShaderStageFlagBits::eCompute)}};
         const std::array set_layouts{klvk::DescriptorSetLayoutView{
-            .handle = compute_set_layout_,
+            .handle = compute_set_layout_.get(),
             .description = &set_description,
         }};
         const vk::PushConstantRange push_constant_range = vk::PushConstantRange{}
@@ -111,7 +111,7 @@ CountingRenderer::CountingRenderer(klvk::Application& app, size_t max_iterations
                     .setStageFlags(vk::ShaderStageFlagBits::eFragment),
             }};
         const std::array set_layouts{klvk::DescriptorSetLayoutView{
-            .handle = draw_set_layout_,
+            .handle = draw_set_layout_.get(),
             .description = &set_description,
         }};
         const vk::PushConstantRange push_constant_range = vk::PushConstantRange{}
@@ -125,12 +125,6 @@ CountingRenderer::~CountingRenderer() noexcept
 {
     klvk::DeviceContext& context = app_->GetDeviceContext();
     context.WaitIdle();
-    vk::Device device = context.GetDevice();
-    device.destroyPipeline(draw_pipeline_);
-    device.destroyPipeline(compute_pipeline_);
-    device.destroyDescriptorPool(descriptor_pool_);
-    device.destroyDescriptorSetLayout(draw_set_layout_);
-    device.destroyDescriptorSetLayout(compute_set_layout_);
 }
 
 void CountingRenderer::ApplySettings(const FractalSettings& settings)
@@ -141,23 +135,22 @@ void CountingRenderer::ApplySettings(const FractalSettings& settings)
     compute_shader_.SetDefineValue(def_compute_inside_out_space_, settings.inside_out_space ? 1 : 0);
 
     // Rebuild only when a define actually changed - color edits skip the wait.
-    if (compute_pipeline_ == nullptr || pipelines_shader_version_ != compute_shader_.GetVersion())
+    if (!compute_pipeline_ || pipelines_shader_version_ != compute_shader_.GetVersion())
     {
         // Old pipelines may still be referenced by the frame in flight.
         context.WaitIdle();
-        device.destroyPipeline(compute_pipeline_);
-        device.destroyPipeline(draw_pipeline_);
+        compute_pipeline_.reset();
+        draw_pipeline_.reset();
 
         const klvk::ShaderStages compute_stages = compute_shader_.MakeStages();
         (void)compute_pipeline_layout_.Validate(compute_stages);
         const vk::ComputePipelineCreateInfo compute_info = vk::ComputePipelineCreateInfo{}
                                                                .setStage(compute_stages.GetCreateInfos().front())
                                                                .setLayout(compute_pipeline_layout_.GetHandle());
-        std::array<vk::Pipeline, 1> pipelines{};
-        const vk::Result result = device.createComputePipelines(nullptr, 1, &compute_info, nullptr, pipelines.data());
-        klvk::VulkanObject<vk::Pipeline> compute_pipeline{device, pipelines.front()};
-        klvk::VulkanCheck(result, "vkCreateComputePipelines");
-        compute_pipeline_ = compute_pipeline.Release();
+        auto outcome = device.createComputePipelineUnique(nullptr, compute_info);
+        vk::UniquePipeline compute_pipeline = std::move(outcome.value);
+        klvk::VulkanCheck(outcome.result, "vkCreateComputePipelines");
+        compute_pipeline_ = std::move(compute_pipeline);
 
         auto stages = fullscreen_shader_.MakeStages();
         stages.Append(draw_shader_.MakeStages());
@@ -209,7 +202,7 @@ void CountingRenderer::ApplySettings(const FractalSettings& settings)
 
 void CountingRenderer::PrepareFrame(vk::CommandBuffer command_buffer, const FractalSettings& settings)
 {
-    if (compute_pipeline_ == nullptr || !counters_.IsValid()) return;
+    if (!compute_pipeline_ || !counters_.IsValid()) return;
 
     render_transforms_.Update(settings.camera, settings.viewport);
 
@@ -240,7 +233,7 @@ void CountingRenderer::PrepareFrame(vk::CommandBuffer command_buffer, const Frac
         vk::PipelineStageFlagBits2::eComputeShader,
         vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite);
 
-    command_buffer.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline_);
+    command_buffer.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline_.get());
     command_buffer.bindDescriptorSets(
         vk::PipelineBindPoint::eCompute,
         compute_pipeline_layout_.GetHandle(),
@@ -272,10 +265,10 @@ void CountingRenderer::PrepareFrame(vk::CommandBuffer command_buffer, const Frac
 
 void CountingRenderer::Render(vk::CommandBuffer command_buffer, const FractalSettings& settings)
 {
-    if (draw_pipeline_ == nullptr) return;
+    if (!draw_pipeline_) return;
 
     CmdSetGlStyleViewport(command_buffer, settings.viewport, app_->GetWindow().GetSize());
-    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, draw_pipeline_);
+    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, draw_pipeline_.get());
     command_buffer.bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
         draw_pipeline_layout_.GetHandle(),
