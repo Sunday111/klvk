@@ -10,6 +10,7 @@
 #include "edt/math/matrix.hpp"
 #include "klvk/diagnostics/diagnostic_run_config.hpp"
 #include "klvk/platform/file_dialog.hpp"
+#include "klvk/vulkan/swapchain_present_mode.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk::events
@@ -107,6 +108,7 @@ public:
     [[nodiscard]] float GetLastFrameDurationSeconds() const;
 
     void SetTargetFramerate(std::optional<float> framerate);
+    void SetSwapchainPresentMode(SwapchainPresentMode present_mode);
 
     void SetClearColor(const edt::Vec4f& color);
     void SetDepthBufferEnabled(bool enabled);

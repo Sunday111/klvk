@@ -5,6 +5,7 @@
 #include "edt/math/matrix.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/render_target.hpp"
+#include "klvk/vulkan/swapchain_present_mode.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
 VK_DEFINE_HANDLE(VmaAllocation)
@@ -17,7 +18,11 @@ class DeviceContext;
 class Swapchain final : public RenderTarget
 {
 public:
-    Swapchain(DeviceContext& context, edt::Vec2<u32> framebuffer_size, vk::ImageUsageFlags additional_image_usage = {});
+    Swapchain(
+        DeviceContext& context,
+        edt::Vec2<u32> framebuffer_size,
+        vk::ImageUsageFlags additional_image_usage = {},
+        SwapchainPresentMode present_mode = SwapchainPresentMode::PreferLowLatency);
     Swapchain(const Swapchain&) = delete;
     Swapchain(Swapchain&&) = delete;
     ~Swapchain() override;
@@ -43,6 +48,7 @@ private:
 
     DeviceContext* context_ = nullptr;
     vk::ImageUsageFlags additional_image_usage_{};
+    SwapchainPresentMode present_mode_ = SwapchainPresentMode::PreferLowLatency;
     vk::UniqueSwapchainKHR swapchain_;
     vk::SurfaceFormatKHR format_{};
     vk::Format depth_stencil_format_ = vk::Format::eUndefined;

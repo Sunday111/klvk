@@ -62,6 +62,7 @@ struct Application::State
     bool stencil_buffer_enabled_ = false;
     bool offscreen_ = false;
     bool exit_requested_ = false;
+    SwapchainPresentMode present_mode_ = SwapchainPresentMode::PreferLowLatency;
     u64 completed_frames_ = 0;
     events::EventManager event_manager_;
     std::optional<DiagnosticRunConfig> diagnostic_config_;
@@ -284,7 +285,8 @@ void Application::Initialize()
         auto swapchain = std::make_unique<Swapchain>(
             *state_->device_context_,
             state_->window_->GetFramebufferSize(),
-            diagnostic_usage);
+            diagnostic_usage,
+            state_->present_mode_);
         state_->swapchain_ = swapchain.get();
         state_->render_target_ = std::move(swapchain);
         if (state_->diagnostic_config_.has_value() && state_->diagnostic_config_->framebuffer_size.has_value())
@@ -868,6 +870,14 @@ float Application::GetLastFrameDurationSeconds() const
 void Application::SetTargetFramerate(std::optional<float> framerate)
 {
     state_->frame_clock_.SetTargetFramerate(framerate);
+}
+
+void Application::SetSwapchainPresentMode(SwapchainPresentMode present_mode)
+{
+    ErrorHandling::Ensure(
+        state_->swapchain_ == nullptr,
+        "Swapchain present mode must be selected before initialization");
+    state_->present_mode_ = present_mode;
 }
 
 void Application::SetClearColor(const edt::Vec4f& color)
