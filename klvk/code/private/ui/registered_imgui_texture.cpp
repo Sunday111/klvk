@@ -3,39 +3,39 @@
 #include <backends/imgui_impl_vulkan.h>
 
 #include "klvk/vulkan/device_context.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk
 {
 
-VkSamplerCreateInfo RegisteredImGuiTexture::DefaultSamplerCreateInfo() noexcept
+vk::SamplerCreateInfo RegisteredImGuiTexture::DefaultSamplerCreateInfo() noexcept
 {
-    return {
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .magFilter = VK_FILTER_LINEAR,
-        .minFilter = VK_FILTER_NEAREST,
-        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-    };
+    return vk::SamplerCreateInfo{}
+        .setMagFilter(vk::Filter::eLinear)
+        .setMinFilter(vk::Filter::eNearest)
+        .setMipmapMode(vk::SamplerMipmapMode::eNearest)
+        .setAddressModeU(vk::SamplerAddressMode::eClampToEdge)
+        .setAddressModeV(vk::SamplerAddressMode::eClampToEdge)
+        .setAddressModeW(vk::SamplerAddressMode::eClampToEdge)
+        .setBorderColor(vk::BorderColor::eIntOpaqueBlack);
 }
 
 RegisteredImGuiTexture::RegisteredImGuiTexture(
     DeviceContext& context,
-    VkImageView image_view,
-    const VkSamplerCreateInfo& sampler_info)
-    : context_{&context}
+    vk::ImageView image_view,
+    const vk::SamplerCreateInfo& sampler_info)
 {
-    sampler_ = Vulkan::CreateSampler(context_->GetDevice(), sampler_info);
-    descriptor_ = ImGui_ImplVulkan_AddTexture(sampler_, image_view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    sampler_ = context.GetDevice().createSamplerUnique(sampler_info);
+    const VkDescriptorSet descriptor = ImGui_ImplVulkan_AddTexture(
+        static_cast<VkSampler>(sampler_.get()),
+        static_cast<VkImageView>(image_view),
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    descriptor_ = vk::DescriptorSet{descriptor};
 }
 
 RegisteredImGuiTexture::~RegisteredImGuiTexture()
 {
-    if (descriptor_ != VK_NULL_HANDLE) ImGui_ImplVulkan_RemoveTexture(descriptor_);
-    if (sampler_ != VK_NULL_HANDLE) Vulkan::DestroySamplerNE(context_->GetDevice(), sampler_);
+    if (descriptor_ != nullptr) ImGui_ImplVulkan_RemoveTexture(static_cast<VkDescriptorSet>(descriptor_));
 }
 
 }  // namespace klvk

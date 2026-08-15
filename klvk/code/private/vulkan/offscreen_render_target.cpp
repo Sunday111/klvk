@@ -5,7 +5,7 @@
 #include "klvk/error_handling.hpp"
 #include "klvk/vulkan/depth_stencil_format.hpp"
 #include "klvk/vulkan/device_context.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk
 {
@@ -15,57 +15,55 @@ namespace
 
 struct AllocatedImage
 {
-    VkImage image = VK_NULL_HANDLE;
-    VmaAllocation allocation = VK_NULL_HANDLE;
-    VkImageView view = VK_NULL_HANDLE;
+    vk::Image image = nullptr;
+    VmaAllocation allocation = nullptr;
+    vk::UniqueImageView view;
 };
 
 AllocatedImage CreateImage(
     DeviceContext& context,
-    VkExtent2D extent,
-    VkFormat format,
-    VkImageUsageFlags usage,
-    VkImageAspectFlags aspect)
+    vk::Extent2D extent,
+    vk::Format format,
+    vk::ImageUsageFlags usage,
+    vk::ImageAspectFlags aspect)
 {
-    const VkImageCreateInfo image_info{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .imageType = VK_IMAGE_TYPE_2D,
-        .format = format,
-        .extent = {.width = extent.width, .height = extent.height, .depth = 1},
-        .mipLevels = 1,
-        .arrayLayers = 1,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = usage,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-    };
+    const auto image_info = vk::ImageCreateInfo{}
+                                .setImageType(vk::ImageType::e2D)
+                                .setFormat(format)
+                                .setExtent(vk::Extent3D{extent.width, extent.height, 1})
+                                .setMipLevels(1)
+                                .setArrayLayers(1)
+                                .setSamples(vk::SampleCountFlagBits::e1)
+                                .setTiling(vk::ImageTiling::eOptimal)
+                                .setUsage(usage)
+                                .setSharingMode(vk::SharingMode::eExclusive)
+                                .setInitialLayout(vk::ImageLayout::eUndefined);
     const VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+    const VkImageCreateInfo& raw_image_info = image_info;
     AllocatedImage result;
-    CheckVkResult(
-        vmaCreateImage(
+    VkImage image = VK_NULL_HANDLE;
+    VulkanCheck(
+        static_cast<vk::Result>(vmaCreateImage(
             context.GetAllocator(),
-            &image_info,
+            &raw_image_info,
             &allocation_info,
-            &result.image,
+            &image,
             &result.allocation,
-            nullptr),
-        "vmaCreateImage(offscreen)");
+            nullptr)));
+    result.image = vk::Image{image};
     try
     {
-        result.view = Vulkan::CreateImageView(
-            context.GetDevice(),
-            {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                .image = result.image,
-                .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                .format = format,
-                .subresourceRange = {.aspectMask = aspect, .levelCount = 1, .layerCount = 1},
-            });
+        const auto range = vk::ImageSubresourceRange{}.setAspectMask(aspect).setLevelCount(1).setLayerCount(1);
+        const auto view_info = vk::ImageViewCreateInfo{}
+                                   .setImage(result.image)
+                                   .setViewType(vk::ImageViewType::e2D)
+                                   .setFormat(format)
+                                   .setSubresourceRange(range);
+        result.view = context.GetDevice().createImageViewUnique(view_info);
     }
     catch (...)
     {
-        vmaDestroyImage(context.GetAllocator(), result.image, result.allocation);
+        vmaDestroyImage(context.GetAllocator(), static_cast<VkImage>(result.image), result.allocation);
         throw;
     }
     return result;
@@ -76,7 +74,7 @@ AllocatedImage CreateImage(
 OffscreenRenderTarget::OffscreenRenderTarget(DeviceContext& context, edt::Vec2<u32> size, size_t image_count)
     : context_(&context),
       depth_stencil_format_(SelectDepthStencilFormat(context.GetPhysicalDevice())),
-      extent_{.width = size.x(), .height = size.y()}
+      extent_{size.x(), size.y()}
 {
     ErrorHandling::Ensure(extent_.width != 0 && extent_.height != 0, "Offscreen render target size must be positive");
     ErrorHandling::Ensure(image_count != 0, "Offscreen render target requires at least one image");
@@ -100,25 +98,25 @@ void OffscreenRenderTarget::CreateImages(size_t image_count)
     {
         for (size_t index = 0; index != image_count; ++index)
         {
-            const AllocatedImage color = CreateImage(
+            AllocatedImage color = CreateImage(
                 *context_,
                 extent_,
                 kColorFormat,
-                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-                VK_IMAGE_ASPECT_COLOR_BIT);
+                vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc,
+                vk::ImageAspectFlagBits::eColor);
             color_images_.push_back(color.image);
             color_allocations_.push_back(color.allocation);
-            color_image_views_.push_back(color.view);
+            color_image_views_.push_back(std::move(color.view));
 
-            const AllocatedImage depth = CreateImage(
+            AllocatedImage depth = CreateImage(
                 *context_,
                 extent_,
                 depth_stencil_format_,
-                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                vk::ImageUsageFlagBits::eDepthStencilAttachment,
                 DepthStencilAspectMask(depth_stencil_format_));
             depth_images_.push_back(depth.image);
             depth_allocations_.push_back(depth.allocation);
-            depth_image_views_.push_back(depth.view);
+            depth_image_views_.push_back(std::move(depth.view));
         }
     }
     catch (...)
@@ -130,22 +128,26 @@ void OffscreenRenderTarget::CreateImages(size_t image_count)
 
 void OffscreenRenderTarget::DestroyImages()
 {
-    for (VkImageView view : color_image_views_) Vulkan::DestroyImageViewNE(context_->GetDevice(), view);
-    for (VkImageView view : depth_image_views_) Vulkan::DestroyImageViewNE(context_->GetDevice(), view);
+    color_image_views_.clear();
+    depth_image_views_.clear();
     for (size_t index = 0; index != color_images_.size(); ++index)
     {
-        vmaDestroyImage(context_->GetAllocator(), color_images_[index], color_allocations_[index]);
+        vmaDestroyImage(
+            context_->GetAllocator(),
+            static_cast<VkImage>(color_images_[index]),
+            color_allocations_[index]);
     }
     for (size_t index = 0; index != depth_images_.size(); ++index)
     {
-        vmaDestroyImage(context_->GetAllocator(), depth_images_[index], depth_allocations_[index]);
+        vmaDestroyImage(
+            context_->GetAllocator(),
+            static_cast<VkImage>(depth_images_[index]),
+            depth_allocations_[index]);
     }
     color_images_.clear();
     color_allocations_.clear();
-    color_image_views_.clear();
     depth_images_.clear();
     depth_allocations_.clear();
-    depth_image_views_.clear();
 }
 
 }  // namespace klvk

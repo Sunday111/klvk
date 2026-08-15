@@ -8,15 +8,16 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/depth_stencil_format.hpp"
 #include "klvk/vulkan/device_context.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk
 {
 
 namespace
 {
-constexpr VkColorComponentFlags kAllColorComponents =
-    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+constexpr vk::ColorComponentFlags kAllColorComponents = vk::ColorComponentFlagBits::eR |
+                                                        vk::ColorComponentFlagBits::eG |
+                                                        vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
 
 struct VertexFormat
 {
@@ -26,35 +27,35 @@ struct VertexFormat
     bool normalized = false;
 };
 
-VertexFormat DescribeVertexFormat(VkFormat format)
+VertexFormat DescribeVertexFormat(vk::Format format)
 {
     switch (format)
     {
-    case VK_FORMAT_R32_SFLOAT:
+    case vk::Format::eR32Sfloat:
         return {.scalar = ShaderScalarType::Float32, .components = 1, .bytes = 4, .normalized = false};
-    case VK_FORMAT_R32G32_SFLOAT:
+    case vk::Format::eR32G32Sfloat:
         return {.scalar = ShaderScalarType::Float32, .components = 2, .bytes = 8, .normalized = false};
-    case VK_FORMAT_R32G32B32_SFLOAT:
+    case vk::Format::eR32G32B32Sfloat:
         return {.scalar = ShaderScalarType::Float32, .components = 3, .bytes = 12, .normalized = false};
-    case VK_FORMAT_R32G32B32A32_SFLOAT:
+    case vk::Format::eR32G32B32A32Sfloat:
         return {.scalar = ShaderScalarType::Float32, .components = 4, .bytes = 16, .normalized = false};
-    case VK_FORMAT_R32_SINT:
+    case vk::Format::eR32Sint:
         return {.scalar = ShaderScalarType::Int32, .components = 1, .bytes = 4, .normalized = false};
-    case VK_FORMAT_R32G32_SINT:
+    case vk::Format::eR32G32Sint:
         return {.scalar = ShaderScalarType::Int32, .components = 2, .bytes = 8, .normalized = false};
-    case VK_FORMAT_R32G32B32_SINT:
+    case vk::Format::eR32G32B32Sint:
         return {.scalar = ShaderScalarType::Int32, .components = 3, .bytes = 12, .normalized = false};
-    case VK_FORMAT_R32G32B32A32_SINT:
+    case vk::Format::eR32G32B32A32Sint:
         return {.scalar = ShaderScalarType::Int32, .components = 4, .bytes = 16, .normalized = false};
-    case VK_FORMAT_R32_UINT:
+    case vk::Format::eR32Uint:
         return {.scalar = ShaderScalarType::UInt32, .components = 1, .bytes = 4, .normalized = false};
-    case VK_FORMAT_R32G32_UINT:
+    case vk::Format::eR32G32Uint:
         return {.scalar = ShaderScalarType::UInt32, .components = 2, .bytes = 8, .normalized = false};
-    case VK_FORMAT_R32G32B32_UINT:
+    case vk::Format::eR32G32B32Uint:
         return {.scalar = ShaderScalarType::UInt32, .components = 3, .bytes = 12, .normalized = false};
-    case VK_FORMAT_R32G32B32A32_UINT:
+    case vk::Format::eR32G32B32A32Uint:
         return {.scalar = ShaderScalarType::UInt32, .components = 4, .bytes = 16, .normalized = false};
-    case VK_FORMAT_R8G8B8A8_UNORM:
+    case vk::Format::eR8G8B8A8Unorm:
         return {.scalar = ShaderScalarType::Float32, .components = 4, .bytes = 4, .normalized = true};
     default:
         ErrorHandling::ThrowWithMessage(
@@ -66,8 +67,8 @@ VertexFormat DescribeVertexFormat(VkFormat format)
 
 void ValidateVertexInput(
     const ShaderStages& stages,
-    const std::vector<VkVertexInputBindingDescription>& bindings,
-    const std::vector<VkVertexInputAttributeDescription>& attributes)
+    const std::vector<vk::VertexInputBindingDescription>& bindings,
+    const std::vector<vk::VertexInputAttributeDescription>& attributes)
 {
     std::unordered_set<u32> binding_indices;
     for (const auto& binding : bindings)
@@ -88,7 +89,7 @@ void ValidateVertexInput(
 
     const auto vertex_interface = std::ranges::find_if(
         stages.GetInterfaces(),
-        [](const auto& interface) { return interface->stage == VK_SHADER_STAGE_VERTEX_BIT; });
+        [](const auto& interface) { return interface->stage == vk::ShaderStageFlagBits::eVertex; });
     if (vertex_interface == stages.GetInterfaces().end()) return;
 
     size_t required_count = 0;
@@ -104,14 +105,14 @@ void ValidateVertexInput(
         {
             const u32 location = input.location + location_offset;
             const auto attribute =
-                std::ranges::find(attributes, location, &VkVertexInputAttributeDescription::location);
+                std::ranges::find(attributes, location, &vk::VertexInputAttributeDescription::location);
             ErrorHandling::Ensure(
                 attribute != attributes.end(),
                 "GraphicsPipelineBuilder: vertex shader input '{}' requires missing location {}",
                 input.name,
                 location);
             const auto binding =
-                std::ranges::find(bindings, attribute->binding, &VkVertexInputBindingDescription::binding);
+                std::ranges::find(bindings, attribute->binding, &vk::VertexInputBindingDescription::binding);
             ErrorHandling::Ensure(
                 binding != bindings.end(),
                 "GraphicsPipelineBuilder: vertex attribute location {} references missing binding {}",
@@ -141,13 +142,13 @@ void ValidateVertexInput(
 GraphicsPipelineBuilder::GraphicsPipelineBuilder(Application& app)
     : app_(&app),
       context_(&app.GetDeviceContext()),
-      blend_attachment_{.colorWriteMask = kAllColorComponents}
+      blend_attachment_{vk::PipelineColorBlendAttachmentState{}.setColorWriteMask(kAllColorComponents)}
 {
 }
 
 GraphicsPipelineBuilder::GraphicsPipelineBuilder(DeviceContext& context)
     : context_(&context),
-      blend_attachment_{.colorWriteMask = kAllColorComponents}
+      blend_attachment_{vk::PipelineColorBlendAttachmentState{}.setColorWriteMask(kAllColorComponents)}
 {
 }
 
@@ -161,7 +162,7 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::Layout(const PipelineLayout& l
     return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::UncheckedLayout(VkPipelineLayout layout)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::UncheckedLayout(vk::PipelineLayout layout)
 {
     ErrorHandling::Ensure(reflected_layout_ == nullptr, "Cannot mix reflected and unchecked pipeline layouts");
     unchecked_layout_ = true;
@@ -177,7 +178,7 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::Stages(const ShaderStages& sta
 }
 
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::UncheckedStages(
-    std::span<const VkPipelineShaderStageCreateInfo> stages)
+    std::span<const vk::PipelineShaderStageCreateInfo> stages)
 {
     ErrorHandling::Ensure(
         reflected_stages_.GetCreateInfos().empty() && owned_modules_.empty(),
@@ -187,7 +188,7 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::UncheckedStages(
 }
 
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::ShaderFile(
-    VkShaderStageFlagBits stage,
+    vk::ShaderStageFlagBits stage,
     const std::filesystem::path& path)
 {
     ErrorHandling::Ensure(unchecked_stages_.empty(), "Cannot mix reflected and unchecked shader stages");
@@ -202,30 +203,30 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::ShaderFile(
 
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::VertexShaderFile(const std::filesystem::path& path)
 {
-    return ShaderFile(VK_SHADER_STAGE_VERTEX_BIT, path);
+    return ShaderFile(vk::ShaderStageFlagBits::eVertex, path);
 }
 
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::TessellationControlShaderFile(const std::filesystem::path& path)
 {
-    return ShaderFile(VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, path);
+    return ShaderFile(vk::ShaderStageFlagBits::eTessellationControl, path);
 }
 
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::TessellationEvaluationShaderFile(const std::filesystem::path& path)
 {
-    return ShaderFile(VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, path);
+    return ShaderFile(vk::ShaderStageFlagBits::eTessellationEvaluation, path);
 }
 
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::FragmentShaderFile(const std::filesystem::path& path)
 {
-    return ShaderFile(VK_SHADER_STAGE_FRAGMENT_BIT, path);
+    return ShaderFile(vk::ShaderStageFlagBits::eFragment, path);
 }
 
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::GeometryShaderFile(const std::filesystem::path& path)
 {
-    return ShaderFile(VK_SHADER_STAGE_GEOMETRY_BIT, path);
+    return ShaderFile(vk::ShaderStageFlagBits::eGeometry, path);
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::Topology(VkPrimitiveTopology topology)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::Topology(vk::PrimitiveTopology topology)
 {
     topology_ = topology;
     return *this;
@@ -237,69 +238,68 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::PatchControlPoints(u32 count)
     return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::PolygonMode(VkPolygonMode mode)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::PolygonMode(vk::PolygonMode mode)
 {
     polygon_mode_ = mode;
     return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::CullMode(VkCullModeFlags mode, VkFrontFace front_face)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::CullMode(vk::CullModeFlags mode, vk::FrontFace front_face)
 {
     cull_mode_ = mode;
     front_face_ = front_face;
     return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::VertexBinding(u32 binding, u32 stride, VkVertexInputRate rate)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::VertexBinding(u32 binding, u32 stride, vk::VertexInputRate rate)
 {
-    vertex_bindings_.push_back({.binding = binding, .stride = stride, .inputRate = rate});
+    vertex_bindings_.push_back(vk::VertexInputBindingDescription{binding, stride, rate});
     return *this;
 }
 
 GraphicsPipelineBuilder&
-GraphicsPipelineBuilder::VertexAttribute(u32 location, u32 binding, VkFormat format, u32 offset)
+GraphicsPipelineBuilder::VertexAttribute(u32 location, u32 binding, vk::Format format, u32 offset)
 {
-    vertex_attributes_.push_back({.location = location, .binding = binding, .format = format, .offset = offset});
+    vertex_attributes_.push_back(vk::VertexInputAttributeDescription{location, binding, format, offset});
     return *this;
 }
 
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::AlphaBlend()
 {
-    blend_attachment_ = {
-        .blendEnable = VK_TRUE,
-        .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-        .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-        .colorBlendOp = VK_BLEND_OP_ADD,
-        .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-        .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-        .alphaBlendOp = VK_BLEND_OP_ADD,
-        .colorWriteMask = kAllColorComponents,
-    };
+    blend_attachment_ = vk::PipelineColorBlendAttachmentState{}
+                            .setBlendEnable(true)
+                            .setSrcColorBlendFactor(vk::BlendFactor::eSrcAlpha)
+                            .setDstColorBlendFactor(vk::BlendFactor::eOneMinusSrcAlpha)
+                            .setColorBlendOp(vk::BlendOp::eAdd)
+                            .setSrcAlphaBlendFactor(vk::BlendFactor::eOne)
+                            .setDstAlphaBlendFactor(vk::BlendFactor::eOneMinusSrcAlpha)
+                            .setAlphaBlendOp(vk::BlendOp::eAdd)
+                            .setColorWriteMask(kAllColorComponents);
     return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::Blend(const VkPipelineColorBlendAttachmentState& attachment)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::Blend(const vk::PipelineColorBlendAttachmentState& attachment)
 {
     blend_attachment_ = attachment;
     return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::DepthTest(VkCompareOp compare_op)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::DepthTest(vk::CompareOp compare_op)
 {
     depth_test_ = true;
     depth_compare_op_ = compare_op;
     return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::DepthFormat(VkFormat format)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::DepthFormat(vk::Format format)
 {
     depth_format_ = format;
     return *this;
 }
 
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::StencilTest(
-    const VkStencilOpState& front,
-    const VkStencilOpState& back)
+    const vk::StencilOpState& front,
+    const vk::StencilOpState& back)
 {
     stencil_test_ = true;
     stencil_front_ = front;
@@ -307,7 +307,7 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::StencilTest(
     return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::StencilFormat(VkFormat format)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::StencilFormat(vk::Format format)
 {
     stencil_format_ = format;
     return *this;
@@ -319,21 +319,21 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::DynamicStencilMasks()
     return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::ColorWriteMask(VkColorComponentFlags mask)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::ColorWriteMask(vk::ColorComponentFlags mask)
 {
     blend_attachment_.colorWriteMask = mask;
     return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::ColorFormat(VkFormat format)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::ColorFormat(vk::Format format)
 {
     color_format_ = format;
     return *this;
 }
 
-VkPipeline GraphicsPipelineBuilder::Build()
+vk::UniquePipeline GraphicsPipelineBuilder::Build()
 {
-    ErrorHandling::Ensure(layout_ != VK_NULL_HANDLE, "GraphicsPipelineBuilder: pipeline layout was not set");
+    ErrorHandling::Ensure(layout_ != nullptr, "GraphicsPipelineBuilder: pipeline layout was not set");
 
     ShaderStages owned_stages;
     if (!owned_modules_.empty())
@@ -341,16 +341,12 @@ VkPipeline GraphicsPipelineBuilder::Build()
         ErrorHandling::Ensure(
             reflected_stages_.GetCreateInfos().empty(),
             "GraphicsPipelineBuilder: file stages and external reflected stages cannot be mixed");
-        std::vector<VkPipelineShaderStageCreateInfo> create_infos;
+        std::vector<vk::PipelineShaderStageCreateInfo> create_infos;
         std::vector<std::shared_ptr<const ShaderInterface>> interfaces;
         for (const auto& [stage, module] : owned_modules_)
         {
-            create_infos.push_back({
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                .stage = stage,
-                .module = module.GetHandle(),
-                .pName = "main",
-            });
+            create_infos.push_back(
+                vk::PipelineShaderStageCreateInfo{}.setStage(stage).setModule(module.GetHandle()).setPName("main"));
             interfaces.push_back(module.GetInterface());
         }
         owned_stages = ShaderStages{std::move(create_infos), std::move(interfaces)};
@@ -373,17 +369,17 @@ VkPipeline GraphicsPipelineBuilder::Build()
             unchecked_layout_ && !unchecked_stages_.empty(),
             "GraphicsPipelineBuilder: unchecked construction requires UncheckedLayout and UncheckedStages");
     }
-    const std::span<const VkPipelineShaderStageCreateInfo> stages =
+    const std::span<const vk::PipelineShaderStageCreateInfo> stages =
         reflected_path ? reflected->GetCreateInfos() : unchecked_stages_;
     ErrorHandling::Ensure(!stages.empty(), "GraphicsPipelineBuilder: no shader stages were set");
 
-    const auto has_stage = [stages](VkShaderStageFlagBits stage)
+    const auto has_stage = [stages](vk::ShaderStageFlagBits stage)
     {
         return std::ranges::any_of(stages, [stage](const auto& info) { return info.stage == stage; });
     };
-    const bool has_geometry = has_stage(VK_SHADER_STAGE_GEOMETRY_BIT);
-    const bool has_tessellation_control = has_stage(VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT);
-    const bool has_tessellation_evaluation = has_stage(VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT);
+    const bool has_geometry = has_stage(vk::ShaderStageFlagBits::eGeometry);
+    const bool has_tessellation_control = has_stage(vk::ShaderStageFlagBits::eTessellationControl);
+    const bool has_tessellation_evaluation = has_stage(vk::ShaderStageFlagBits::eTessellationEvaluation);
     const bool has_tessellation = has_tessellation_control || has_tessellation_evaluation;
     ErrorHandling::Ensure(
         !has_geometry || context_->IsGeometryShaderEnabled(),
@@ -395,7 +391,7 @@ VkPipeline GraphicsPipelineBuilder::Build()
         !has_tessellation || context_->IsTessellationShaderEnabled(),
         "GraphicsPipelineBuilder: tessellation stages require the tessellationShader device feature");
     ErrorHandling::Ensure(
-        has_tessellation == (topology_ == VK_PRIMITIVE_TOPOLOGY_PATCH_LIST),
+        has_tessellation == (topology_ == vk::PrimitiveTopology::ePatchList),
         "GraphicsPipelineBuilder: tessellation stages require patch-list topology, and patch-list topology requires "
         "tessellation stages");
     ErrorHandling::Ensure(
@@ -404,8 +400,7 @@ VkPipeline GraphicsPipelineBuilder::Build()
         "pipelines must not set one");
     if (has_tessellation)
     {
-        const VkPhysicalDeviceProperties properties =
-            Vulkan::GetPhysicalDeviceProperties(context_->GetPhysicalDevice());
+        const vk::PhysicalDeviceProperties properties = context_->GetPhysicalDevice().getProperties();
         ErrorHandling::Ensure(
             patch_control_points_ <= properties.limits.maxTessellationPatchSize,
             "GraphicsPipelineBuilder: {} patch control points exceed the device limit of {}",
@@ -413,78 +408,50 @@ VkPipeline GraphicsPipelineBuilder::Build()
             properties.limits.maxTessellationPatchSize);
     }
 
-    const VkPipelineVertexInputStateCreateInfo vertex_input{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .vertexBindingDescriptionCount = static_cast<u32>(vertex_bindings_.size()),
-        .pVertexBindingDescriptions = vertex_bindings_.data(),
-        .vertexAttributeDescriptionCount = static_cast<u32>(vertex_attributes_.size()),
-        .pVertexAttributeDescriptions = vertex_attributes_.data(),
-    };
-    const VkPipelineInputAssemblyStateCreateInfo input_assembly{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = topology_,
-    };
-    const VkPipelineTessellationStateCreateInfo tessellation{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
-        .patchControlPoints = patch_control_points_,
-    };
-    const VkPipelineViewportStateCreateInfo viewport_state{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-        .viewportCount = 1,
-        .scissorCount = 1,
-    };
-    const VkPipelineRasterizationStateCreateInfo rasterization{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-        .polygonMode = polygon_mode_,
-        .cullMode = cull_mode_,
-        .frontFace = front_face_,
-        .lineWidth = 1.f,
-    };
-    const VkPipelineMultisampleStateCreateInfo multisample{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-    };
-    const VkPipelineDepthStencilStateCreateInfo depth_stencil{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-        .depthTestEnable = depth_test_ ? VK_TRUE : VK_FALSE,
-        .depthWriteEnable = depth_test_ ? VK_TRUE : VK_FALSE,
-        .depthCompareOp = depth_compare_op_,
-        .stencilTestEnable = stencil_test_ ? VK_TRUE : VK_FALSE,
-        .front = stencil_front_,
-        .back = stencil_back_,
-    };
+    const auto vertex_input = vk::PipelineVertexInputStateCreateInfo{}
+                                  .setVertexBindingDescriptions(vertex_bindings_)
+                                  .setVertexAttributeDescriptions(vertex_attributes_);
+    const auto input_assembly = vk::PipelineInputAssemblyStateCreateInfo{}.setTopology(topology_);
+    const auto tessellation = vk::PipelineTessellationStateCreateInfo{}.setPatchControlPoints(patch_control_points_);
+    const auto viewport_state = vk::PipelineViewportStateCreateInfo{}.setViewportCount(1).setScissorCount(1);
+    const auto rasterization = vk::PipelineRasterizationStateCreateInfo{}
+                                   .setPolygonMode(polygon_mode_)
+                                   .setCullMode(cull_mode_)
+                                   .setFrontFace(front_face_)
+                                   .setLineWidth(1.f);
+    const auto multisample =
+        vk::PipelineMultisampleStateCreateInfo{}.setRasterizationSamples(vk::SampleCountFlagBits::e1);
+    const auto depth_stencil = vk::PipelineDepthStencilStateCreateInfo{}
+                                   .setDepthTestEnable(depth_test_)
+                                   .setDepthWriteEnable(depth_test_)
+                                   .setDepthCompareOp(depth_compare_op_)
+                                   .setStencilTestEnable(stencil_test_)
+                                   .setFront(stencil_front_)
+                                   .setBack(stencil_back_);
     const std::array blend_attachments{blend_attachment_};
-    const VkPipelineColorBlendStateCreateInfo color_blend{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-        .attachmentCount = blend_attachments.size(),
-        .pAttachments = blend_attachments.data(),
-    };
-    std::vector dynamic_states{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    const auto color_blend = vk::PipelineColorBlendStateCreateInfo{}.setAttachments(blend_attachments);
+    std::vector dynamic_states{vk::DynamicState::eViewport, vk::DynamicState::eScissor};
     if (dynamic_stencil_masks_)
     {
-        dynamic_states.push_back(VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK);
-        dynamic_states.push_back(VK_DYNAMIC_STATE_STENCIL_WRITE_MASK);
-        dynamic_states.push_back(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
+        dynamic_states.push_back(vk::DynamicState::eStencilCompareMask);
+        dynamic_states.push_back(vk::DynamicState::eStencilWriteMask);
+        dynamic_states.push_back(vk::DynamicState::eStencilReference);
     }
-    const VkPipelineDynamicStateCreateInfo dynamic_state{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        .dynamicStateCount = static_cast<u32>(dynamic_states.size()),
-        .pDynamicStates = dynamic_states.data(),
-    };
+    const auto dynamic_state = vk::PipelineDynamicStateCreateInfo{}.setDynamicStates(dynamic_states);
 
     std::array color_formats{color_format_};
-    if (color_formats.front() == VK_FORMAT_UNDEFINED)
+    if (color_formats.front() == vk::Format::eUndefined)
     {
         ErrorHandling::Ensure(
             app_ != nullptr,
             "GraphicsPipelineBuilder: no color format set and no application to default from");
         color_formats.front() = app_->GetSwapchainFormat();
     }
-    VkFormat depth_format = VK_FORMAT_UNDEFINED;
+    vk::Format depth_format = vk::Format::eUndefined;
     if (depth_test_)
     {
         depth_format = depth_format_;
-        if (depth_format == VK_FORMAT_UNDEFINED)
+        if (depth_format == vk::Format::eUndefined)
         {
             ErrorHandling::Ensure(
                 app_ != nullptr,
@@ -492,11 +459,11 @@ VkPipeline GraphicsPipelineBuilder::Build()
             depth_format = app_->GetDepthFormat();
         }
     }
-    VkFormat stencil_format = VK_FORMAT_UNDEFINED;
+    vk::Format stencil_format = vk::Format::eUndefined;
     if (stencil_test_)
     {
         stencil_format = stencil_format_;
-        if (stencil_format == VK_FORMAT_UNDEFINED)
+        if (stencil_format == vk::Format::eUndefined)
         {
             ErrorHandling::Ensure(
                 app_ != nullptr,
@@ -507,31 +474,32 @@ VkPipeline GraphicsPipelineBuilder::Build()
             FormatHasStencil(stencil_format),
             "GraphicsPipelineBuilder: stencil test enabled with a format that has no stencil plane");
     }
-    const VkPipelineRenderingCreateInfo rendering_info{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-        .colorAttachmentCount = color_formats.size(),
-        .pColorAttachmentFormats = color_formats.data(),
-        .depthAttachmentFormat = depth_format,
-        .stencilAttachmentFormat = stencil_format,
-    };
+    const auto rendering_info = vk::PipelineRenderingCreateInfo{}
+                                    .setColorAttachmentFormats(color_formats)
+                                    .setDepthAttachmentFormat(depth_format)
+                                    .setStencilAttachmentFormat(stencil_format);
 
-    const std::array pipeline_infos{VkGraphicsPipelineCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .pNext = &rendering_info,
-        .stageCount = static_cast<u32>(stages.size()),
-        .pStages = stages.data(),
-        .pVertexInputState = &vertex_input,
-        .pInputAssemblyState = &input_assembly,
-        .pTessellationState = has_tessellation ? &tessellation : nullptr,
-        .pViewportState = &viewport_state,
-        .pRasterizationState = &rasterization,
-        .pMultisampleState = &multisample,
-        .pDepthStencilState = &depth_stencil,
-        .pColorBlendState = &color_blend,
-        .pDynamicState = &dynamic_state,
-        .layout = layout_,
-    }};
-    return Vulkan::CreateGraphicsPipelines(context_->GetDevice(), VK_NULL_HANDLE, pipeline_infos).front();
+    const auto pipeline_info = vk::GraphicsPipelineCreateInfo{}
+                                   .setStages(stages)
+                                   .setPVertexInputState(&vertex_input)
+                                   .setPInputAssemblyState(&input_assembly)
+                                   .setPTessellationState(has_tessellation ? &tessellation : nullptr)
+                                   .setPViewportState(&viewport_state)
+                                   .setPRasterizationState(&rasterization)
+                                   .setPMultisampleState(&multisample)
+                                   .setPDepthStencilState(&depth_stencil)
+                                   .setPColorBlendState(&color_blend)
+                                   .setPDynamicState(&dynamic_state)
+                                   .setLayout(layout_);
+    const vk::StructureChain<vk::GraphicsPipelineCreateInfo, vk::PipelineRenderingCreateInfo> pipeline_chain{
+        pipeline_info,
+        rendering_info};
+    const vk::Device device = context_->GetDevice();
+    const std::array pipeline_infos{pipeline_chain.get<vk::GraphicsPipelineCreateInfo>()};
+    auto outcome = device.createGraphicsPipelinesUnique(nullptr, pipeline_infos);
+    vk::UniquePipeline pipeline = std::move(outcome.value.front());
+    VulkanCheck(outcome.result);
+    return pipeline;
 }
 
 }  // namespace klvk

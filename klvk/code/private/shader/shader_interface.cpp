@@ -12,21 +12,21 @@ namespace klvk
 namespace
 {
 
-u32 StageOrder(VkShaderStageFlagBits stage)
+u32 StageOrder(vk::ShaderStageFlagBits stage)
 {
     switch (stage)
     {
-    case VK_SHADER_STAGE_VERTEX_BIT:
+    case vk::ShaderStageFlagBits::eVertex:
         return 0;
-    case VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT:
+    case vk::ShaderStageFlagBits::eTessellationControl:
         return 1;
-    case VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT:
+    case vk::ShaderStageFlagBits::eTessellationEvaluation:
         return 2;
-    case VK_SHADER_STAGE_GEOMETRY_BIT:
+    case vk::ShaderStageFlagBits::eGeometry:
         return 3;
-    case VK_SHADER_STAGE_FRAGMENT_BIT:
+    case vk::ShaderStageFlagBits::eFragment:
         return 4;
-    case VK_SHADER_STAGE_COMPUTE_BIT:
+    case vk::ShaderStageFlagBits::eCompute:
         return 5;
     default:
         return 6;
@@ -105,7 +105,7 @@ void ValidateInterface(const ShaderInterface& interface)
             "Shader specialization constant '{}' has an unsupported type or size",
             constant.name);
     }
-    if (interface.stage == VK_SHADER_STAGE_COMPUTE_BIT)
+    if (interface.stage == vk::ShaderStageFlagBits::eCompute)
     {
         ErrorHandling::Ensure(
             std::ranges::all_of(interface.workgroup_size, [](u32 value) { return value != 0; }),
@@ -152,7 +152,7 @@ ShaderProgramInterface MergeShaderInterfaces(const std::vector<std::shared_ptr<c
 
     std::vector<const ShaderInterface*> ordered;
     ordered.reserve(interfaces.size());
-    VkShaderStageFlags stage_mask = 0;
+    vk::ShaderStageFlags stage_mask{};
     bool has_compute = false;
     for (const auto& interface : interfaces)
     {
@@ -163,11 +163,11 @@ ShaderProgramInterface MergeShaderInterfaces(const std::vector<std::shared_ptr<c
             "Shader program contains duplicate stage {}",
             static_cast<u32>(interface->stage));
         stage_mask |= interface->stage;
-        has_compute |= interface->stage == VK_SHADER_STAGE_COMPUTE_BIT;
+        has_compute |= interface->stage == vk::ShaderStageFlagBits::eCompute;
         ordered.push_back(interface.get());
     }
     ErrorHandling::Ensure(
-        !has_compute || stage_mask == VK_SHADER_STAGE_COMPUTE_BIT,
+        !has_compute || stage_mask == vk::ShaderStageFlagBits::eCompute,
         "Compute and graphics shader stages cannot be combined");
     std::ranges::sort(ordered, {}, [](const ShaderInterface* interface) { return StageOrder(interface->stage); });
     if (!has_compute)

@@ -13,7 +13,7 @@ public:
     SimpleGpuRenderer(klvk::Application& app, size_t max_iterations);
     ~SimpleGpuRenderer() noexcept override;
 
-    void Render(VkCommandBuffer command_buffer, const FractalSettings& settings) override;
+    void Render(vk::CommandBuffer command_buffer, const FractalSettings& settings) override;
     void ApplySettings(const FractalSettings& settings) override;
 
 private:
@@ -27,10 +27,10 @@ private:
     klvk::DefineHandle def_inside_out_space_;
     klvk::DefineHandle def_color_mode_;
     size_t pipeline_shader_version_ = 0;
-    VkDescriptorSetLayout set_layout_ = VK_NULL_HANDLE;
+    vk::UniqueDescriptorSetLayout set_layout_;
     klvk::DescriptorSetLayoutDescription set_layout_description_;
-    VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
-    VkDescriptorSet descriptor_set_ = VK_NULL_HANDLE;
+    vk::UniqueDescriptorPool descriptor_pool_;
+    vk::DescriptorSet descriptor_set_ = nullptr;
     klvk::PipelineLayout pipeline_layout_;
-    VkPipeline pipeline_ = VK_NULL_HANDLE;
+    vk::UniquePipeline pipeline_;
 };

@@ -11,7 +11,7 @@
 #include "klvk/filesystem/filesystem.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 #include "shader/shader_config.hpp"
 
 namespace klvk
@@ -20,13 +20,13 @@ namespace klvk
 namespace
 {
 
-constexpr std::array<std::pair<std::string_view, VkShaderStageFlagBits>, 6> kStageExtensions{{
-    {".vert", VK_SHADER_STAGE_VERTEX_BIT},
-    {".frag", VK_SHADER_STAGE_FRAGMENT_BIT},
-    {".geom", VK_SHADER_STAGE_GEOMETRY_BIT},
-    {".comp", VK_SHADER_STAGE_COMPUTE_BIT},
-    {".tesc", VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT},
-    {".tese", VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT},
+constexpr std::array<std::pair<std::string_view, vk::ShaderStageFlagBits>, 6> kStageExtensions{{
+    {".vert", vk::ShaderStageFlagBits::eVertex},
+    {".frag", vk::ShaderStageFlagBits::eFragment},
+    {".geom", vk::ShaderStageFlagBits::eGeometry},
+    {".comp", vk::ShaderStageFlagBits::eCompute},
+    {".tesc", vk::ShaderStageFlagBits::eTessellationControl},
+    {".tese", vk::ShaderStageFlagBits::eTessellationEvaluation},
 }};
 
 // A document may spell an integer as signed or unsigned; a constant only cares
@@ -195,31 +195,27 @@ DefineHandle Shader::GetDefine(std::string_view name) const
     return *handle;
 }
 
-ShaderStages Shader::MakeStages(VkShaderStageFlags stage_mask) const
+ShaderStages Shader::MakeStages(vk::ShaderStageFlags stage_mask) const
 {
     ShaderStages result;
     for (const auto& [stage, module] : stages_)
     {
         if (!(stage & stage_mask)) continue;
-        std::vector<VkPipelineShaderStageCreateInfo> create_infos{{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .stage = stage,
-            .module = module.GetHandle(),
-            .pName = "main",
-        }};
-        std::vector<VkSpecializationMapEntry> entries;
+        std::vector<vk::PipelineShaderStageCreateInfo> create_infos{
+            vk::PipelineShaderStageCreateInfo{}.setStage(stage).setModule(module.GetHandle()).setPName("main")};
+        std::vector<vk::SpecializationMapEntry> entries;
         std::vector<u32> values;
         for (size_t index = 0; index != define_names_.size(); ++index)
         {
             if (!define_overridden_[index]) continue;
             const auto occurrence =
-                std::ranges::find(define_stage_ids_[index], stage, &std::pair<VkShaderStageFlagBits, u32>::first);
+                std::ranges::find(define_stage_ids_[index], stage, &std::pair<vk::ShaderStageFlagBits, u32>::first);
             if (occurrence == define_stage_ids_[index].end()) continue;
-            entries.push_back({
-                .constantID = occurrence->second,
-                .offset = static_cast<u32>(values.size() * sizeof(u32)),
-                .size = sizeof(u32),
-            });
+            entries.push_back(
+                vk::SpecializationMapEntry{}
+                    .setConstantID(occurrence->second)
+                    .setOffset(static_cast<u32>(values.size() * sizeof(u32)))
+                    .setSize(sizeof(u32)));
             values.push_back(define_values_[index]);
         }
         result.Append(

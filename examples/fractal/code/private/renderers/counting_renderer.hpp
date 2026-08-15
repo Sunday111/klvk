@@ -13,8 +13,8 @@ public:
     CountingRenderer(klvk::Application& app, size_t max_iterations);
     ~CountingRenderer() noexcept override;
 
-    void PrepareFrame(VkCommandBuffer command_buffer, const FractalSettings& settings) override;
-    void Render(VkCommandBuffer command_buffer, const FractalSettings& settings) override;
+    void PrepareFrame(vk::CommandBuffer command_buffer, const FractalSettings& settings) override;
+    void Render(vk::CommandBuffer command_buffer, const FractalSettings& settings) override;
     void ApplySettings(const FractalSettings& settings) override;
 
 private:
@@ -32,14 +32,14 @@ private:
     klvk::DefineHandle def_compute_inside_out_space_;
     size_t pipelines_shader_version_ = 0;
 
-    VkDescriptorSetLayout compute_set_layout_ = VK_NULL_HANDLE;
-    VkDescriptorSetLayout draw_set_layout_ = VK_NULL_HANDLE;
-    VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
-    VkDescriptorSet compute_set_ = VK_NULL_HANDLE;
-    VkDescriptorSet draw_set_ = VK_NULL_HANDLE;
+    vk::UniqueDescriptorSetLayout compute_set_layout_;
+    vk::UniqueDescriptorSetLayout draw_set_layout_;
+    vk::UniqueDescriptorPool descriptor_pool_;
+    vk::DescriptorSet compute_set_ = nullptr;
+    vk::DescriptorSet draw_set_ = nullptr;
 
     klvk::PipelineLayout compute_pipeline_layout_;
     klvk::PipelineLayout draw_pipeline_layout_;
-    VkPipeline compute_pipeline_ = VK_NULL_HANDLE;
-    VkPipeline draw_pipeline_ = VK_NULL_HANDLE;
+    vk::UniquePipeline compute_pipeline_;
+    vk::UniquePipeline draw_pipeline_;
 };

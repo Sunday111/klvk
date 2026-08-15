@@ -19,8 +19,8 @@
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
 #include "klvk/vulkan/texture.hpp"
-#include "klvk/vulkan/vk_object.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 #include "klvk/window.hpp"
 
 namespace
@@ -74,32 +74,29 @@ class TextApp : public klvk::Application
         font_ = klvk::FontFace::FromFile(GetContentDir() / "fonts" / "DejaVuSansMono.ttf");
 
         klvk::DeviceContext& context = GetDeviceContext();
-        VkDevice device = context.GetDevice();
+        descriptor_sets_ =
+            klvk::DescriptorSets::Builder(context)
+                .Binding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
+                .Build(kFramesInFlight);
 
-        descriptor_sets_ = klvk::DescriptorSets::Builder(context)
-                               .Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-                               .Build(kFramesInFlight);
-
-        const VkPushConstantRange push_constant_range{
-            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-            .offset = 0,
-            .size = sizeof(PushConstants),
-        };
+        const vk::PushConstantRange push_constant_range =
+            vk::PushConstantRange{}
+                .setStageFlags(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment)
+                .setOffset(0)
+                .setSize(sizeof(PushConstants));
         const std::array set_layouts{descriptor_sets_.GetLayoutView()};
         pipeline_layout_ = klvk::PipelineLayout{context, set_layouts, std::span{&push_constant_range, 1}};
 
         const std::filesystem::path shader_dir = GetShaderDir() / "text";
-        pipeline_ = klvk::VkObject<VkPipeline>{
-            device,
-            klvk::GraphicsPipelineBuilder(*this)
-                .Layout(pipeline_layout_)
-                .VertexShaderFile(shader_dir / "glyph.vert.slang")
-                .FragmentShaderFile(shader_dir / "glyph.frag.slang")
-                .VertexBinding(0, sizeof(GlyphVertex), VK_VERTEX_INPUT_RATE_VERTEX)
-                .VertexAttribute(0, 0, VK_FORMAT_R32G32_SFLOAT, 0)
-                .VertexAttribute(1, 0, VK_FORMAT_R32G32_SFLOAT, sizeof(Vec2f))
-                .AlphaBlend()
-                .Build()};
+        pipeline_ = klvk::GraphicsPipelineBuilder(*this)
+                        .Layout(pipeline_layout_)
+                        .VertexShaderFile(shader_dir / "glyph.vert.slang")
+                        .FragmentShaderFile(shader_dir / "glyph.frag.slang")
+                        .VertexBinding(0, sizeof(GlyphVertex), vk::VertexInputRate::eVertex)
+                        .VertexAttribute(0, 0, vk::Format::eR32G32Sfloat, 0)
+                        .VertexAttribute(1, 0, vk::Format::eR32G32Sfloat, sizeof(Vec2f))
+                        .AlphaBlend()
+                        .Build();
 
         // A seed from the diagnostic config keeps a scripted run reproducible.
         const nlohmann::json* config = GetDiagnosticApplicationConfig();
@@ -221,7 +218,7 @@ class TextApp : public klvk::Application
 
     // Copies into the atlas have to be recorded outside a render pass, and before
     // the one that samples them.
-    void BeforeSwapchainRender(VkCommandBuffer command_buffer) override
+    void BeforeSwapchainRender(vk::CommandBuffer command_buffer) override
     {
         if (pending_next_size_)
         {
@@ -257,26 +254,22 @@ class TextApp : public klvk::Application
             .color = {0.95f, 0.93f, 0.85f, 1.f},
         };
 
-        VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
+        vk::CommandBuffer command_buffer = GetCurrentCommandBuffer();
         const std::array descriptor_set{descriptor_sets_.Get(frame_index)};
         const std::array buffers{vertex_buffers_[frame_index].GetHandle()};
-        const std::array<VkDeviceSize, 1> offsets{0};
+        const std::array<vk::DeviceSize, 1> offsets{0};
 
-        klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-        klvk::Vulkan::CmdBindDescriptorSets(
-            command_buffer,
-            VK_PIPELINE_BIND_POINT_GRAPHICS,
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
+        command_buffer
+            .bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout_.GetHandle(), 0, descriptor_set, {});
+        command_buffer.bindVertexBuffers(0, buffers, offsets);
+        command_buffer.pushConstants(
             pipeline_layout_.GetHandle(),
+            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
             0,
-            descriptor_set);
-        klvk::Vulkan::CmdBindVertexBuffers(command_buffer, 0, buffers, offsets);
-        klvk::Vulkan::CmdPushConstants(
-            command_buffer,
-            pipeline_layout_.GetHandle(),
-            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-            0,
-            push_constants);
-        klvk::Vulkan::CmdDraw(command_buffer, static_cast<u32>(vertices.size()), 1, 0, 0);
+            sizeof(push_constants),
+            &push_constants);
+        command_buffer.draw(static_cast<u32>(vertices.size()), 1, 0, 0);
     }
 
     void EnsureVertexCapacity(size_t frame_index, size_t bytes)
@@ -290,7 +283,7 @@ class TextApp : public klvk::Application
         GetDeviceContext().WaitIdle();
         buffer = klvk::GpuBuffer{
             GetDeviceContext(),
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            vk::BufferUsageFlagBits::eVertexBuffer,
             capacity,
             klvk::GpuBufferHostAccess::SequentialWrite};
     }
@@ -308,7 +301,7 @@ private:
     std::unique_ptr<klvk::events::IEventListener> key_listener_;
     klvk::DescriptorSets descriptor_sets_;
     klvk::PipelineLayout pipeline_layout_;
-    klvk::VkObject<VkPipeline> pipeline_;
+    vk::UniquePipeline pipeline_;
     std::array<klvk::GpuBuffer, kFramesInFlight> vertex_buffers_{};
 
     std::mt19937 random_{7};

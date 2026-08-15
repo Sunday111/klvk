@@ -45,7 +45,7 @@ public:
     // A rectangle to overwrite, and where its rows start in the staging buffer.
     struct RegionUpdate
     {
-        VkDeviceSize buffer_offset = 0;
+        vk::DeviceSize buffer_offset = 0;
         edt::Vec2<u32> offset{};
         edt::Vec2<u32> size{};
     };
@@ -57,14 +57,15 @@ public:
     // The regions must not be ones an unfinished frame is still sampling. Writing
     // only into space no earlier frame knew about - as an append-only packer does
     // - satisfies that; overwriting occupied space does not.
-    void RecordRegionUpdates(VkCommandBuffer command_buffer, VkBuffer staging, std::span<const RegionUpdate> regions);
+    void
+    RecordRegionUpdates(vk::CommandBuffer command_buffer, vk::Buffer staging, std::span<const RegionUpdate> regions);
 
     Texture(const Texture&) = delete;
     Texture(Texture&&) = delete;
     ~Texture();
 
-    [[nodiscard]] VkImageView GetView() const noexcept { return view_; }
-    [[nodiscard]] VkSampler GetSampler() const noexcept { return sampler_; }
+    [[nodiscard]] vk::ImageView GetView() const noexcept { return view_.get(); }
+    [[nodiscard]] vk::Sampler GetSampler() const noexcept { return sampler_.get(); }
     [[nodiscard]] edt::Vec2<u32> GetSize() const noexcept { return size_; }
 
 private:
@@ -74,14 +75,14 @@ private:
         DeviceContext& context,
         edt::Vec2<u32> size,
         std::span<const u8> pixels,
-        VkFormat format,
+        vk::Format format,
         u32 bytes_per_pixel);
 
     DeviceContext* context_ = nullptr;
-    VkImage image_ = VK_NULL_HANDLE;
-    VmaAllocation allocation_ = VK_NULL_HANDLE;
-    VkImageView view_ = VK_NULL_HANDLE;
-    VkSampler sampler_ = VK_NULL_HANDLE;
+    vk::Image image_ = nullptr;
+    VmaAllocation allocation_ = nullptr;
+    vk::UniqueImageView view_;
+    vk::UniqueSampler sampler_;
     edt::Vec2<u32> size_{};
 };
 

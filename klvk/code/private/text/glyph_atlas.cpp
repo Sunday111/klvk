@@ -107,10 +107,11 @@ void GlyphAtlas::EnsureStagingCapacity(size_t frame_index, size_t bytes)
     while (capacity < bytes) capacity *= 2;
 
     context_->WaitIdle();
-    buffer = GpuBuffer{*context_, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, capacity, GpuBufferHostAccess::SequentialWrite};
+    buffer =
+        GpuBuffer{*context_, vk::BufferUsageFlagBits::eTransferSrc, capacity, GpuBufferHostAccess::SequentialWrite};
 }
 
-void GlyphAtlas::RecordPendingUploads(VkCommandBuffer command_buffer, size_t frame_index)
+void GlyphAtlas::RecordPendingUploads(vk::CommandBuffer command_buffer, size_t frame_index)
 {
     if (pending_.empty()) return;
 
@@ -128,7 +129,7 @@ void GlyphAtlas::RecordPendingUploads(VkCommandBuffer command_buffer, size_t fra
     std::vector<Texture::RegionUpdate> regions;
     regions.reserve(pending_.size());
 
-    VkDeviceSize offset = 0;
+    vk::DeviceSize offset = 0;
     for (const PendingGlyph& glyph : pending_)
     {
         staging.Write(std::as_bytes(std::span{glyph.coverage}), offset);

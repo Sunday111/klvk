@@ -43,7 +43,7 @@ public:
     virtual void Run();
     void RunWithArguments(int argc, char** argv);
     virtual void PreTick();
-    virtual void BeforeSwapchainRender(VkCommandBuffer command_buffer);
+    virtual void BeforeSwapchainRender(vk::CommandBuffer command_buffer);
     virtual void Tick();
     virtual void PostTick();
     virtual void MainLoop();
@@ -117,13 +117,13 @@ public:
 
     // Vulkan accessors for renderers.
     [[nodiscard]] DeviceContext& GetDeviceContext();
-    [[nodiscard]] VkFormat GetSwapchainFormat() const;
-    [[nodiscard]] VkFormat GetDepthFormat() const;
+    [[nodiscard]] vk::Format GetSwapchainFormat() const;
+    [[nodiscard]] vk::Format GetDepthFormat() const;
 
     // Valid between PreTick and PostTick: the command buffer of the frame being recorded
     // (inside an active dynamic rendering pass targeting the presentation image)
     // and the index of the frame-in-flight slot it belongs to.
-    [[nodiscard]] VkCommandBuffer GetCurrentCommandBuffer() const;
+    [[nodiscard]] vk::CommandBuffer GetCurrentCommandBuffer() const;
     [[nodiscard]] size_t GetFrameInFlightIndex() const;
 
 private:

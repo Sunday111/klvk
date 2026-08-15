@@ -8,7 +8,7 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/depth_stencil_format.hpp"
 #include "klvk/vulkan/device_context.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk
 {
@@ -16,20 +16,20 @@ namespace klvk
 namespace
 {
 
-bool IsDiagnosticCaptureFormat(VkFormat format)
+bool IsDiagnosticCaptureFormat(vk::Format format)
 {
-    return format == VK_FORMAT_B8G8R8A8_UNORM || format == VK_FORMAT_B8G8R8A8_SRGB ||
-           format == VK_FORMAT_R8G8B8A8_UNORM || format == VK_FORMAT_R8G8B8A8_SRGB;
+    return format == vk::Format::eB8G8R8A8Unorm || format == vk::Format::eB8G8R8A8Srgb ||
+           format == vk::Format::eR8G8B8A8Unorm || format == vk::Format::eR8G8B8A8Srgb;
 }
 
-VkSurfaceFormatKHR ChooseSurfaceFormat(VkPhysicalDevice device, VkSurfaceKHR surface, bool diagnostic_capture)
+vk::SurfaceFormatKHR ChooseSurfaceFormat(vk::PhysicalDevice device, vk::SurfaceKHR surface, bool diagnostic_capture)
 {
-    const std::vector<VkSurfaceFormatKHR> formats = Vulkan::GetPhysicalDeviceSurfaceFormatsKHR(device, surface);
+    const std::vector<vk::SurfaceFormatKHR> formats = device.getSurfaceFormatsKHR(surface);
     ErrorHandling::Ensure(!formats.empty(), "Surface reports no formats");
 
     for (const auto& format : formats)
     {
-        if (format.format == VK_FORMAT_B8G8R8A8_UNORM && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+        if (format.format == vk::Format::eB8G8R8A8Unorm && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
         {
             return format;
         }
@@ -45,53 +45,55 @@ VkSurfaceFormatKHR ChooseSurfaceFormat(VkPhysicalDevice device, VkSurfaceKHR sur
     return formats.front();
 }
 
-VkPresentModeKHR ChoosePresentMode(VkPhysicalDevice device, VkSurfaceKHR surface)
+vk::PresentModeKHR ChoosePresentMode(vk::PhysicalDevice device, vk::SurfaceKHR surface)
 {
-    const std::vector<VkPresentModeKHR> modes = Vulkan::GetPhysicalDeviceSurfacePresentModesKHR(device, surface);
+    const std::vector<vk::PresentModeKHR> modes = device.getSurfacePresentModesKHR(surface);
 
     // Application paces frames itself (SetTargetFramerate), so prefer modes that do not block on vsync
     // to mirror klgl's glfwSwapInterval(0) behavior.
-    for (const VkPresentModeKHR preferred : {VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR})
+    for (const vk::PresentModeKHR preferred : {vk::PresentModeKHR::eMailbox, vk::PresentModeKHR::eImmediate})
     {
         if (std::ranges::find(modes, preferred) != modes.end()) return preferred;
     }
-    return VK_PRESENT_MODE_FIFO_KHR;
+    return vk::PresentModeKHR::eFifo;
 }
 
 }  // namespace
 
-Swapchain::Swapchain(DeviceContext& context, edt::Vec2<u32> framebuffer_size, VkImageUsageFlags additional_image_usage)
+Swapchain::Swapchain(
+    DeviceContext& context,
+    edt::Vec2<u32> framebuffer_size,
+    vk::ImageUsageFlags additional_image_usage)
     : context_(&context),
       additional_image_usage_(additional_image_usage)
 {
-    Create(framebuffer_size, VK_NULL_HANDLE);
+    Create(framebuffer_size, nullptr);
 }
 
 Swapchain::~Swapchain()
 {
     DestroyImageViews();
-    if (swapchain_) Vulkan::DestroySwapchainKHRNE(context_->GetDevice(), swapchain_);
 }
 
 void Swapchain::Recreate(edt::Vec2<u32> framebuffer_size)
 {
     context_->WaitIdle();
+    vk::UniqueSwapchainKHR old_swapchain = std::move(swapchain_);
     DestroyImageViews();
-    VkSwapchainKHR old_swapchain = swapchain_;
-    Create(framebuffer_size, old_swapchain);
-    if (old_swapchain) Vulkan::DestroySwapchainKHRNE(context_->GetDevice(), old_swapchain);
+    Create(framebuffer_size, old_swapchain.get());
 }
 
-void Swapchain::Create(edt::Vec2<u32> framebuffer_size, VkSwapchainKHR old_swapchain)
+void Swapchain::Create(edt::Vec2<u32> framebuffer_size, vk::SwapchainKHR old_swapchain)
 {
-    VkPhysicalDevice physical_device = context_->GetPhysicalDevice();
-    VkSurfaceKHR surface = context_->GetSurface();
+    vk::PhysicalDevice physical_device = context_->GetPhysicalDevice();
+    vk::SurfaceKHR surface = context_->GetSurface();
 
-    const VkSurfaceCapabilitiesKHR capabilities =
-        Vulkan::GetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface);
+    const vk::SurfaceCapabilitiesKHR capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
 
-    format_ =
-        ChooseSurfaceFormat(physical_device, surface, (additional_image_usage_ & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0);
+    format_ = ChooseSurfaceFormat(
+        physical_device,
+        surface,
+        static_cast<bool>(additional_image_usage_ & vk::ImageUsageFlagBits::eTransferSrc));
 
     if (capabilities.currentExtent.width != std::numeric_limits<u32>::max())
     {
@@ -115,109 +117,100 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, VkSwapchainKHR old_swapc
         image_count = std::min(image_count, capabilities.maxImageCount);
     }
 
-    const VkImageUsageFlags image_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | additional_image_usage_;
+    const vk::ImageUsageFlags image_usage = vk::ImageUsageFlagBits::eColorAttachment | additional_image_usage_;
     ErrorHandling::Ensure(
         (capabilities.supportedUsageFlags & image_usage) == image_usage,
-        "Surface does not support required swapchain image usage flags 0x{:x}",
-        image_usage);
+        "Surface does not support required swapchain image usage flags {}",
+        vk::to_string(image_usage));
 
-    const VkSwapchainCreateInfoKHR create_info{
-        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-        .surface = surface,
-        .minImageCount = image_count,
-        .imageFormat = format_.format,
-        .imageColorSpace = format_.colorSpace,
-        .imageExtent = extent_,
-        .imageArrayLayers = 1,
-        .imageUsage = image_usage,
-        .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .preTransform = capabilities.currentTransform,
-        .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = ChoosePresentMode(physical_device, surface),
-        .clipped = VK_TRUE,
-        .oldSwapchain = old_swapchain,
-    };
+    const vk::SwapchainCreateInfoKHR create_info = vk::SwapchainCreateInfoKHR{}
+                                                       .setSurface(surface)
+                                                       .setMinImageCount(image_count)
+                                                       .setImageFormat(format_.format)
+                                                       .setImageColorSpace(format_.colorSpace)
+                                                       .setImageExtent(extent_)
+                                                       .setImageArrayLayers(1)
+                                                       .setImageUsage(image_usage)
+                                                       .setImageSharingMode(vk::SharingMode::eExclusive)
+                                                       .setPreTransform(capabilities.currentTransform)
+                                                       .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque)
+                                                       .setPresentMode(ChoosePresentMode(physical_device, surface))
+                                                       .setClipped(true)
+                                                       .setOldSwapchain(old_swapchain);
 
-    swapchain_ = Vulkan::CreateSwapchainKHR(context_->GetDevice(), create_info);
-    images_ = Vulkan::GetSwapchainImagesKHR(context_->GetDevice(), swapchain_);
+    swapchain_ = context_->GetDevice().createSwapchainKHRUnique(create_info);
+    images_ = context_->GetDevice().getSwapchainImagesKHR(swapchain_.get());
 
     image_views_.clear();
     image_views_.reserve(images_.size());
     for (auto& image : images_)
     {
-        const VkImageViewCreateInfo view_info{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-            .image = image,
-            .viewType = VK_IMAGE_VIEW_TYPE_2D,
-            .format = format_.format,
-            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
-        };
-        image_views_.push_back(Vulkan::CreateImageView(context_->GetDevice(), view_info));
+        const vk::ImageSubresourceRange subresource_range = vk::ImageSubresourceRange{}
+                                                                .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                                                                .setLevelCount(1)
+                                                                .setLayerCount(1);
+        const vk::ImageViewCreateInfo view_info = vk::ImageViewCreateInfo{}
+                                                      .setImage(image)
+                                                      .setViewType(vk::ImageViewType::e2D)
+                                                      .setFormat(format_.format)
+                                                      .setSubresourceRange(subresource_range);
+        image_views_.push_back(context_->GetDevice().createImageViewUnique(view_info));
     }
 
     depth_stencil_format_ = SelectDepthStencilFormat(context_->GetPhysicalDevice());
-    const VkImageAspectFlags depth_stencil_aspect = DepthStencilAspectMask(depth_stencil_format_);
+    const vk::ImageAspectFlags depth_stencil_aspect = DepthStencilAspectMask(depth_stencil_format_);
 
-    depth_images_.resize(images_.size(), VK_NULL_HANDLE);
-    depth_allocations_.resize(images_.size(), VK_NULL_HANDLE);
+    depth_images_.resize(images_.size(), nullptr);
+    depth_allocations_.resize(images_.size(), nullptr);
     depth_image_views_.reserve(images_.size());
     for (size_t index = 0; index != images_.size(); ++index)
     {
-        const VkImageCreateInfo image_info{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-            .imageType = VK_IMAGE_TYPE_2D,
-            .format = depth_stencil_format_,
-            .extent = {.width = extent_.width, .height = extent_.height, .depth = 1},
-            .mipLevels = 1,
-            .arrayLayers = 1,
-            .samples = VK_SAMPLE_COUNT_1_BIT,
-            .tiling = VK_IMAGE_TILING_OPTIMAL,
-            .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        };
+        const vk::ImageCreateInfo image_info = vk::ImageCreateInfo{}
+                                                   .setImageType(vk::ImageType::e2D)
+                                                   .setFormat(depth_stencil_format_)
+                                                   .setExtent(vk::Extent3D{extent_.width, extent_.height, 1})
+                                                   .setMipLevels(1)
+                                                   .setArrayLayers(1)
+                                                   .setSamples(vk::SampleCountFlagBits::e1)
+                                                   .setTiling(vk::ImageTiling::eOptimal)
+                                                   .setUsage(vk::ImageUsageFlagBits::eDepthStencilAttachment)
+                                                   .setSharingMode(vk::SharingMode::eExclusive)
+                                                   .setInitialLayout(vk::ImageLayout::eUndefined);
         const VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
-        CheckVkResult(
-            vmaCreateImage(
+        const VkImageCreateInfo& raw_image_info = image_info;
+        VkImage raw_depth_image = nullptr;
+        VulkanCheck(
+            static_cast<vk::Result>(vmaCreateImage(
                 context_->GetAllocator(),
-                &image_info,
+                &raw_image_info,
                 &allocation_info,
-                &depth_images_[index],
+                &raw_depth_image,
                 &depth_allocations_[index],
-                nullptr),
-            "vmaCreateImage(depth)");
+                nullptr)));
+        depth_images_[index] = raw_depth_image;
 
-        depth_image_views_.push_back(
-            Vulkan::CreateImageView(
-                context_->GetDevice(),
-                {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                    .image = depth_images_[index],
-                    .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                    .format = depth_stencil_format_,
-                    .subresourceRange = {.aspectMask = depth_stencil_aspect, .levelCount = 1, .layerCount = 1},
-                }));
+        const vk::ImageSubresourceRange subresource_range =
+            vk::ImageSubresourceRange{}.setAspectMask(depth_stencil_aspect).setLevelCount(1).setLayerCount(1);
+        const vk::ImageViewCreateInfo view_info = vk::ImageViewCreateInfo{}
+                                                      .setImage(depth_images_[index])
+                                                      .setViewType(vk::ImageViewType::e2D)
+                                                      .setFormat(depth_stencil_format_)
+                                                      .setSubresourceRange(subresource_range);
+        depth_image_views_.push_back(context_->GetDevice().createImageViewUnique(view_info));
     }
 }
 
 void Swapchain::DestroyImageViews()
 {
-    for (VkImageView view : image_views_)
-    {
-        Vulkan::DestroyImageViewNE(context_->GetDevice(), view);
-    }
     image_views_.clear();
 
-    for (VkImageView view : depth_image_views_)
-    {
-        Vulkan::DestroyImageViewNE(context_->GetDevice(), view);
-    }
     depth_image_views_.clear();
     for (size_t index = 0; index != depth_images_.size(); ++index)
     {
         if (depth_images_[index])
         {
-            vmaDestroyImage(context_->GetAllocator(), depth_images_[index], depth_allocations_[index]);
+            const VkImage raw_depth_image = depth_images_[index];
+            vmaDestroyImage(context_->GetAllocator(), raw_depth_image, depth_allocations_[index]);
         }
     }
     depth_images_.clear();

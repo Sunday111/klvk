@@ -10,8 +10,8 @@
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
-#include "klvk/vulkan/vk_object.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 #include "klvk/window.hpp"
 
 // The shader ABI stores this beside u32 padding; shrinking it would break Object's std430 layout.
@@ -50,7 +50,6 @@ class GeometryShaderApp : public klvk::Application
         klvk::ErrorHandling::Ensure(
             context.IsGeometryShaderEnabled(),
             "This example requires a device with geometry shader support");
-        VkDevice device = context.GetDevice();
 
         objects_.resize(kMaxObjects);
         std::mt19937 rnd;  // NOLINT
@@ -62,37 +61,32 @@ class GeometryShaderApp : public klvk::Application
 
         // One storage buffer and descriptor set per frame in flight
         descriptor_sets_ = klvk::DescriptorSets::Builder(context)
-                               .Binding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
+                               .Binding(0, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eVertex)
                                .Build(kFramesInFlight);
         for (size_t index = 0; index != kFramesInFlight; ++index)
         {
             object_buffers_[index] =
-                klvk::GpuBuffer(context, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, kMaxObjects * sizeof(Object), true);
-            descriptor_sets_.WriteBuffer(index, 0, object_buffers_[index].GetHandle(), VK_WHOLE_SIZE);
+                klvk::GpuBuffer(context, vk::BufferUsageFlagBits::eStorageBuffer, kMaxObjects * sizeof(Object), true);
+            descriptor_sets_.WriteBuffer(index, 0, object_buffers_[index].GetHandle(), vk::WholeSize);
         }
 
         // Pipeline with a geometry stage
         {
-            const VkPushConstantRange push_constant_range{
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .offset = 0,
-                .size = sizeof(float),
-            };
+            const vk::PushConstantRange push_constant_range =
+                vk::PushConstantRange{}.setStageFlags(vk::ShaderStageFlagBits::eFragment).setSize(sizeof(float));
             const auto set_layout = descriptor_sets_.GetLayoutView();
             pipeline_layout_ =
                 klvk::PipelineLayout{context, std::span{&set_layout, 1}, std::span{&push_constant_range, 1}};
 
             const std::filesystem::path shader_dir = GetShaderDir() / "points_to_quads_2d";
-            pipeline_ = klvk::VkObject<VkPipeline>{
-                device,
-                klvk::GraphicsPipelineBuilder(*this)
-                    .Layout(pipeline_layout_)
-                    .VertexShaderFile(shader_dir / "points_to_quads_2d.vert.slang")
-                    .GeometryShaderFile(shader_dir / "points_to_quads_2d.geom.slang")
-                    .FragmentShaderFile(shader_dir / "points_to_quads_2d.frag.slang")
-                    .Topology(VK_PRIMITIVE_TOPOLOGY_POINT_LIST)
-                    .AlphaBlend()
-                    .Build()};
+            pipeline_ = klvk::GraphicsPipelineBuilder(*this)
+                            .Layout(pipeline_layout_)
+                            .VertexShaderFile(shader_dir / "points_to_quads_2d.vert.slang")
+                            .GeometryShaderFile(shader_dir / "points_to_quads_2d.geom.slang")
+                            .FragmentShaderFile(shader_dir / "points_to_quads_2d.frag.slang")
+                            .Topology(vk::PrimitiveTopology::ePointList)
+                            .AlphaBlend()
+                            .Build();
         }
     }
 
@@ -135,22 +129,22 @@ class GeometryShaderApp : public klvk::Application
         const size_t frame_index = GetFrameInFlightIndex();
         object_buffers_[frame_index].Write(std::as_bytes(std::span{objects_}.first(n)));
 
-        VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
-        const VkDescriptorSet descriptor_set = descriptor_sets_.Get(frame_index);
-        klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-        klvk::Vulkan::CmdBindDescriptorSets(
-            command_buffer,
-            VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vk::CommandBuffer command_buffer = GetCurrentCommandBuffer();
+        const vk::DescriptorSet descriptor_set = descriptor_sets_.Get(frame_index);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
+        command_buffer.bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics,
             pipeline_layout_.GetHandle(),
             0,
-            std::span{&descriptor_set, 1});
-        klvk::Vulkan::CmdPushConstants(
-            command_buffer,
+            std::span{&descriptor_set, 1},
+            {});
+        command_buffer.pushConstants(
             pipeline_layout_.GetHandle(),
-            VK_SHADER_STAGE_FRAGMENT_BIT,
+            vk::ShaderStageFlagBits::eFragment,
             0,
-            figure_border_);
-        klvk::Vulkan::CmdDraw(command_buffer, static_cast<u32>(n), 1, 0, 0);
+            sizeof(figure_border_),
+            &figure_border_);
+        command_buffer.draw(static_cast<u32>(n), 1, 0, 0);
     }
 
 private:
@@ -159,7 +153,7 @@ private:
     klvk::DescriptorSets descriptor_sets_;
     std::array<klvk::GpuBuffer, kFramesInFlight> object_buffers_{};
     klvk::PipelineLayout pipeline_layout_;
-    klvk::VkObject<VkPipeline> pipeline_;
+    vk::UniquePipeline pipeline_;
 };
 
 void Main(int argc, char** argv)

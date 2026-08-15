@@ -48,10 +48,10 @@ void TestPureValidation()
     Ensure(klvk::ShaderValueLocationCount(double_vector) == 2, "64-bit interface location accounting is incorrect");
 
     auto vertex = std::make_shared<klvk::ShaderInterface>();
-    vertex->stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertex->stage = vk::ShaderStageFlagBits::eVertex;
     klvk::ShaderDescriptorBinding vertex_descriptor{};
     vertex_descriptor.name = "scene";
-    vertex_descriptor.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    vertex_descriptor.type = vk::DescriptorType::eUniformBuffer;
     vertex_descriptor.stages = vertex->stage;
     vertex->descriptors.push_back(vertex_descriptor);
     klvk::ShaderInterfaceVariable output{};
@@ -62,7 +62,7 @@ void TestPureValidation()
     vertex->outputs.push_back(output);
 
     auto fragment = std::make_shared<klvk::ShaderInterface>();
-    fragment->stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragment->stage = vk::ShaderStageFlagBits::eFragment;
     klvk::ShaderDescriptorBinding fragment_descriptor = vertex_descriptor;
     fragment_descriptor.stages = fragment->stage;
     fragment->descriptors.push_back(fragment_descriptor);
@@ -72,10 +72,10 @@ void TestPureValidation()
     const auto program = klvk::MergeShaderInterfaces({vertex, fragment});
     Ensure(program.descriptors.size() == 1, "matching descriptors were not merged");
     Ensure(
-        program.descriptors.front().stages == (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+        program.descriptors.front().stages == (vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment),
         "descriptor stage masks were not merged");
 
-    fragment->descriptors.front().type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    fragment->descriptors.front().type = vk::DescriptorType::eStorageBuffer;
     try
     {
         (void)klvk::MergeShaderInterfaces({vertex, fragment});
@@ -111,21 +111,22 @@ void TestTessellationReflection(const std::filesystem::path& cache)
             cold_interfaces.push_back(compiled->interface);
         }
         const auto program = klvk::MergeShaderInterfaces(cold_interfaces);
-        constexpr VkShaderStageFlags expected_stages =
-            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
-            VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        constexpr vk::ShaderStageFlags expected_stages =
+            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eTessellationControl |
+            vk::ShaderStageFlagBits::eTessellationEvaluation | vk::ShaderStageFlagBits::eGeometry |
+            vk::ShaderStageFlagBits::eFragment;
         Ensure(program.stages == expected_stages, "curve tessellation stage mask is incomplete");
         Ensure(program.push_constants.size() == 1, "curve push constants were not merged");
         // Every stage that reads the push constants has to be named here, and the geometry
         // stage reads them too.
-        constexpr VkShaderStageFlags push_stages =
-            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
-            VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_GEOMETRY_BIT;
+        constexpr vk::ShaderStageFlags push_stages =
+            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eTessellationControl |
+            vk::ShaderStageFlagBits::eTessellationEvaluation | vk::ShaderStageFlagBits::eGeometry;
         Ensure(
             program.push_constants.front().stages == push_stages,
-            "curve push-constant stages are incorrect: expected {:#x}, got {:#x}",
-            push_stages,
-            program.push_constants.front().stages);
+            "curve push-constant stages are incorrect: expected {}, got {}",
+            vk::to_string(push_stages),
+            vk::to_string(program.push_constants.front().stages));
     }
     {
         klvk::ShaderCacheManager manager(sources, cache);
@@ -214,7 +215,7 @@ void Run()
             "}\n");
         const auto reflected = manager.GetOrCompile(reflection_shader);
         Ensure(reflected->interface != nullptr, "Slang reflection was not retained");
-        Ensure(reflected->interface->stage == VK_SHADER_STAGE_COMPUTE_BIT, "compute stage was not reflected");
+        Ensure(reflected->interface->stage == vk::ShaderStageFlagBits::eCompute, "compute stage was not reflected");
         Ensure(reflected->interface->workgroup_size == std::array<u32, 3>{8, 4, 2}, "workgroup size mismatch");
         Ensure(reflected->interface->descriptors.size() == 1, "descriptor binding was not reflected");
         Ensure(reflected->interface->descriptors.front().set == 1, "descriptor set was not reflected");
@@ -260,8 +261,8 @@ void Run()
         const auto varying_program = klvk::MergeShaderInterfaces(
             {vertex_reflected->interface, geometry_reflected->interface, fragment_reflected->interface});
         Ensure(
-            varying_program.stages ==
-                (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+            varying_program.stages == (vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eGeometry |
+                                       vk::ShaderStageFlagBits::eFragment),
             "vertex-geometry-fragment interface merge failed");
 
         Write(

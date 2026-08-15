@@ -24,8 +24,8 @@
 #include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
-#include "klvk/vulkan/vk_object.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 #include "klvk/window.hpp"
 
 namespace
@@ -149,7 +149,7 @@ class CurveFractalApp : public klvk::Application
     static constexpr Vec2<u32> kFramebufferResolution{3840, 2160};
     static constexpr size_t kMaxCurves = 10'000;
     static constexpr size_t kMaxCurvesPerFrame = 100;
-    static constexpr VkFormat kOffscreenFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+    static constexpr vk::Format kOffscreenFormat = vk::Format::eR32G32B32A32Sfloat;
     static constexpr float kCurveThickness = 1.f;
     static constexpr float kSegmentPixelLength = 8.f;
 
@@ -157,9 +157,9 @@ class CurveFractalApp : public klvk::Application
 
     struct OffscreenTarget
     {
-        VkImage image = VK_NULL_HANDLE;
-        VmaAllocation allocation = VK_NULL_HANDLE;
-        VkImageView view = VK_NULL_HANDLE;
+        vk::Image image = nullptr;
+        VmaAllocation allocation = nullptr;
+        vk::UniqueImageView view;
         bool initialized = false;
     };
 
@@ -249,27 +249,25 @@ class CurveFractalApp : public klvk::Application
     void CreateDisplayResources()
     {
         auto& context = GetDeviceContext();
-        const VkDevice device = context.GetDevice();
-        descriptor_sets_ = klvk::DescriptorSets::Builder(context)
-                               .Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-                               .Build();
-        sampler_ = klvk::VkObject<VkSampler>{
-            device,
-            klvk::Vulkan::CreateSampler(
-                device,
-                {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-                 .magFilter = VK_FILTER_LINEAR,
-                 .minFilter = VK_FILTER_LINEAR,
-                 .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-                 .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-                 .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-                 .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER})};
+        const vk::Device device = context.GetDevice();
+        descriptor_sets_ =
+            klvk::DescriptorSets::Builder(context)
+                .Binding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
+                .Build();
+        const vk::SamplerCreateInfo sampler_info = vk::SamplerCreateInfo{}
+                                                       .setMagFilter(vk::Filter::eLinear)
+                                                       .setMinFilter(vk::Filter::eLinear)
+                                                       .setMipmapMode(vk::SamplerMipmapMode::eNearest)
+                                                       .setAddressModeU(vk::SamplerAddressMode::eClampToBorder)
+                                                       .setAddressModeV(vk::SamplerAddressMode::eClampToBorder)
+                                                       .setAddressModeW(vk::SamplerAddressMode::eClampToBorder);
+        sampler_ = device.createSamplerUnique(sampler_info);
         const auto set_layout = descriptor_sets_.GetLayoutView();
         pipeline_layout_ = klvk::PipelineLayout{context, std::span{&set_layout, 1}};
-        pipeline_ = klvk::VkObject<VkPipeline>{device, CreateDisplayPipeline(context)};
+        pipeline_ = CreateDisplayPipeline(context);
     }
 
-    [[nodiscard]] VkPipeline CreateDisplayPipeline(klvk::DeviceContext&)
+    [[nodiscard]] vk::UniquePipeline CreateDisplayPipeline(klvk::DeviceContext&)
     {
         const std::filesystem::path shader_dir = GetShaderDir() / "curve_fractal";
         return klvk::GraphicsPipelineBuilder(*this)
@@ -282,36 +280,41 @@ class CurveFractalApp : public klvk::Application
     void CreateOffscreenTarget()
     {
         auto& context = GetDeviceContext();
-        const VkImageCreateInfo image_info{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-            .imageType = VK_IMAGE_TYPE_2D,
-            .format = kOffscreenFormat,
-            .extent = {.width = kFramebufferResolution.x(), .height = kFramebufferResolution.y(), .depth = 1},
-            .mipLevels = 1,
-            .arrayLayers = 1,
-            .samples = VK_SAMPLE_COUNT_1_BIT,
-            .tiling = VK_IMAGE_TILING_OPTIMAL,
-            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
+        const vk::ImageCreateInfo image_info =
+            vk::ImageCreateInfo{}
+                .setImageType(vk::ImageType::e2D)
+                .setFormat(kOffscreenFormat)
+                .setExtent(vk::Extent3D{kFramebufferResolution.x(), kFramebufferResolution.y(), 1})
+                .setMipLevels(1)
+                .setArrayLayers(1)
+                .setSamples(vk::SampleCountFlagBits::e1)
+                .setTiling(vk::ImageTiling::eOptimal)
+                .setUsage(vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled)
+                .setSharingMode(vk::SharingMode::eExclusive)
+                .setInitialLayout(vk::ImageLayout::eUndefined);
         const VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
-        klvk::CheckVkResult(
-            vmaCreateImage(
+        const VkImageCreateInfo& raw_image_info = image_info;
+        VkImage raw_image = nullptr;
+        klvk::VulkanCheck(
+            static_cast<vk::Result>(vmaCreateImage(
                 context.GetAllocator(),
-                &image_info,
+                &raw_image_info,
                 &allocation_info,
-                &target_.image,
+                &raw_image,
                 &target_.allocation,
-                nullptr),
-            "vmaCreateImage(curve fractal accumulation)");
-        target_.view = klvk::Vulkan::CreateImageView(
-            context.GetDevice(),
-            {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-             .image = target_.image,
-             .viewType = VK_IMAGE_VIEW_TYPE_2D,
-             .format = kOffscreenFormat,
-             .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1}});
-        descriptor_sets_.WriteImage(0, 0, target_.view, sampler_);
+                nullptr)));
+        target_.image = raw_image;
+        const vk::ImageSubresourceRange subresource_range = vk::ImageSubresourceRange{}
+                                                                .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                                                                .setLevelCount(1)
+                                                                .setLayerCount(1);
+        const vk::ImageViewCreateInfo view_info = vk::ImageViewCreateInfo{}
+                                                      .setImage(target_.image)
+                                                      .setViewType(vk::ImageViewType::e2D)
+                                                      .setFormat(kOffscreenFormat)
+                                                      .setSubresourceRange(subresource_range);
+        target_.view = context.GetDevice().createImageViewUnique(view_info);
+        descriptor_sets_.WriteImage(0, 0, target_.view.get(), sampler_.get());
     }
 
     size_t DrainProducedCurves()
@@ -327,50 +330,53 @@ class CurveFractalApp : public klvk::Application
         return count;
     }
 
-    void BeforeSwapchainRender(VkCommandBuffer command_buffer) override
+    void BeforeSwapchainRender(vk::CommandBuffer command_buffer) override
     {
-        const VkImageLayout old_layout =
-            target_.initialized ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
-        VkImageMemoryBarrier2 barrier{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask = target_.initialized ? VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT : VK_PIPELINE_STAGE_2_NONE,
-            .srcAccessMask = target_.initialized ? VK_ACCESS_2_SHADER_SAMPLED_READ_BIT : VK_ACCESS_2_NONE,
-            .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            .oldLayout = old_layout,
-            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = target_.image,
-            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1}};
-        const VkDependencyInfo dependency{
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .imageMemoryBarrierCount = 1,
-            .pImageMemoryBarriers = &barrier};
-        klvk::Vulkan::CmdPipelineBarrier2(command_buffer, dependency);
-        const VkRenderingAttachmentInfo attachment{
-            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView = target_.view,
-            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .loadOp = target_.initialized ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-            .clearValue = {.color = {.float32 = {0.f, 0.f, 0.f, 0.f}}}};
-        const VkRenderingInfo rendering_info{
-            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-            .renderArea = {.extent = {.width = kFramebufferResolution.x(), .height = kFramebufferResolution.y()}},
-            .layerCount = 1,
-            .colorAttachmentCount = 1,
-            .pColorAttachments = &attachment};
-        klvk::Vulkan::CmdBeginRendering(command_buffer, rendering_info);
-        const VkViewport offscreen_viewport{
-            .y = static_cast<float>(kFramebufferResolution.y()),
-            .width = static_cast<float>(kFramebufferResolution.x()),
-            .height = -static_cast<float>(kFramebufferResolution.y()),
-            .minDepth = 0.f,
-            .maxDepth = 1.f};
-        const VkRect2D scissor{.extent = {.width = kFramebufferResolution.x(), .height = kFramebufferResolution.y()}};
-        klvk::Vulkan::CmdSetViewport(command_buffer, 0, std::span{&offscreen_viewport, 1});
-        klvk::Vulkan::CmdSetScissor(command_buffer, 0, std::span{&scissor, 1});
+        const vk::ImageLayout old_layout =
+            target_.initialized ? vk::ImageLayout::eShaderReadOnlyOptimal : vk::ImageLayout::eUndefined;
+        const vk::ImageSubresourceRange subresource_range = vk::ImageSubresourceRange{}
+                                                                .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                                                                .setLevelCount(1)
+                                                                .setLayerCount(1);
+        vk::ImageMemoryBarrier2 barrier =
+            vk::ImageMemoryBarrier2{}
+                .setSrcStageMask(
+                    target_.initialized ? vk::PipelineStageFlagBits2::eFragmentShader
+                                        : vk::PipelineStageFlagBits2::eNone)
+                .setSrcAccessMask(
+                    target_.initialized ? vk::AccessFlagBits2::eShaderSampledRead : vk::AccessFlagBits2::eNone)
+                .setDstStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput)
+                .setDstAccessMask(vk::AccessFlagBits2::eColorAttachmentWrite)
+                .setOldLayout(old_layout)
+                .setNewLayout(vk::ImageLayout::eColorAttachmentOptimal)
+                .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+                .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+                .setImage(target_.image)
+                .setSubresourceRange(subresource_range);
+        const vk::DependencyInfo dependency = vk::DependencyInfo{}.setImageMemoryBarriers(barrier);
+        command_buffer.pipelineBarrier2(dependency);
+        const vk::RenderingAttachmentInfo attachment =
+            vk::RenderingAttachmentInfo{}
+                .setImageView(target_.view.get())
+                .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
+                .setLoadOp(target_.initialized ? vk::AttachmentLoadOp::eLoad : vk::AttachmentLoadOp::eClear)
+                .setStoreOp(vk::AttachmentStoreOp::eStore);
+        const vk::RenderingInfo rendering_info =
+            vk::RenderingInfo{}
+                .setRenderArea(vk::Rect2D{{}, {kFramebufferResolution.x(), kFramebufferResolution.y()}})
+                .setLayerCount(1)
+                .setColorAttachments(attachment);
+        command_buffer.beginRendering(rendering_info);
+        const vk::Viewport offscreen_viewport = vk::Viewport{}
+                                                    .setY(static_cast<float>(kFramebufferResolution.y()))
+                                                    .setWidth(static_cast<float>(kFramebufferResolution.x()))
+                                                    .setHeight(-static_cast<float>(kFramebufferResolution.y()))
+                                                    .setMinDepth(0.f)
+                                                    .setMaxDepth(1.f);
+        const vk::Rect2D scissor =
+            vk::Rect2D{}.setExtent(vk::Extent2D{kFramebufferResolution.x(), kFramebufferResolution.y()});
+        command_buffer.setViewport(0, std::span{&offscreen_viewport, 1});
+        command_buffer.setScissor(0, std::span{&scissor, 1});
 
         // The offscreen pass renders at kFramebufferResolution, so the curve
         // renderer's viewport_size (which its coverage math keys pixel-space
@@ -394,31 +400,31 @@ class CurveFractalApp : public klvk::Application
                 kCurveThickness * target_scale,
                 kSegmentPixelLength * target_scale);
         }
-        klvk::Vulkan::CmdEndRendering(command_buffer);
+        command_buffer.endRendering();
 
-        barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-        barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-        barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-        barrier.dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        klvk::Vulkan::CmdPipelineBarrier2(command_buffer, dependency);
+        barrier.srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+        barrier.srcAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
+        barrier.dstStageMask = vk::PipelineStageFlagBits2::eFragmentShader;
+        barrier.dstAccessMask = vk::AccessFlagBits2::eShaderSampledRead;
+        barrier.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        command_buffer.pipelineBarrier2(dependency);
         target_.initialized = true;
     }
 
     void Tick() override
     {
         klvk::Application::Tick();
-        const VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
-        const VkDescriptorSet descriptor_set = descriptor_sets_.Get(0);
-        klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-        klvk::Vulkan::CmdBindDescriptorSets(
-            command_buffer,
-            VK_PIPELINE_BIND_POINT_GRAPHICS,
+        const vk::CommandBuffer command_buffer = GetCurrentCommandBuffer();
+        const vk::DescriptorSet descriptor_set = descriptor_sets_.Get(0);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
+        command_buffer.bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics,
             pipeline_layout_.GetHandle(),
             0,
-            std::span{&descriptor_set, 1});
-        klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
+            std::span{&descriptor_set, 1},
+            {});
+        command_buffer.draw(6, 1, 0, 0);
         HandleInput();
     }
 
@@ -453,15 +459,14 @@ public:
         producers_.clear();
         renderers_.clear();
 
-        // The offscreen accumulation image is a raw VMA allocation, so it and its
-        // view still need manual teardown; the sampler, pipeline, layout and
-        // descriptor sets are VkObject / DescriptorSets members that clean up
-        // themselves. Application::Run already waited for the device to go idle.
+        // The offscreen accumulation image is VMA-owned, so reset its view before
+        // destroying the image. Application::Run already waited for the device to go idle.
         if (target_.image)
         {
             auto& context = GetDeviceContext();
-            klvk::Vulkan::DestroyImageViewNE(context.GetDevice(), target_.view);
-            vmaDestroyImage(context.GetAllocator(), target_.image, target_.allocation);
+            target_.view.reset();
+            const VkImage raw_image = target_.image;
+            vmaDestroyImage(context.GetAllocator(), raw_image, target_.allocation);
         }
     }
 
@@ -479,9 +484,9 @@ private:
     std::vector<std::unique_ptr<klvk::CurveRenderer2d>> renderers_;
     OffscreenTarget target_{};
     klvk::DescriptorSets descriptor_sets_;
-    klvk::VkObject<VkSampler> sampler_;
+    vk::UniqueSampler sampler_;
     klvk::PipelineLayout pipeline_layout_;
-    klvk::VkObject<VkPipeline> pipeline_;
+    vk::UniquePipeline pipeline_;
 };
 
 void Main(int argc, char** argv)

@@ -6,17 +6,9 @@
 namespace klvk
 {
 
-ShaderStages::ShaderStages(VkShaderStageFlagBits stage, const ShaderModule& module)
+ShaderStages::ShaderStages(vk::ShaderStageFlagBits stage, const ShaderModule& module)
     : ShaderStages(
-          {{
-              .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-              .pNext = nullptr,
-              .flags = 0,
-              .stage = stage,
-              .module = module.GetHandle(),
-              .pName = "main",
-              .pSpecializationInfo = nullptr,
-          }},
+          {vk::PipelineShaderStageCreateInfo{}.setStage(stage).setModule(module.GetHandle()).setPName("main")},
           {module.GetInterface()})
 {
     ErrorHandling::Ensure(
@@ -25,9 +17,9 @@ ShaderStages::ShaderStages(VkShaderStageFlagBits stage, const ShaderModule& modu
 }
 
 ShaderStages::ShaderStages(
-    std::vector<VkPipelineShaderStageCreateInfo> stages,
+    std::vector<vk::PipelineShaderStageCreateInfo> stages,
     std::vector<std::shared_ptr<const ShaderInterface>> interfaces,
-    std::vector<VkSpecializationMapEntry> specialization_entries,
+    std::vector<vk::SpecializationMapEntry> specialization_entries,
     std::vector<u32> specialization_values)
     : stages_(std::move(stages)),
       interfaces_(std::move(interfaces))
@@ -43,12 +35,9 @@ ShaderStages::ShaderStages(
         auto specialization = std::make_shared<SpecializationStorage>();
         specialization->entries = std::move(specialization_entries);
         specialization->values = std::move(specialization_values);
-        specialization->info = {
-            .mapEntryCount = static_cast<u32>(specialization->entries.size()),
-            .pMapEntries = specialization->entries.data(),
-            .dataSize = specialization->values.size() * sizeof(u32),
-            .pData = specialization->values.data(),
-        };
+        specialization->info.setMapEntries(specialization->entries)
+            .setDataSize(specialization->values.size() * sizeof(u32))
+            .setPData(specialization->values.data());
         for (auto& stage : stages_) stage.pSpecializationInfo = &specialization->info;
         specialization_storage_.push_back(std::move(specialization));
     }

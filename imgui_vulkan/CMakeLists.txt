@@ -9,5 +9,5 @@ list(APPEND imgui_sources ${YAE_imgui_sources_SOURCES}/backends/imgui_impl_vulka
 list(APPEND imgui_sources ${YAE_imgui_sources_SOURCES}/backends/imgui_impl_glfw.cpp)
 add_library(${target_name} STATIC ${imgui_headers} ${imgui_sources})
 target_include_directories(${target_name} PUBLIC ${YAE_imgui_sources_SOURCES} SYSTEM)
-target_compile_definitions(${target_name} PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK)
-target_link_libraries(${target_name} PUBLIC glfw volk Vulkan-Headers)
+target_compile_definitions(${target_name} PUBLIC IMGUI_IMPL_VULKAN_NO_PROTOTYPES VK_NO_PROTOTYPES)
+target_link_libraries(${target_name} PUBLIC glfw Vulkan-Headers)

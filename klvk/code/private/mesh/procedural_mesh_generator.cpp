@@ -14,7 +14,7 @@ GeneratedMeshData2d ProceduralMeshGenerator::GenerateQuadMesh()
         .vertices{{-1, +1}, {+1, +1}, {-1, -1}, {+1, -1}},
         .texture_coordinates{{0, 1}, {1, 1}, {0, 0}, {1, 0}},
         .indices{3, 0, 2, 3, 1, 0},
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .topology = vk::PrimitiveTopology::eTriangleList,
     };
 }
 
@@ -35,7 +35,7 @@ GeneratedMeshData3d ProceduralMeshGenerator::GenerateCubeMesh()
         .texture_coordinates{},
         .indices{0,  1,  2,  0,  2,  3,  4,  6,  5,  4,  7,  6,  8,  9,  10, 8,  10, 11,
                  12, 14, 13, 12, 15, 14, 16, 17, 18, 16, 18, 19, 20, 22, 21, 20, 23, 22},
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .topology = vk::PrimitiveTopology::eTriangleList,
     };
 
     result.texture_coordinates.reserve(result.vertices.size());
@@ -53,12 +53,13 @@ std::optional<GeneratedMeshData2d> ProceduralMeshGenerator::GenerateCircleMesh(s
     if (triangles_count < 3) return std::nullopt;
 
     GeneratedMeshData2d result;
-    result.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+    result.topology = vk::PrimitiveTopology::eTriangleFan;
     result.vertices.resize(triangles_count + 1);
     result.indices.resize(triangles_count + 2);
     result.vertices[1] = {0.f, 1.f};
 
-    const edt::Mat3f rotation = edt::Math::RotationMatrix2d(2 * std::numbers::pi_v<float> / static_cast<float>(triangles_count));
+    const edt::Mat3f rotation =
+        edt::Math::RotationMatrix2d(2 * std::numbers::pi_v<float> / static_cast<float>(triangles_count));
     for (size_t index = 2; index != result.vertices.size(); ++index)
     {
         result.vertices[index] = edt::Math::TransformVector(rotation, result.vertices[index - 1]);

@@ -119,13 +119,13 @@ public:
     // Stage create infos with the current specialization constants attached.
     // The returned value owns specialization storage but borrows this shader's
     // module handles, so this Shader must outlive pipeline creation.
-    [[nodiscard]] ShaderStages MakeStages(VkShaderStageFlags stage_mask = VK_SHADER_STAGE_ALL) const;
+    [[nodiscard]] ShaderStages MakeStages(vk::ShaderStageFlags stage_mask = vk::ShaderStageFlagBits::eAll) const;
 
 private:
     std::string name_;
-    std::vector<std::pair<VkShaderStageFlagBits, ShaderModule>> stages_;
+    std::vector<std::pair<vk::ShaderStageFlagBits, ShaderModule>> stages_;
     std::vector<std::string> define_names_;
-    std::vector<std::vector<std::pair<VkShaderStageFlagBits, u32>>> define_stage_ids_;
+    std::vector<std::vector<std::pair<vk::ShaderStageFlagBits, u32>>> define_stage_ids_;
     std::vector<ShaderScalarType> define_types_;
     std::vector<u32> define_values_;
     std::vector<bool> define_overridden_;

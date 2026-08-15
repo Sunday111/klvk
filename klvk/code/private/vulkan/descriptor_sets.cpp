@@ -12,9 +12,9 @@ namespace klvk
 {
 
 DescriptorSets::Builder&
-DescriptorSets::Builder::Binding(u32 binding, VkDescriptorType type, VkShaderStageFlags stages, u32 count)
+DescriptorSets::Builder::Binding(u32 binding, vk::DescriptorType type, vk::ShaderStageFlags stages, u32 count)
 {
-    bindings_.push_back({.binding = binding, .descriptorType = type, .descriptorCount = count, .stageFlags = stages});
+    bindings_.push_back(vk::DescriptorSetLayoutBinding{binding, type, count, stages});
     return *this;
 }
 
@@ -24,29 +24,22 @@ DescriptorSets DescriptorSets::Builder::Build(u32 set_count)
     ErrorHandling::Ensure(set_count != 0, "DescriptorSets::Builder: set_count must be non-zero");
 
     DeviceContext& context = *context_;
-    const VkDevice device = context.GetDevice();
+    const vk::Device device = context.GetDevice();
 
-    VkObject<VkDescriptorSetLayout> layout{
-        device,
-        Vulkan::CreateDescriptorSetLayout(
-            device,
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .bindingCount = static_cast<u32>(bindings_.size()),
-                .pBindings = bindings_.data(),
-            })};
+    vk::UniqueDescriptorSetLayout layout =
+        device.createDescriptorSetLayoutUnique(vk::DescriptorSetLayoutCreateInfo{}.setBindings(bindings_));
 
     // The pool must hold set_count copies of every binding, aggregated per type.
-    std::vector<VkDescriptorPoolSize> pool_sizes;
-    for (const VkDescriptorSetLayoutBinding& b : bindings_)
+    std::vector<vk::DescriptorPoolSize> pool_sizes;
+    for (const vk::DescriptorSetLayoutBinding& b : bindings_)
     {
         const u32 needed = b.descriptorCount * set_count;
         auto it = std::ranges::find_if(
             pool_sizes,
-            [&](const VkDescriptorPoolSize& size) { return size.type == b.descriptorType; });
+            [&](const vk::DescriptorPoolSize& size) { return size.type == b.descriptorType; });
         if (it == pool_sizes.end())
         {
-            pool_sizes.push_back({.type = b.descriptorType, .descriptorCount = needed});
+            pool_sizes.push_back(vk::DescriptorPoolSize{b.descriptorType, needed});
         }
         else
         {
@@ -54,26 +47,12 @@ DescriptorSets DescriptorSets::Builder::Build(u32 set_count)
         }
     }
 
-    VkObject<VkDescriptorPool> pool{
-        device,
-        Vulkan::CreateDescriptorPool(
-            device,
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-                .maxSets = set_count,
-                .poolSizeCount = static_cast<u32>(pool_sizes.size()),
-                .pPoolSizes = pool_sizes.data(),
-            })};
+    vk::UniqueDescriptorPool pool = device.createDescriptorPoolUnique(
+        vk::DescriptorPoolCreateInfo{}.setMaxSets(set_count).setPoolSizes(pool_sizes));
 
-    const std::vector<VkDescriptorSetLayout> layouts(set_count, layout.GetHandle());
-    std::vector<VkDescriptorSet> sets = Vulkan::AllocateDescriptorSets(
-        device,
-        {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .descriptorPool = pool.GetHandle(),
-            .descriptorSetCount = set_count,
-            .pSetLayouts = layouts.data(),
-        });
+    const std::vector<vk::DescriptorSetLayout> layouts(set_count, layout.get());
+    std::vector<vk::DescriptorSet> sets = device.allocateDescriptorSets(
+        vk::DescriptorSetAllocateInfo{}.setDescriptorPool(pool.get()).setSetLayouts(layouts));
 
     return DescriptorSets{
         context,
@@ -85,9 +64,9 @@ DescriptorSets DescriptorSets::Builder::Build(u32 set_count)
 
 DescriptorSets::DescriptorSets(
     DeviceContext& context,
-    VkObject<VkDescriptorSetLayout> layout,
-    VkObject<VkDescriptorPool> pool,
-    std::vector<VkDescriptorSet> sets,
+    vk::UniqueDescriptorSetLayout layout,
+    vk::UniqueDescriptorPool pool,
+    std::vector<vk::DescriptorSet> sets,
     DescriptorSetLayoutDescription layout_description)
     : context_(&context),
       layout_(std::move(layout)),
@@ -97,11 +76,11 @@ DescriptorSets::DescriptorSets(
 {
 }
 
-VkDescriptorType DescriptorSets::TypeOfBinding(u32 binding) const
+vk::DescriptorType DescriptorSets::TypeOfBinding(u32 binding) const
 {
     const auto it = std::ranges::find_if(
         layout_description_.bindings,
-        [&](const VkDescriptorSetLayoutBinding& b) { return b.binding == binding; });
+        [&](const vk::DescriptorSetLayoutBinding& b) { return b.binding == binding; });
     ErrorHandling::Ensure(it != layout_description_.bindings.end(), "DescriptorSets: unknown binding {}", binding);
     return it->descriptorType;
 }
@@ -123,7 +102,7 @@ void DescriptorSets::ValidateAgainst(const ShaderProgramInterface& program, u32 
         const auto binding = std::ranges::find(
             layout_description_.bindings,
             descriptor->binding,
-            &VkDescriptorSetLayoutBinding::binding);
+            &vk::DescriptorSetLayoutBinding::binding);
         ErrorHandling::Ensure(
             binding != layout_description_.bindings.end() && binding->descriptorType == descriptor->type &&
                 binding->descriptorCount >= descriptor->count &&
@@ -137,41 +116,35 @@ void DescriptorSets::ValidateAgainst(const ShaderProgramInterface& program, u32 
 void DescriptorSets::WriteBuffer(
     size_t set_index,
     u32 binding,
-    VkBuffer buffer,
-    VkDeviceSize range,
-    VkDeviceSize offset)
+    vk::Buffer buffer,
+    vk::DeviceSize range,
+    vk::DeviceSize offset)
 {
-    const std::array buffer_info{VkDescriptorBufferInfo{.buffer = buffer, .offset = offset, .range = range}};
-    const std::array write{VkWriteDescriptorSet{
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = sets_.at(set_index),
-        .dstBinding = binding,
-        .descriptorCount = buffer_info.size(),
-        .descriptorType = TypeOfBinding(binding),
-        .pBufferInfo = buffer_info.data(),
-    }};
-    Vulkan::UpdateDescriptorSets(context_->GetDevice(), std::span{write});
+    const std::array buffer_info{vk::DescriptorBufferInfo{buffer, offset, range}};
+    const std::array write{vk::WriteDescriptorSet{}
+                               .setDstSet(sets_.at(set_index))
+                               .setDstBinding(binding)
+                               .setDescriptorType(TypeOfBinding(binding))
+                               .setBufferInfo(buffer_info)};
+    context_->GetDevice().updateDescriptorSets(write, {});
 }
 
 void DescriptorSets::WriteImage(
     size_t set_index,
     u32 binding,
-    VkImageView view,
-    VkSampler sampler,
-    VkImageLayout layout,
+    vk::ImageView view,
+    vk::Sampler sampler,
+    vk::ImageLayout layout,
     u32 array_element)
 {
-    const std::array image_info{VkDescriptorImageInfo{.sampler = sampler, .imageView = view, .imageLayout = layout}};
-    const std::array write{VkWriteDescriptorSet{
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = sets_.at(set_index),
-        .dstBinding = binding,
-        .dstArrayElement = array_element,
-        .descriptorCount = image_info.size(),
-        .descriptorType = TypeOfBinding(binding),
-        .pImageInfo = image_info.data(),
-    }};
-    Vulkan::UpdateDescriptorSets(context_->GetDevice(), std::span{write});
+    const std::array image_info{vk::DescriptorImageInfo{sampler, view, layout}};
+    const std::array write{vk::WriteDescriptorSet{}
+                               .setDstSet(sets_.at(set_index))
+                               .setDstBinding(binding)
+                               .setDstArrayElement(array_element)
+                               .setDescriptorType(TypeOfBinding(binding))
+                               .setImageInfo(image_info)};
+    context_->GetDevice().updateDescriptorSets(write, {});
 }
 
 }  // namespace klvk

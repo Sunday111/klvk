@@ -54,7 +54,6 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/swapchain.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/texture.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/vma_usage.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/vulkan_api.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/vulkan/vulkan_common.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/application.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/camera/camera_2d.hpp
@@ -107,22 +106,15 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/ui/type_id_widget_minimal.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/depth_stencil_format.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/descriptor_sets.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/detail/settings.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/detail/vulkan_api_impl.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/detail/vulkan_enum_converter.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/device_context.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/gpu_buffer.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/graphics_pipeline_builder.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/offscreen_render_target.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/pipeline_layout.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/render_target.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/sampler_address_mode.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/sampler_border_color.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/sampler_filter.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/swapchain.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/texture.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vk_object.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan_api.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/vulkan/vulkan_common.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/window.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/text/code/private/text_example.cpp)
@@ -136,8 +128,7 @@ target_link_libraries(klvk PUBLIC ass
                                   magic_enum
                                   unordered_dense
                                   nlohmann_json
-                                  Vulkan-Headers
-                                  volk
+                                  VulkanHpp
                                   VulkanMemoryAllocator
                                   imgui_vulkan)
 target_link_libraries(klvk PRIVATE glfw
@@ -148,7 +139,6 @@ target_link_libraries(klvk PRIVATE glfw
 target_include_directories(klvk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/code/public)
 target_include_directories(klvk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/code/private)
 include(${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/vulkan_api.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/warnings.cmake)
 add_custom_target(klvk_copy_files ALL
     COMMAND ${Python3_EXECUTABLE} "${YAE_SUPPORT_ROOT}/scripts/stage_directories.py"

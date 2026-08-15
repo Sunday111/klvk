@@ -11,8 +11,8 @@
 #include "klvk/vulkan/descriptor_sets.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
-#include "klvk/vulkan/vk_object.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 #include "klvk/window.hpp"
 
 namespace
@@ -20,9 +20,9 @@ namespace
 
 struct Target
 {
-    VkImage image = VK_NULL_HANDLE;
-    VmaAllocation allocation = VK_NULL_HANDLE;
-    VkImageView view = VK_NULL_HANDLE;
+    vk::Image image = nullptr;
+    VmaAllocation allocation = nullptr;
+    vk::UniqueImageView view;
 };
 
 struct PushConstants
@@ -32,7 +32,7 @@ struct PushConstants
 
 class PostProcessingApp : public klvk::Application
 {
-    static constexpr VkFormat kTargetFormat = VK_FORMAT_R8G8B8A8_UNORM;
+    static constexpr vk::Format kTargetFormat = vk::Format::eR8G8B8A8Unorm;
 
     void Initialize() override
     {
@@ -41,42 +41,35 @@ class PostProcessingApp : public klvk::Application
         GetWindow().SetSize(1000, 1000);
         GetWindow().SetTitle("Post-processing effect");
         auto& context = GetDeviceContext();
-        const VkDevice device = context.GetDevice();
+        const vk::Device device = context.GetDevice();
 
-        descriptor_sets_ = klvk::DescriptorSets::Builder(context)
-                               .Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-                               .Build(kFramesInFlight);
-        sampler_ = klvk::VkObject<VkSampler>{
-            device,
-            klvk::Vulkan::CreateSampler(
-                device,
-                {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-                 .magFilter = VK_FILTER_LINEAR,
-                 .minFilter = VK_FILTER_LINEAR,
-                 .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-                 .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                 .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                 .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE})};
+        descriptor_sets_ =
+            klvk::DescriptorSets::Builder(context)
+                .Binding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
+                .Build(kFramesInFlight);
+        const vk::SamplerCreateInfo sampler_info = vk::SamplerCreateInfo{}
+                                                       .setMagFilter(vk::Filter::eLinear)
+                                                       .setMinFilter(vk::Filter::eLinear)
+                                                       .setMipmapMode(vk::SamplerMipmapMode::eNearest)
+                                                       .setAddressModeU(vk::SamplerAddressMode::eClampToEdge)
+                                                       .setAddressModeV(vk::SamplerAddressMode::eClampToEdge)
+                                                       .setAddressModeW(vk::SamplerAddressMode::eClampToEdge);
+        sampler_ = device.createSamplerUnique(sampler_info);
 
-        const VkPushConstantRange scene_range{
-            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-            .size = sizeof(PushConstants)};
+        const vk::PushConstantRange scene_range =
+            vk::PushConstantRange{}.setStageFlags(vk::ShaderStageFlagBits::eFragment).setSize(sizeof(PushConstants));
         scene_layout_ = klvk::PipelineLayout{context, {}, std::span{&scene_range, 1}};
         const auto set_layout = descriptor_sets_.GetLayoutView();
         blur_layout_ = klvk::PipelineLayout{context, std::span{&set_layout, 1}, std::span{&scene_range, 1}};
-        scene_pipeline_ = klvk::VkObject<VkPipeline>{
-            device,
-            CreatePipeline(context, "scene.frag.slang", scene_layout_, kTargetFormat)};
-        blur_pipeline_ = klvk::VkObject<VkPipeline>{
-            device,
-            CreatePipeline(context, "blur.frag.slang", blur_layout_, GetSwapchainFormat())};
+        scene_pipeline_ = CreatePipeline(context, "scene.frag.slang", scene_layout_, kTargetFormat);
+        blur_pipeline_ = CreatePipeline(context, "blur.frag.slang", blur_layout_, GetSwapchainFormat());
     }
 
-    VkPipeline CreatePipeline(
+    vk::UniquePipeline CreatePipeline(
         klvk::DeviceContext& context,
         const char* fragment_name,
         const klvk::PipelineLayout& layout,
-        VkFormat format)
+        vk::Format format)
     {
         const std::filesystem::path shader_dir = GetShaderDir() / "post_processing";
         return klvk::GraphicsPipelineBuilder(context)
@@ -94,105 +87,107 @@ class PostProcessingApp : public klvk::Application
         if (targets_[0].image) context.WaitIdle();
         DestroyTargets();
         size_ = size;
-        const VkImageCreateInfo image_info{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-            .imageType = VK_IMAGE_TYPE_2D,
-            .format = kTargetFormat,
-            .extent = {.width = size.x(), .height = size.y(), .depth = 1},
-            .mipLevels = 1,
-            .arrayLayers = 1,
-            .samples = VK_SAMPLE_COUNT_1_BIT,
-            .tiling = VK_IMAGE_TILING_OPTIMAL,
-            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
+        const vk::ImageCreateInfo image_info =
+            vk::ImageCreateInfo{}
+                .setImageType(vk::ImageType::e2D)
+                .setFormat(kTargetFormat)
+                .setExtent(vk::Extent3D{size.x(), size.y(), 1})
+                .setMipLevels(1)
+                .setArrayLayers(1)
+                .setSamples(vk::SampleCountFlagBits::e1)
+                .setTiling(vk::ImageTiling::eOptimal)
+                .setUsage(vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled)
+                .setSharingMode(vk::SharingMode::eExclusive)
+                .setInitialLayout(vk::ImageLayout::eUndefined);
+        const VkImageCreateInfo& raw_image_info = image_info;
         const VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
         for (size_t i = 0; i != targets_.size(); ++i)
         {
             auto& target = targets_[i];
-            klvk::CheckVkResult(
-                vmaCreateImage(
+            VkImage raw_image = nullptr;
+            klvk::VulkanCheck(
+                static_cast<vk::Result>(vmaCreateImage(
                     context.GetAllocator(),
-                    &image_info,
+                    &raw_image_info,
                     &allocation_info,
-                    &target.image,
+                    &raw_image,
                     &target.allocation,
-                    nullptr),
-                "vmaCreateImage(post-processing)");
-            target.view = klvk::Vulkan::CreateImageView(
-                context.GetDevice(),
-                {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                 .image = target.image,
-                 .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                 .format = kTargetFormat,
-                 .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1}});
-            descriptor_sets_.WriteImage(i, 0, target.view, sampler_);
+                    nullptr)));
+            target.image = raw_image;
+            const vk::ImageSubresourceRange subresource_range = vk::ImageSubresourceRange{}
+                                                                    .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                                                                    .setLevelCount(1)
+                                                                    .setLayerCount(1);
+            const vk::ImageViewCreateInfo view_info = vk::ImageViewCreateInfo{}
+                                                          .setImage(target.image)
+                                                          .setViewType(vk::ImageViewType::e2D)
+                                                          .setFormat(kTargetFormat)
+                                                          .setSubresourceRange(subresource_range);
+            target.view = context.GetDevice().createImageViewUnique(view_info);
+            descriptor_sets_.WriteImage(i, 0, target.view.get(), sampler_.get());
         }
     }
 
-    void BeforeSwapchainRender(VkCommandBuffer command_buffer) override
+    void BeforeSwapchainRender(vk::CommandBuffer command_buffer) override
     {
         EnsureTargets(GetWindow().GetFramebufferSize());
         const Target& target = targets_[GetFrameInFlightIndex()];
-        VkImageMemoryBarrier2 barrier{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = target.image,
-            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1}};
-        VkDependencyInfo dependency{
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .imageMemoryBarrierCount = 1,
-            .pImageMemoryBarriers = &barrier};
-        klvk::Vulkan::CmdPipelineBarrier2(command_buffer, dependency);
-        const VkRenderingAttachmentInfo attachment{
-            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView = target.view,
-            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE};
-        const VkRenderingInfo rendering{
-            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-            .renderArea = {.extent = {.width = size_.x(), .height = size_.y()}},
-            .layerCount = 1,
-            .colorAttachmentCount = 1,
-            .pColorAttachments = &attachment};
-        klvk::Vulkan::CmdBeginRendering(command_buffer, rendering);
+        const vk::ImageSubresourceRange subresource_range = vk::ImageSubresourceRange{}
+                                                                .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                                                                .setLevelCount(1)
+                                                                .setLayerCount(1);
+        vk::ImageMemoryBarrier2 barrier = vk::ImageMemoryBarrier2{}
+                                              .setDstStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput)
+                                              .setDstAccessMask(vk::AccessFlagBits2::eColorAttachmentWrite)
+                                              .setOldLayout(vk::ImageLayout::eUndefined)
+                                              .setNewLayout(vk::ImageLayout::eColorAttachmentOptimal)
+                                              .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+                                              .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+                                              .setImage(target.image)
+                                              .setSubresourceRange(subresource_range);
+        const vk::DependencyInfo dependency = vk::DependencyInfo{}.setImageMemoryBarriers(barrier);
+        command_buffer.pipelineBarrier2(dependency);
+        const vk::RenderingAttachmentInfo attachment = vk::RenderingAttachmentInfo{}
+                                                           .setImageView(target.view.get())
+                                                           .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
+                                                           .setLoadOp(vk::AttachmentLoadOp::eClear)
+                                                           .setStoreOp(vk::AttachmentStoreOp::eStore);
+        const vk::RenderingInfo rendering = vk::RenderingInfo{}
+                                                .setRenderArea(vk::Rect2D{{}, {size_.x(), size_.y()}})
+                                                .setLayerCount(1)
+                                                .setColorAttachments(attachment);
+        command_buffer.beginRendering(rendering);
         SetViewport(command_buffer);
-        klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, scene_pipeline_);
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, scene_pipeline_.get());
         const PushConstants constants{.data = {GetTimeSeconds(), 0.f, 0.f, 0.f}};
-        klvk::Vulkan::CmdPushConstants(
-            command_buffer,
+        command_buffer.pushConstants(
             scene_layout_.GetHandle(),
-            VK_SHADER_STAGE_FRAGMENT_BIT,
+            vk::ShaderStageFlagBits::eFragment,
             0,
-            constants);
-        klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
-        klvk::Vulkan::CmdEndRendering(command_buffer);
-        barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-        barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-        barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-        barrier.dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        klvk::Vulkan::CmdPipelineBarrier2(command_buffer, dependency);
+            sizeof(constants),
+            &constants);
+        command_buffer.draw(6, 1, 0, 0);
+        command_buffer.endRendering();
+        barrier.srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+        barrier.srcAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
+        barrier.dstStageMask = vk::PipelineStageFlagBits2::eFragmentShader;
+        barrier.dstAccessMask = vk::AccessFlagBits2::eShaderSampledRead;
+        barrier.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        command_buffer.pipelineBarrier2(dependency);
     }
 
-    void SetViewport(VkCommandBuffer command_buffer)
+    void SetViewport(vk::CommandBuffer command_buffer)
     {
-        const VkViewport viewport{
-            .y = static_cast<float>(size_.y()),
-            .width = static_cast<float>(size_.x()),
-            .height = -static_cast<float>(size_.y()),
-            .minDepth = 0.f,
-            .maxDepth = 1.f};
-        const VkRect2D scissor{.extent = {.width = size_.x(), .height = size_.y()}};
-        klvk::Vulkan::CmdSetViewport(command_buffer, 0, std::span{&viewport, 1});
-        klvk::Vulkan::CmdSetScissor(command_buffer, 0, std::span{&scissor, 1});
+        const vk::Viewport viewport = vk::Viewport{}
+                                          .setY(static_cast<float>(size_.y()))
+                                          .setWidth(static_cast<float>(size_.x()))
+                                          .setHeight(-static_cast<float>(size_.y()))
+                                          .setMinDepth(0.f)
+                                          .setMaxDepth(1.f);
+        const vk::Rect2D scissor = vk::Rect2D{}.setExtent(vk::Extent2D{size_.x(), size_.y()});
+        command_buffer.setViewport(0, std::span{&viewport, 1});
+        command_buffer.setScissor(0, std::span{&scissor, 1});
     }
 
     void Tick() override
@@ -201,32 +196,33 @@ class PostProcessingApp : public klvk::Application
         ImGui::SliderInt("Blur radius", &radius_, 0, 8);
         ImGui::SliderFloat("Blur spread", &spread_, 0.5f, 30.f);
         ImGui::SliderFloat("Blur mix", &mix_, 0.f, 1.f);
-        const VkCommandBuffer command_buffer = GetCurrentCommandBuffer();
-        const VkDescriptorSet set = descriptor_sets_.Get(GetFrameInFlightIndex());
-        klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, blur_pipeline_);
-        klvk::Vulkan::CmdBindDescriptorSets(
-            command_buffer,
-            VK_PIPELINE_BIND_POINT_GRAPHICS,
-            blur_layout_.GetHandle(),
-            0,
-            std::span{&set, 1});
+        const vk::CommandBuffer command_buffer = GetCurrentCommandBuffer();
+        const vk::DescriptorSet set = descriptor_sets_.Get(GetFrameInFlightIndex());
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, blur_pipeline_.get());
+        command_buffer
+            .bindDescriptorSets(vk::PipelineBindPoint::eGraphics, blur_layout_.GetHandle(), 0, std::span{&set, 1}, {});
         const PushConstants constants{.data = {static_cast<float>(radius_), spread_, mix_, 0.f}};
-        klvk::Vulkan::CmdPushConstants(
-            command_buffer,
+        command_buffer.pushConstants(
             blur_layout_.GetHandle(),
-            VK_SHADER_STAGE_FRAGMENT_BIT,
+            vk::ShaderStageFlagBits::eFragment,
             0,
-            constants);
-        klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
+            sizeof(constants),
+            &constants);
+        command_buffer.draw(6, 1, 0, 0);
     }
 
     void DestroyTargets()
     {
         for (auto& target : targets_)
         {
-            if (target.view) klvk::Vulkan::DestroyImageViewNE(GetDeviceContext().GetDevice(), target.view);
-            if (target.image) vmaDestroyImage(GetDeviceContext().GetAllocator(), target.image, target.allocation);
-            target = {};
+            target.view.reset();
+            if (target.image)
+            {
+                const VkImage raw_image = target.image;
+                vmaDestroyImage(GetDeviceContext().GetAllocator(), raw_image, target.allocation);
+            }
+            target.image = nullptr;
+            target.allocation = nullptr;
         }
     }
 
@@ -234,19 +230,19 @@ public:
     ~PostProcessingApp() override
     {
         // The offscreen targets are raw VMA allocations with no RAII wrapper; the
-        // sampler, pipelines, layouts and descriptor sets are VkObject /
-        // DescriptorSets members that clean up themselves. Application::Run has
+        // sampler, pipelines, layouts and descriptor sets are owning members
+        // that clean up themselves. Application::Run has
         // already waited for the device to go idle.
         DestroyTargets();
     }
 
 private:
     klvk::DescriptorSets descriptor_sets_;
-    klvk::VkObject<VkSampler> sampler_;
+    vk::UniqueSampler sampler_;
     klvk::PipelineLayout scene_layout_;
     klvk::PipelineLayout blur_layout_;
-    klvk::VkObject<VkPipeline> scene_pipeline_;
-    klvk::VkObject<VkPipeline> blur_pipeline_;
+    vk::UniquePipeline scene_pipeline_;
+    vk::UniquePipeline blur_pipeline_;
     std::array<Target, kFramesInFlight> targets_{};
     edt::Vec2<u32> size_{};
     int radius_ = 4;

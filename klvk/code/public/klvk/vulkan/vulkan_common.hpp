@@ -1,29 +1,14 @@
 #pragma once
 
-#include <volk.h>  // IWYU pragma: export
-
-#include <cpptrace/cpptrace.hpp>
-#include <string>
-#include <string_view>
+#include "klvk/vulkan/vulkan.hpp"
 
 namespace klvk
 {
 
-// Returns the name of a VkResult value ("VK_ERROR_DEVICE_LOST") or "VkResult(unknown)" for unknown values.
-[[nodiscard]] std::string_view VkResultToString(VkResult result);
+void VulkanCheck(vk::Result result);
 
-class VulkanError : public cpptrace::runtime_error
-{
-public:
-    VulkanError(VkResult result, std::string message, cpptrace::raw_trace&& trace = cpptrace::generate_raw_trace());
-
-    [[nodiscard]] VkResult GetResult() const noexcept { return result_; }
-
-private:
-    VkResult result_;
-};
-
-// Throws VulkanError if result is not VK_SUCCESS. Context tells which operation failed.
-void CheckVkResult(VkResult result, std::string_view context);
+void InitializeVulkanDispatcher();
+void InitializeVulkanDispatcher(vk::Instance instance);
+void InitializeVulkanDispatcher(vk::Device device);
 
 }  // namespace klvk

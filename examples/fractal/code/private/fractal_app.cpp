@@ -68,7 +68,7 @@ std::vector<edt::Vec4u8> FractalApp::CaptureScreenshot() const
     return {};
 }
 
-void FractalApp::BeforeSwapchainRender(VkCommandBuffer command_buffer)
+void FractalApp::BeforeSwapchainRender(vk::CommandBuffer command_buffer)
 {
     if (pending_renderer_factory_)
     {

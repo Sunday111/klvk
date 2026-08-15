@@ -26,7 +26,7 @@ public:
 
     void HandleInput();
 
-    void BeforeSwapchainRender(VkCommandBuffer command_buffer) override;
+    void BeforeSwapchainRender(vk::CommandBuffer command_buffer) override;
     void Tick() override;
 
     void OnMouseScroll(const klvk::events::OnMouseScroll& event);

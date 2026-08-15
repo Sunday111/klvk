@@ -3,44 +3,45 @@
 #include <array>
 
 #include "klvk/error_handling.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk
 {
 
-bool FormatHasStencil(VkFormat format) noexcept
+bool FormatHasStencil(vk::Format format) noexcept
 {
     switch (format)
     {
-    case VK_FORMAT_S8_UINT:
-    case VK_FORMAT_D16_UNORM_S8_UINT:
-    case VK_FORMAT_D24_UNORM_S8_UINT:
-    case VK_FORMAT_D32_SFLOAT_S8_UINT:
+    case vk::Format::eS8Uint:
+    case vk::Format::eD16UnormS8Uint:
+    case vk::Format::eD24UnormS8Uint:
+    case vk::Format::eD32SfloatS8Uint:
         return true;
     default:
         return false;
     }
 }
 
-VkImageAspectFlags DepthStencilAspectMask(VkFormat format) noexcept
+vk::ImageAspectFlags DepthStencilAspectMask(vk::Format format) noexcept
 {
-    VkImageAspectFlags aspect = format == VK_FORMAT_S8_UINT ? 0u : VK_IMAGE_ASPECT_DEPTH_BIT;
-    if (FormatHasStencil(format)) aspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
+    vk::ImageAspectFlags aspect =
+        format == vk::Format::eS8Uint ? vk::ImageAspectFlags{} : vk::ImageAspectFlagBits::eDepth;
+    if (FormatHasStencil(format)) aspect |= vk::ImageAspectFlagBits::eStencil;
     return aspect;
 }
 
-VkFormat SelectDepthStencilFormat(VkPhysicalDevice physical_device)
+vk::Format SelectDepthStencilFormat(vk::PhysicalDevice physical_device)
 {
     constexpr std::array candidates{
-        VK_FORMAT_D32_SFLOAT_S8_UINT,
-        VK_FORMAT_D24_UNORM_S8_UINT,
-        VK_FORMAT_D32_SFLOAT,
+        vk::Format::eD32SfloatS8Uint,
+        vk::Format::eD24UnormS8Uint,
+        vk::Format::eD32Sfloat,
     };
 
-    for (VkFormat candidate : candidates)
+    for (vk::Format candidate : candidates)
     {
-        const auto properties = Vulkan::GetPhysicalDeviceFormatProperties(physical_device, candidate);
-        if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0)
+        const auto properties = physical_device.getFormatProperties(candidate);
+        if (properties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment)
         {
             return candidate;
         }

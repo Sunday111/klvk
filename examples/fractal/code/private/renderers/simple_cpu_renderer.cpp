@@ -15,55 +15,36 @@ SimpleCpuRenderer::SimpleCpuRenderer(klvk::Application& app, size_t max_iteratio
       textured_quad_shader_(app.GetDeviceContext(), "fractal_example/textured_quad")
 {
     klvk::DeviceContext& context = app.GetDeviceContext();
-    VkDevice device = context.GetDevice();
+    vk::Device device = context.GetDevice();
 
-    const VkSamplerCreateInfo sampler_info{
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .magFilter = VK_FILTER_NEAREST,
-        .minFilter = VK_FILTER_NEAREST,
-        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-    };
-    sampler_ = klvk::Vulkan::CreateSampler(device, sampler_info);
+    const vk::SamplerCreateInfo sampler_info = vk::SamplerCreateInfo{}
+                                                   .setMagFilter(vk::Filter::eNearest)
+                                                   .setMinFilter(vk::Filter::eNearest)
+                                                   .setMipmapMode(vk::SamplerMipmapMode::eNearest)
+                                                   .setAddressModeU(vk::SamplerAddressMode::eClampToEdge)
+                                                   .setAddressModeV(vk::SamplerAddressMode::eClampToEdge)
+                                                   .setAddressModeW(vk::SamplerAddressMode::eClampToEdge);
+    sampler_ = device.createSamplerUnique(sampler_info);
 
-    const VkDescriptorSetLayoutBinding binding{
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-    };
+    const vk::DescriptorSetLayoutBinding binding = vk::DescriptorSetLayoutBinding{}
+                                                       .setBinding(0)
+                                                       .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                                                       .setDescriptorCount(1)
+                                                       .setStageFlags(vk::ShaderStageFlagBits::eFragment);
     set_layout_description_.bindings = {binding};
-    set_layout_ = klvk::Vulkan::CreateDescriptorSetLayout(
-        device,
-        {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            .bindingCount = 1,
-            .pBindings = &binding,
-        });
+    const vk::DescriptorSetLayoutCreateInfo layout_info = vk::DescriptorSetLayoutCreateInfo{}.setBindings(binding);
+    set_layout_ = device.createDescriptorSetLayoutUnique(layout_info);
 
-    const VkDescriptorPoolSize pool_size{.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1};
-    descriptor_pool_ = klvk::Vulkan::CreateDescriptorPool(
-        device,
-        {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-            .maxSets = 1,
-            .poolSizeCount = 1,
-            .pPoolSizes = &pool_size,
-        });
-    descriptor_set_ = klvk::Vulkan::AllocateDescriptorSets(
-                          device,
-                          {
-                              .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-                              .descriptorPool = descriptor_pool_,
-                              .descriptorSetCount = 1,
-                              .pSetLayouts = &set_layout_,
-                          })
-                          .front();
+    const vk::DescriptorPoolSize pool_size =
+        vk::DescriptorPoolSize{}.setType(vk::DescriptorType::eCombinedImageSampler).setDescriptorCount(1);
+    const vk::DescriptorPoolCreateInfo pool_info = vk::DescriptorPoolCreateInfo{}.setMaxSets(1).setPoolSizes(pool_size);
+    descriptor_pool_ = device.createDescriptorPoolUnique(pool_info);
+    const vk::DescriptorSetAllocateInfo allocate_info =
+        vk::DescriptorSetAllocateInfo{}.setDescriptorPool(descriptor_pool_.get()).setSetLayouts(set_layout_.get());
+    descriptor_set_ = device.allocateDescriptorSets(allocate_info).front();
 
     const klvk::DescriptorSetLayoutView set_layout_view{
-        .handle = set_layout_,
+        .handle = set_layout_.get(),
         .description = &set_layout_description_,
     };
     pipeline_layout_ = klvk::PipelineLayout{context, std::span{&set_layout_view, 1}};
@@ -76,29 +57,27 @@ SimpleCpuRenderer::~SimpleCpuRenderer() noexcept
 {
     klvk::DeviceContext& context = app_->GetDeviceContext();
     context.WaitIdle();
-    VkDevice device = context.GetDevice();
     DestroyImage();
-    klvk::Vulkan::DestroyPipelineNE(device, pipeline_);
-    klvk::Vulkan::DestroyDescriptorPoolNE(device, descriptor_pool_);
-    klvk::Vulkan::DestroyDescriptorSetLayoutNE(device, set_layout_);
-    klvk::Vulkan::DestroySamplerNE(device, sampler_);
 }
 
 void SimpleCpuRenderer::DestroyImage()
 {
     klvk::DeviceContext& context = app_->GetDeviceContext();
-    if (image_view_) klvk::Vulkan::DestroyImageViewNE(context.GetDevice(), image_view_);
-    if (image_) vmaDestroyImage(context.GetAllocator(), image_, image_allocation_);
-    image_view_ = VK_NULL_HANDLE;
-    image_ = VK_NULL_HANDLE;
-    image_allocation_ = VK_NULL_HANDLE;
+    image_view_.reset();
+    if (image_)
+    {
+        const VkImage raw_image = image_;
+        vmaDestroyImage(context.GetAllocator(), raw_image, image_allocation_);
+    }
+    image_ = nullptr;
+    image_allocation_ = nullptr;
     image_initialized_ = false;
 }
 
 void SimpleCpuRenderer::ApplySettings(const FractalSettings& settings)
 {
     klvk::DeviceContext& context = app_->GetDeviceContext();
-    VkDevice device = context.GetDevice();
+    vk::Device device = context.GetDevice();
 
     if (auto s = settings.viewport.size.Cast<size_t>(); !image_ || image_size_ != s)
     {
@@ -106,61 +85,69 @@ void SimpleCpuRenderer::ApplySettings(const FractalSettings& settings)
         DestroyImage();
         image_size_ = s;
 
-        const VkImageCreateInfo image_info{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-            .imageType = VK_IMAGE_TYPE_2D,
-            .format = VK_FORMAT_R8G8B8A8_UNORM,
-            .extent = {.width = static_cast<u32>(s.x()), .height = static_cast<u32>(s.y()), .depth = 1},
-            .mipLevels = 1,
-            .arrayLayers = 1,
-            .samples = VK_SAMPLE_COUNT_1_BIT,
-            .tiling = VK_IMAGE_TILING_OPTIMAL,
-            .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        };
+        const vk::ImageCreateInfo image_info =
+            vk::ImageCreateInfo{}
+                .setImageType(vk::ImageType::e2D)
+                .setFormat(vk::Format::eR8G8B8A8Unorm)
+                .setExtent(vk::Extent3D{static_cast<u32>(s.x()), static_cast<u32>(s.y()), 1})
+                .setMipLevels(1)
+                .setArrayLayers(1)
+                .setSamples(vk::SampleCountFlagBits::e1)
+                .setTiling(vk::ImageTiling::eOptimal)
+                .setUsage(vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst)
+                .setSharingMode(vk::SharingMode::eExclusive)
+                .setInitialLayout(vk::ImageLayout::eUndefined);
         const VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO};
-        klvk::CheckVkResult(
-            vmaCreateImage(context.GetAllocator(), &image_info, &allocation_info, &image_, &image_allocation_, nullptr),
-            "vmaCreateImage");
+        const VkImageCreateInfo& raw_image_info = image_info;
+        VkImage raw_image = nullptr;
+        klvk::VulkanCheck(
+            static_cast<vk::Result>(vmaCreateImage(
+                context.GetAllocator(),
+                &raw_image_info,
+                &allocation_info,
+                &raw_image,
+                &image_allocation_,
+                nullptr)));
+        image_ = raw_image;
 
-        image_view_ = klvk::Vulkan::CreateImageView(
-            device,
-            {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                .image = image_,
-                .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                .format = VK_FORMAT_R8G8B8A8_UNORM,
-                .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
-            });
+        const vk::ImageSubresourceRange subresource_range = vk::ImageSubresourceRange{}
+                                                                .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                                                                .setLevelCount(1)
+                                                                .setLayerCount(1);
+        const vk::ImageViewCreateInfo view_info = vk::ImageViewCreateInfo{}
+                                                      .setImage(image_)
+                                                      .setViewType(vk::ImageViewType::e2D)
+                                                      .setFormat(vk::Format::eR8G8B8A8Unorm)
+                                                      .setSubresourceRange(subresource_range);
+        image_view_ = device.createImageViewUnique(view_info);
 
         for (auto& buffer : staging_buffers_)
         {
-            buffer =
-                klvk::GpuBuffer(context, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, s.x() * s.y() * sizeof(edt::Vec4u8), true);
+            buffer = klvk::GpuBuffer(
+                context,
+                vk::BufferUsageFlagBits::eTransferSrc,
+                s.x() * s.y() * sizeof(edt::Vec4u8),
+                true);
         }
 
-        const VkDescriptorImageInfo descriptor_image_info{
-            .sampler = sampler_,
-            .imageView = image_view_,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
-        const VkWriteDescriptorSet write{
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = descriptor_set_,
-            .dstBinding = 0,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .pImageInfo = &descriptor_image_info,
-        };
-        klvk::Vulkan::UpdateDescriptorSets(device, std::span{&write, 1});
+        const vk::DescriptorImageInfo descriptor_image_info =
+            vk::DescriptorImageInfo{}
+                .setSampler(sampler_.get())
+                .setImageView(image_view_.get())
+                .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+        const vk::WriteDescriptorSet write = vk::WriteDescriptorSet{}
+                                                 .setDstSet(descriptor_set_)
+                                                 .setDstBinding(0)
+                                                 .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                                                 .setImageInfo(descriptor_image_info);
+        device.updateDescriptorSets(std::span{&write, 1}, {});
     }
 
     pallette.resize(max_iterations + 1);
     settings.ComputeColors(pallette.size(), [&](size_t index, const edt::Vec3f& color) { pallette[index] = color; });
 }
 
-void SimpleCpuRenderer::PrepareFrame(VkCommandBuffer command_buffer, const FractalSettings& settings)
+void SimpleCpuRenderer::PrepareFrame(vk::CommandBuffer command_buffer, const FractalSettings& settings)
 {
     if (!image_) return;
 
@@ -198,59 +185,53 @@ void SimpleCpuRenderer::PrepareFrame(VkCommandBuffer command_buffer, const Fract
     klvk::GpuBuffer& staging = staging_buffers_[app_->GetFrameInFlightIndex()];
     staging.Write(std::as_bytes(std::span{image_buffer_}));
 
-    VkImageMemoryBarrier2 barrier{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-        .srcAccessMask = VK_ACCESS_2_NONE,
-        .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-        .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-        .oldLayout = image_initialized_ ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
-        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = image_,
-        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
-    };
-    VkDependencyInfo dependency{
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .imageMemoryBarrierCount = 1,
-        .pImageMemoryBarriers = &barrier,
-    };
-    klvk::Vulkan::CmdPipelineBarrier2(command_buffer, dependency);
+    const vk::ImageSubresourceRange subresource_range =
+        vk::ImageSubresourceRange{}.setAspectMask(vk::ImageAspectFlagBits::eColor).setLevelCount(1).setLayerCount(1);
+    vk::ImageMemoryBarrier2 barrier =
+        vk::ImageMemoryBarrier2{}
+            .setSrcStageMask(vk::PipelineStageFlagBits2::eFragmentShader)
+            .setSrcAccessMask(vk::AccessFlagBits2::eNone)
+            .setDstStageMask(vk::PipelineStageFlagBits2::eCopy)
+            .setDstAccessMask(vk::AccessFlagBits2::eTransferWrite)
+            .setOldLayout(image_initialized_ ? vk::ImageLayout::eShaderReadOnlyOptimal : vk::ImageLayout::eUndefined)
+            .setNewLayout(vk::ImageLayout::eTransferDstOptimal)
+            .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+            .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+            .setImage(image_)
+            .setSubresourceRange(subresource_range);
+    const vk::DependencyInfo dependency = vk::DependencyInfo{}.setImageMemoryBarriers(barrier);
+    command_buffer.pipelineBarrier2(dependency);
 
-    const VkBufferImageCopy region{
-        .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1},
-        .imageExtent = {.width = static_cast<u32>(w), .height = static_cast<u32>(h), .depth = 1},
-    };
-    klvk::Vulkan::CmdCopyBufferToImage(
-        command_buffer,
-        staging.GetHandle(),
-        image_,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        std::span{&region, 1});
+    const vk::ImageSubresourceLayers image_subresource =
+        vk::ImageSubresourceLayers{}.setAspectMask(vk::ImageAspectFlagBits::eColor).setLayerCount(1);
+    const vk::BufferImageCopy region = vk::BufferImageCopy{}
+                                           .setImageSubresource(image_subresource)
+                                           .setImageExtent(vk::Extent3D{static_cast<u32>(w), static_cast<u32>(h), 1});
+    command_buffer
+        .copyBufferToImage(staging.GetHandle(), image_, vk::ImageLayout::eTransferDstOptimal, std::span{&region, 1});
 
-    barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
-    barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-    barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-    barrier.dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    klvk::Vulkan::CmdPipelineBarrier2(command_buffer, dependency);
+    barrier.srcStageMask = vk::PipelineStageFlagBits2::eCopy;
+    barrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+    barrier.dstStageMask = vk::PipelineStageFlagBits2::eFragmentShader;
+    barrier.dstAccessMask = vk::AccessFlagBits2::eShaderSampledRead;
+    barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+    barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    command_buffer.pipelineBarrier2(dependency);
 
     image_initialized_ = true;
 }
 
-void SimpleCpuRenderer::Render(VkCommandBuffer command_buffer, const FractalSettings& settings)
+void SimpleCpuRenderer::Render(vk::CommandBuffer command_buffer, const FractalSettings& settings)
 {
     if (!image_initialized_) return;
 
     CmdSetGlStyleViewport(command_buffer, settings.viewport, app_->GetWindow().GetSize());
-    klvk::Vulkan::CmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-    klvk::Vulkan::CmdBindDescriptorSets(
-        command_buffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
+    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
+    command_buffer.bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics,
         pipeline_layout_.GetHandle(),
         0,
-        std::span{&descriptor_set_, 1});
-    klvk::Vulkan::CmdDraw(command_buffer, 6, 1, 0, 0);
+        std::span{&descriptor_set_, 1},
+        {});
+    command_buffer.draw(6, 1, 0, 0);
 }

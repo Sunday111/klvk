@@ -7,19 +7,19 @@
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/gpu_buffer.hpp"
-#include "klvk/vulkan/vulkan_api.hpp"
+#include "klvk/vulkan/vulkan_common.hpp"
 
 namespace klvk
 {
 
 std::unique_ptr<Texture> Texture::CreateR8(DeviceContext& context, edt::Vec2<u32> size, std::span<const u8> pixels)
 {
-    return Create(context, size, pixels, VK_FORMAT_R8_UNORM, 1);
+    return Create(context, size, pixels, vk::Format::eR8Unorm, 1);
 }
 
 std::unique_ptr<Texture> Texture::CreateRgba8(DeviceContext& context, edt::Vec2<u32> size, std::span<const u8> pixels)
 {
-    return Create(context, size, pixels, VK_FORMAT_R8G8B8A8_UNORM, 4);
+    return Create(context, size, pixels, vk::Format::eR8G8B8A8Unorm, 4);
 }
 
 std::unique_ptr<Texture> Texture::CreateFromEncoded(DeviceContext& context, std::span<const u8> encoded)
@@ -34,64 +34,63 @@ std::unique_ptr<Texture> Texture::CreateEmptyR8(DeviceContext& context, edt::Vec
     // Zeroed rather than left undefined: the padding between packed regions is
     // sampled at their edges, and undefined memory there would show as fringing.
     const std::vector<u8> zeros(static_cast<size_t>(size.x()) * size.y(), 0);
-    return Create(context, size, zeros, VK_FORMAT_R8_UNORM, 1);
+    return Create(context, size, zeros, vk::Format::eR8Unorm, 1);
 }
 
 void Texture::RecordRegionUpdates(
-    VkCommandBuffer command_buffer,
-    VkBuffer staging,
+    vk::CommandBuffer command_buffer,
+    vk::Buffer staging,
     std::span<const RegionUpdate> regions)
 {
     if (regions.empty()) return;
 
-    std::array barriers{VkImageMemoryBarrier2{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-        .srcAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-        .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-        .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-        .oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = image_,
-        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
-    }};
-    VkDependencyInfo dependency{
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .imageMemoryBarrierCount = barriers.size(),
-        .pImageMemoryBarriers = barriers.data(),
-    };
-    Vulkan::CmdPipelineBarrier2(command_buffer, dependency);
+    const vk::ImageSubresourceRange subresource_range =
+        vk::ImageSubresourceRange{}.setAspectMask(vk::ImageAspectFlagBits::eColor).setLevelCount(1).setLayerCount(1);
+    std::array barriers{vk::ImageMemoryBarrier2{}
+                            .setSrcStageMask(vk::PipelineStageFlagBits2::eFragmentShader)
+                            .setSrcAccessMask(vk::AccessFlagBits2::eShaderSampledRead)
+                            .setDstStageMask(vk::PipelineStageFlagBits2::eCopy)
+                            .setDstAccessMask(vk::AccessFlagBits2::eTransferWrite)
+                            .setOldLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
+                            .setNewLayout(vk::ImageLayout::eTransferDstOptimal)
+                            .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+                            .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+                            .setImage(image_)
+                            .setSubresourceRange(subresource_range)};
+    const vk::DependencyInfo dependency = vk::DependencyInfo{}.setImageMemoryBarriers(barriers);
+    command_buffer.pipelineBarrier2(dependency);
 
-    std::vector<VkBufferImageCopy> copies;
+    std::vector<vk::BufferImageCopy> copies;
     copies.reserve(regions.size());
     for (const RegionUpdate& region : regions)
     {
-        copies.push_back({
-            .bufferOffset = region.buffer_offset,
-            .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1},
-            .imageOffset = {.x = static_cast<i32>(region.offset.x()), .y = static_cast<i32>(region.offset.y())},
-            .imageExtent = {.width = region.size.x(), .height = region.size.y(), .depth = 1},
-        });
+        const vk::ImageSubresourceLayers image_subresource =
+            vk::ImageSubresourceLayers{}.setAspectMask(vk::ImageAspectFlagBits::eColor).setLayerCount(1);
+        copies.push_back(
+            vk::BufferImageCopy{}
+                .setBufferOffset(region.buffer_offset)
+                .setImageSubresource(image_subresource)
+                .setImageOffset(
+                    vk::Offset3D{static_cast<i32>(region.offset.x()), static_cast<i32>(region.offset.y()), 0})
+                .setImageExtent(vk::Extent3D{region.size.x(), region.size.y(), 1}));
     }
-    Vulkan::CmdCopyBufferToImage(command_buffer, staging, image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, copies);
+    command_buffer.copyBufferToImage(staging, image_, vk::ImageLayout::eTransferDstOptimal, copies);
 
     // Back to being sampled, and not before the copies have landed.
-    barriers[0].srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
-    barriers[0].srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-    barriers[0].dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-    barriers[0].dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
-    barriers[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barriers[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    Vulkan::CmdPipelineBarrier2(command_buffer, dependency);
+    barriers[0].srcStageMask = vk::PipelineStageFlagBits2::eCopy;
+    barriers[0].srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+    barriers[0].dstStageMask = vk::PipelineStageFlagBits2::eFragmentShader;
+    barriers[0].dstAccessMask = vk::AccessFlagBits2::eShaderSampledRead;
+    barriers[0].oldLayout = vk::ImageLayout::eTransferDstOptimal;
+    barriers[0].newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    command_buffer.pipelineBarrier2(dependency);
 }
 
 std::unique_ptr<Texture> Texture::Create(
     DeviceContext& context,
     edt::Vec2<u32> size,
     std::span<const u8> pixels,
-    VkFormat format,
+    vk::Format format,
     u32 bytes_per_pixel)
 {
     ErrorHandling::Ensure(
@@ -106,99 +105,93 @@ std::unique_ptr<Texture> Texture::Create(
     texture->context_ = &context;
     texture->size_ = size;
 
-    const VkImageCreateInfo image_info{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .imageType = VK_IMAGE_TYPE_2D,
-        .format = format,
-        .extent = {.width = size.x(), .height = size.y(), .depth = 1},
-        .mipLevels = 1,
-        .arrayLayers = 1,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-    };
+    const vk::ImageCreateInfo image_info =
+        vk::ImageCreateInfo{}
+            .setImageType(vk::ImageType::e2D)
+            .setFormat(format)
+            .setExtent(vk::Extent3D{size.x(), size.y(), 1})
+            .setMipLevels(1)
+            .setArrayLayers(1)
+            .setSamples(vk::SampleCountFlagBits::e1)
+            .setTiling(vk::ImageTiling::eOptimal)
+            .setUsage(vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst)
+            .setSharingMode(vk::SharingMode::eExclusive)
+            .setInitialLayout(vk::ImageLayout::eUndefined);
     const VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO};
-    CheckVkResult(
-        vmaCreateImage(
+    const VkImageCreateInfo& raw_image_info = image_info;
+    VkImage raw_image = nullptr;
+    VulkanCheck(
+        static_cast<vk::Result>(vmaCreateImage(
             context.GetAllocator(),
-            &image_info,
+            &raw_image_info,
             &allocation_info,
-            &texture->image_,
+            &raw_image,
             &texture->allocation_,
-            nullptr),
-        "vmaCreateImage");
+            nullptr)));
+    texture->image_ = raw_image;
 
-    GpuBuffer staging(context, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, pixels.size(), true);
+    GpuBuffer staging(context, vk::BufferUsageFlagBits::eTransferSrc, pixels.size(), true);
     staging.Write(std::as_bytes(pixels));
 
     context.SubmitOneTimeCommands(
-        [&](VkCommandBuffer command_buffer)
+        [&](vk::CommandBuffer command_buffer)
         {
-            std::array barriers{VkImageMemoryBarrier2{
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-                .srcAccessMask = VK_ACCESS_2_NONE,
-                .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = texture->image_,
-                .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
-            }};
+            const vk::ImageSubresourceRange subresource_range = vk::ImageSubresourceRange{}
+                                                                    .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                                                                    .setLevelCount(1)
+                                                                    .setLayerCount(1);
+            std::array barriers{vk::ImageMemoryBarrier2{}
+                                    .setSrcStageMask(vk::PipelineStageFlagBits2::eNone)
+                                    .setSrcAccessMask(vk::AccessFlagBits2::eNone)
+                                    .setDstStageMask(vk::PipelineStageFlagBits2::eCopy)
+                                    .setDstAccessMask(vk::AccessFlagBits2::eTransferWrite)
+                                    .setOldLayout(vk::ImageLayout::eUndefined)
+                                    .setNewLayout(vk::ImageLayout::eTransferDstOptimal)
+                                    .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+                                    .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+                                    .setImage(texture->image_)
+                                    .setSubresourceRange(subresource_range)};
             // Reused below: the barrier is rewritten in place and re-issued through dependency.
-            VkDependencyInfo dependency{
-                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                .imageMemoryBarrierCount = barriers.size(),
-                .pImageMemoryBarriers = barriers.data(),
-            };
-            Vulkan::CmdPipelineBarrier2NE(command_buffer, dependency);
+            const vk::DependencyInfo dependency = vk::DependencyInfo{}.setImageMemoryBarriers(barriers);
+            command_buffer.pipelineBarrier2(dependency);
 
-            const std::array regions{VkBufferImageCopy{
-                .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1},
-                .imageExtent = {.width = size.x(), .height = size.y(), .depth = 1},
-            }};
-            Vulkan::CmdCopyBufferToImageNE(
-                command_buffer,
-                staging.GetHandle(),
-                texture->image_,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                regions);
+            const vk::ImageSubresourceLayers image_subresource =
+                vk::ImageSubresourceLayers{}.setAspectMask(vk::ImageAspectFlagBits::eColor).setLayerCount(1);
+            const std::array regions{vk::BufferImageCopy{}
+                                         .setImageSubresource(image_subresource)
+                                         .setImageExtent(vk::Extent3D{size.x(), size.y(), 1})};
+            command_buffer
+                .copyBufferToImage(staging.GetHandle(), texture->image_, vk::ImageLayout::eTransferDstOptimal, regions);
 
-            VkImageMemoryBarrier2& barrier = barriers.front();
-            barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
-            barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-            barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-            barrier.dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
-            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            Vulkan::CmdPipelineBarrier2NE(command_buffer, dependency);
+            vk::ImageMemoryBarrier2& barrier = barriers.front();
+            barrier.srcStageMask = vk::PipelineStageFlagBits2::eCopy;
+            barrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+            barrier.dstStageMask = vk::PipelineStageFlagBits2::eFragmentShader;
+            barrier.dstAccessMask = vk::AccessFlagBits2::eShaderSampledRead;
+            barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+            barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            command_buffer.pipelineBarrier2(dependency);
         });
 
-    const VkImageViewCreateInfo view_info{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image = texture->image_,
-        .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = format,
-        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1},
-    };
-    texture->view_ = Vulkan::CreateImageView(context.GetDevice(), view_info);
+    const vk::ImageSubresourceRange view_subresource_range =
+        vk::ImageSubresourceRange{}.setAspectMask(vk::ImageAspectFlagBits::eColor).setLevelCount(1).setLayerCount(1);
+    const vk::ImageViewCreateInfo view_info = vk::ImageViewCreateInfo{}
+                                                  .setImage(texture->image_)
+                                                  .setViewType(vk::ImageViewType::e2D)
+                                                  .setFormat(format)
+                                                  .setSubresourceRange(view_subresource_range);
+    texture->view_ = context.GetDevice().createImageViewUnique(view_info);
 
     // Same filtering verlet uses for the circle mask: nearest when minified, linear when magnified.
-    const VkSamplerCreateInfo sampler_info{
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .magFilter = VK_FILTER_LINEAR,
-        .minFilter = VK_FILTER_NEAREST,
-        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-    };
-    texture->sampler_ = Vulkan::CreateSampler(context.GetDevice(), sampler_info);
+    const vk::SamplerCreateInfo sampler_info = vk::SamplerCreateInfo{}
+                                                   .setMagFilter(vk::Filter::eLinear)
+                                                   .setMinFilter(vk::Filter::eNearest)
+                                                   .setMipmapMode(vk::SamplerMipmapMode::eNearest)
+                                                   .setAddressModeU(vk::SamplerAddressMode::eRepeat)
+                                                   .setAddressModeV(vk::SamplerAddressMode::eRepeat)
+                                                   .setAddressModeW(vk::SamplerAddressMode::eRepeat)
+                                                   .setBorderColor(vk::BorderColor::eIntOpaqueBlack);
+    texture->sampler_ = context.GetDevice().createSamplerUnique(sampler_info);
 
     return texture;
 }
@@ -206,9 +199,13 @@ std::unique_ptr<Texture> Texture::Create(
 Texture::~Texture()
 {
     if (!context_) return;
-    if (sampler_) Vulkan::DestroySamplerNE(context_->GetDevice(), sampler_);
-    if (view_) Vulkan::DestroyImageViewNE(context_->GetDevice(), view_);
-    if (image_) vmaDestroyImage(context_->GetAllocator(), image_, allocation_);
+    sampler_.reset();
+    view_.reset();
+    if (image_)
+    {
+        const VkImage raw_image = image_;
+        vmaDestroyImage(context_->GetAllocator(), raw_image, allocation_);
+    }
 }
 
 }  // namespace klvk
