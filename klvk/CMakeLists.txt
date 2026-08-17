@@ -34,7 +34,12 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/rendering/curve_renderer_2d.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/rendering/instanced_sprite_renderer_2d.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_cache_coordinator.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_cache_coordinator.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_cache_hash.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_cache_manager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_cache_store.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_cache_store.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_config.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_config.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_interface.cpp
@@ -43,6 +48,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_reflection_json.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_reflection_json.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/shader_stages.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/slang_shader_compiler.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader/slang_shader_compiler.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/text/font_face.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/text/glyph_atlas.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/texture/procedural_texture_generator.cpp

@@ -1,4 +1,8 @@
 {
     "ModuleType": "Executable",
-    "Dependencies": {"Public": ["klvk"]}
+    "Dependencies": {
+        "Public": ["klvk"],
+        "Private": ["slang"]
+    },
+    "ExtraCMakeFiles": ["private_headers"]
 }

@@ -6,6 +6,7 @@
 
 #include "klvk/integral_aliases.hpp"
 #include "klvk/shader/shader_cache_manager.hpp"
+#include "shader_cache_component_tests.hpp"
 
 namespace
 {
@@ -138,6 +139,28 @@ void TestTessellationReflection(const std::filesystem::path& cache)
     }
 }
 
+void TestConfiguration(
+    const std::filesystem::path& sources,
+    const std::filesystem::path& cache,
+    const std::filesystem::path& invalid_cache)
+{
+    {
+        klvk::ShaderCacheManager manager(sources, cache);
+        Ensure(manager.GetSourceRoot() == std::filesystem::weakly_canonical(sources), "source root was not retained");
+        Ensure(manager.GetCacheRoot() == cache, "cache root was not retained");
+    }
+    try
+    {
+        klvk::ShaderCacheManager manager(sources, invalid_cache, {.flush_interval = std::chrono::milliseconds{0}});
+        throw std::runtime_error("zero flush interval was accepted");
+    }
+    catch (const std::exception& error)
+    {
+        Ensure(std::string_view(error.what()).contains("must be positive"), "zero flush interval error was unclear");
+    }
+    Ensure(!std::filesystem::exists(invalid_cache), "invalid settings created a cache directory");
+}
+
 void Run()
 {
     TestPureValidation();
@@ -147,6 +170,8 @@ void Run()
     const std::filesystem::path sources = root / "sources";
     const std::filesystem::path cache = root / "cache";
     std::filesystem::create_directories(sources);
+    ShaderCacheComponentTests::Run(root / "components");
+    TestConfiguration(sources, root / "configuration_cache", root / "invalid_cache");
     TestTessellationReflection(root / "tessellation_cache");
     const std::filesystem::path shader = sources / "coalesce.comp.slang";
     const std::filesystem::path slang_shader = sources / "test.comp.slang";
