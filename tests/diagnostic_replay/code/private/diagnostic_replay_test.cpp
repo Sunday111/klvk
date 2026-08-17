@@ -14,6 +14,7 @@ extern "C"
 #include <string_view>
 #include <vector>
 
+#include "diagnostic_test_support.hpp"
 #include "diagnostics/diagnostic_replay_scheduler.hpp"
 #include "diagnostics/diagnostic_video_recorder.hpp"
 #include "edt/functional/on_scope_leave.hpp"
@@ -23,24 +24,8 @@ extern "C"
 namespace
 {
 
-void Ensure(bool condition, std::string_view message)
-{
-    if (!condition) throw std::runtime_error(std::string(message));
-}
-
-template <typename Function>
-void EnsureThrows(Function&& function, std::string_view message)
-{
-    try
-    {
-        function();
-    }
-    catch (const std::exception&)
-    {
-        return;
-    }
-    throw std::runtime_error(std::string(message));
-}
+using klvk::tests::Ensure;
+using klvk::tests::EnsureThrows;
 
 class QuitObserver
 {
@@ -167,6 +152,42 @@ void TestCheckpointCapturePlan()
     replay.EnsureComplete();
 }
 
+void TestCaptureBatchStateTransitions()
+{
+    klvk::events::EventManager events;
+    klvk::DiagnosticRunConfig config;
+    config.captures = {
+        {.frame = 1, .path = "first.ppm", .include_ui = false},
+        {.frame = 2, .path = "second.ppm", .include_ui = false}};
+    config.exit.frame = 3;
+
+    klvk::DiagnosticReplayScheduler replay(config, events, [](const klvk::DiagnosticInputEvent&) {});
+    replay.Advance(1, klvk::TimerDuration::zero());
+    const klvk::DiagnosticCaptureBatch stale = replay.GetCaptureBatch(false);
+    replay.Advance(2, klvk::TimerDuration::zero());
+    EnsureThrows([&] { replay.MarkCaptured(stale); }, "a stale capture batch was accepted");
+
+    const klvk::DiagnosticCaptureBatch current = replay.GetCaptureBatch(false);
+    Ensure(
+        current.paths == std::vector<std::filesystem::path>{"first.ppm", "second.ppm"},
+        "the current capture batch lost queued work");
+    replay.MarkCaptured(current);
+    Ensure(!replay.HasCaptureDue(false), "a recorded capture remained queued");
+    EnsureThrows([&] { replay.MarkCaptured(current); }, "a capture batch was recorded twice");
+    replay.EnsureComplete();
+}
+
+void TestDisabledVideoRecording()
+{
+    const klvk::DiagnosticRunConfig config;
+    klvk::DiagnosticVideoRecorder recorder(config);
+    Ensure(!recorder.NeedsFrame(false) && !recorder.NeedsFrame(true), "an unconfigured video requested frames");
+    Ensure(!recorder.ReserveFrame(false).has_value(), "an unconfigured video reserved a frame");
+    Ensure(!recorder.ReserveFrame(true).has_value(), "an unconfigured video reserved an after-UI frame");
+    recorder.Finish();
+    EnsureThrows([&] { recorder.WriteFrame({}, false, 0); }, "an unconfigured video recorder accepted pixel data");
+}
+
 void TestVideoRecording()
 {
     const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -238,7 +259,11 @@ void Run()
     TestFramePhasesAndCompletion();
     TestTimeCatchUpAndAfterLastCapture();
     TestCheckpointCapturePlan();
+    TestCaptureBatchStateTransitions();
+    TestDisabledVideoRecording();
     TestVideoRecording();
+    klvk::tests::RunDiagnosticFramebufferReadbackTests();
+    klvk::tests::RunDiagnosticInputPlayerTests();
 }
 
 }  // namespace

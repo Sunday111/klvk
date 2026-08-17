@@ -18,6 +18,7 @@ using namespace edt::lazy_matrix_aliases;  // NOLINT
 class Application;
 class DeviceContext;
 class DiagnosticInputPlayer;
+class DiagnosticInputPlayerTest;
 class GlfwState;
 
 class Window
@@ -62,6 +63,7 @@ private:
     friend class Application;
     friend class DeviceContext;
     friend class DiagnosticInputPlayer;
+    friend class DiagnosticInputPlayerTest;
     friend class GlfwState;
 
     enum class Backend : u8

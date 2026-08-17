@@ -12,6 +12,7 @@ namespace klvk
 {
 
 class DeviceContext;
+class DiagnosticFramebufferReadbackTest;
 class DiagnosticVideoRecorder;
 
 class DiagnosticFramebufferReadback
@@ -41,6 +42,8 @@ public:
     void EnsureComplete() const;
 
 private:
+    friend class DiagnosticFramebufferReadbackTest;
+
     struct PendingReadback
     {
         GpuBuffer buffer;
