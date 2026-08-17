@@ -253,14 +253,14 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::CullMode(vk::CullModeFlags mod
 
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::VertexBinding(u32 binding, u32 stride, vk::VertexInputRate rate)
 {
-    vertex_bindings_.push_back(vk::VertexInputBindingDescription{binding, stride, rate});
+    vertex_bindings_.emplace_back(binding, stride, rate);
     return *this;
 }
 
 GraphicsPipelineBuilder&
 GraphicsPipelineBuilder::VertexAttribute(u32 location, u32 binding, vk::Format format, u32 offset)
 {
-    vertex_attributes_.push_back(vk::VertexInputAttributeDescription{location, binding, format, offset});
+    vertex_attributes_.emplace_back(location, binding, format, offset);
     return *this;
 }
 

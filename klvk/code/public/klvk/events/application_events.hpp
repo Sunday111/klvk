@@ -1,8 +1,8 @@
 #pragma once
 
+#include "edt/guid.hpp"
 #include "refl/reflection_provider.hpp"
 #include "refl/static_type/class.hpp"
-#include "edt/guid.hpp"
 
 namespace klvk::events
 {

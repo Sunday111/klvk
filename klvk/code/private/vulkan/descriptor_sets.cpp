@@ -14,7 +14,7 @@ namespace klvk
 DescriptorSets::Builder&
 DescriptorSets::Builder::Binding(u32 binding, vk::DescriptorType type, vk::ShaderStageFlags stages, u32 count)
 {
-    bindings_.push_back(vk::DescriptorSetLayoutBinding{binding, type, count, stages});
+    bindings_.emplace_back(binding, type, count, stages);
     return *this;
 }
 
@@ -39,7 +39,7 @@ DescriptorSets DescriptorSets::Builder::Build(u32 set_count)
             [&](const vk::DescriptorPoolSize& size) { return size.type == b.descriptorType; });
         if (it == pool_sizes.end())
         {
-            pool_sizes.push_back(vk::DescriptorPoolSize{b.descriptorType, needed});
+            pool_sizes.emplace_back(b.descriptorType, needed);
         }
         else
         {

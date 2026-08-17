@@ -5,6 +5,7 @@
 #include <slang.h>
 
 #include <array>
+#include <cstring>
 #include <utility>
 #include <vector>
 
@@ -160,12 +161,13 @@ std::shared_ptr<const CompiledShader> SlangShaderCompiler::Compile(
         byte_size != 0 && byte_size % sizeof(u32) == 0,
         "Slang produced an invalid SPIR-V size for '{}'",
         source_path.string());
-    const auto* words = static_cast<const u32*>(spirv->getBufferPointer());
-    auto spirv_words = std::make_shared<const std::vector<u32>>(words, words + byte_size / sizeof(u32));
+    auto mutable_spirv_words = std::make_shared<std::vector<u32>>(byte_size / sizeof(u32));
+    std::memcpy(mutable_spirv_words->data(), spirv->getBufferPointer(), byte_size);
     ErrorHandling::Ensure(
-        !spirv_words->empty() && spirv_words->front() == kSpirvMagic,
+        !mutable_spirv_words->empty() && mutable_spirv_words->front() == kSpirvMagic,
         "Slang produced invalid SPIR-V for '{}'",
         source_path.string());
+    std::shared_ptr<const std::vector<u32>> spirv_words = std::move(mutable_spirv_words);
 
     diagnostics.setNull();
     slang::ProgramLayout* layout = linked->getLayout(0, diagnostics.writeRef());

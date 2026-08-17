@@ -125,6 +125,26 @@ void TestLongRunningScheduleDoesNotDrift()
     EnsureDeadline(deadline, kStart + kExpectedElapsed, "a long-running target schedule accumulated drift");
 }
 
+void TestFractionalTargetFramerate()
+{
+    FramePacingSchedule schedule;
+    schedule.SetTargetFramerate(59.94f);
+
+    constexpr auto kStart = 10s;
+    EnsureDeadline(
+        schedule.GetDeadline(OrdinaryFrame(kStart, kStart)),
+        kStart + 16'683'350ns,
+        "fractional target produced an imprecise first deadline");
+    EnsureDeadline(
+        schedule.GetDeadline(OrdinaryFrame(kStart + 16'683'350ns, kStart + 16'683'350ns)),
+        kStart + 33'366'700ns,
+        "fractional target did not accumulate sub-nanosecond periods");
+    EnsureDeadline(
+        schedule.GetDeadline(OrdinaryFrame(kStart + 33'366'700ns, kStart + 33'366'700ns)),
+        kStart + 50'050'051ns,
+        "fractional target accumulated deadline drift");
+}
+
 void TestLateFrameRecovery()
 {
     FramePacingSchedule schedule;
@@ -151,6 +171,21 @@ void TestLateFrameRecovery()
         boundary.GetDeadline(OrdinaryFrame(20s + 10ms, 20s + 11ms)),
         20s + 20ms,
         "the schedule did not advance past an exactly reached deadline");
+}
+
+void TestLargeLateFrameRecovery()
+{
+    FramePacingSchedule schedule;
+    schedule.SetTargetFramerate(60.f);
+
+    constexpr auto kNow = 9'000'000'000'000'000'000ns;
+    Ensure(
+        !schedule.GetDeadline(OrdinaryFrame(0ns, kNow)).has_value(),
+        "a very late frame requested sleep for an expired deadline");
+    EnsureDeadline(
+        schedule.GetDeadline(OrdinaryFrame(kNow, kNow)),
+        kNow + 16'666'666ns,
+        "a large elapsed duration lost nanosecond deadline precision");
 }
 
 void TestTargetChangesResetTheSchedule()
@@ -220,7 +255,9 @@ void Run()
     TestDisabledPacing();
     TestAbsoluteTargetDeadlines();
     TestLongRunningScheduleDoesNotDrift();
+    TestFractionalTargetFramerate();
     TestLateFrameRecovery();
+    TestLargeLateFrameRecovery();
     TestTargetChangesResetTheSchedule();
     TestFixedStepReplayPacing();
 }

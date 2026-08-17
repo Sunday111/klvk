@@ -6,6 +6,7 @@
 #include "klvk/vulkan/vulkan_common.hpp"
 
 VK_DEFINE_HANDLE(VmaAllocation)
+VK_DEFINE_HANDLE(VmaAllocator)
 
 namespace klvk
 {
@@ -41,7 +42,7 @@ public:
 private:
     void Destroy();
 
-    DeviceContext* context_ = nullptr;
+    VmaAllocator allocator_ = nullptr;
     vk::Buffer buffer_ = nullptr;
     VmaAllocation allocation_ = nullptr;
     vk::DeviceSize size_ = 0;

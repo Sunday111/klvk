@@ -9,7 +9,7 @@
 #include "klvk/error_handling.hpp"
 
 #if defined(__linux__)
-#include <time.h>
+#include <ctime>
 #endif
 
 namespace klvk

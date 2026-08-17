@@ -25,7 +25,7 @@ DiagnosticInputRecorder::DiagnosticInputRecorder(std::filesystem::path path, eve
     event_subscription_ = event_manager_.AddEventListener(*event_listener_);
 }
 
-DiagnosticInputRecorder::~DiagnosticInputRecorder() {}
+DiagnosticInputRecorder::~DiagnosticInputRecorder() = default;
 
 void DiagnosticInputRecorder::BeginFrame(u64 frame) noexcept
 {

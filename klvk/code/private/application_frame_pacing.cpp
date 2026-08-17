@@ -1,6 +1,6 @@
 #include "application_frame_pacing.hpp"
 
-#include <algorithm>
+#include <bit>
 #include <cmath>
 #include <limits>
 
@@ -11,7 +11,7 @@ namespace klvk
 namespace
 {
 
-constexpr long double kNanosecondsPerSecond = 1'000'000'000.0L;
+constexpr u64 kNanosecondsPerSecond = 1'000'000'000;
 constexpr float kMaximumTargetFramerate = 1'000'000'000.f;
 
 }  // namespace
@@ -30,6 +30,7 @@ void FramePacingSchedule::SetTargetFramerate(std::optional<float> framerate)
         "Target framerate must be finite, positive, and no greater than the nanosecond clock resolution");
     if (target_framerate_ == framerate) return;
     target_framerate_ = framerate;
+    target_period_ = framerate.has_value() ? CalculateTargetPeriod(*framerate) : std::nullopt;
     Reset();
 }
 
@@ -78,39 +79,118 @@ std::optional<std::chrono::nanoseconds> FramePacingSchedule::GetFixedStepDeadlin
     return frame.application_start + std::chrono::nanoseconds{elapsed};
 }
 
-std::optional<std::chrono::nanoseconds> FramePacingSchedule::GetTargetDeadline(u64 frame_index) const noexcept
+std::optional<FramePacingSchedule::TargetPeriod> FramePacingSchedule::CalculateTargetPeriod(float framerate) noexcept
 {
-    const long double offset =
-        static_cast<long double>(frame_index) * kNanosecondsPerSecond / static_cast<long double>(*target_framerate_);
-    if (offset > static_cast<long double>(std::numeric_limits<i64>::max())) return std::nullopt;
+    static_assert(std::numeric_limits<float>::is_iec559);
+    constexpr u32 kFractionBitCount = 23;
+    constexpr u32 kFractionMask = (u32{1} << kFractionBitCount) - 1;
+    constexpr u32 kExponentMask = 0xff;
+    constexpr i32 kExponentBiasWithFraction = 127 + kFractionBitCount;
 
-    const i64 offset_nanoseconds = static_cast<i64>(offset);
-    if (target_schedule_start_->count() > std::numeric_limits<i64>::max() - offset_nanoseconds)
+    const u32 bits = std::bit_cast<u32>(framerate);
+    const u32 encoded_exponent = (bits >> kFractionBitCount) & kExponentMask;
+    const u64 significand =
+        encoded_exponent == 0 ? bits & kFractionMask : (u32{1} << kFractionBitCount) | (bits & kFractionMask);
+    const i32 binary_exponent =
+        encoded_exponent == 0 ? -149 : static_cast<i32>(encoded_exponent) - kExponentBiasWithFraction;
+
+    u64 denominator = significand;
+    u64 whole_nanoseconds = kNanosecondsPerSecond / denominator;
+    u64 fractional_numerator = kNanosecondsPerSecond % denominator;
+    if (binary_exponent >= 0)
+    {
+        denominator <<= static_cast<u32>(binary_exponent);
+        whole_nanoseconds = kNanosecondsPerSecond / denominator;
+        fractional_numerator = kNanosecondsPerSecond % denominator;
+    }
+    else
+    {
+        const u64 maximum_duration = static_cast<u64>(std::numeric_limits<i64>::max());
+        for (i32 bit = 0; bit < -binary_exponent; ++bit)
+        {
+            const u64 doubled_fraction = fractional_numerator * 2;
+            const u64 carry = doubled_fraction >= denominator ? 1 : 0;
+            if (whole_nanoseconds > (maximum_duration - carry) / 2) return std::nullopt;
+            whole_nanoseconds = whole_nanoseconds * 2 + carry;
+            fractional_numerator = doubled_fraction - carry * denominator;
+        }
+    }
+
+    return TargetPeriod{
+        .whole_nanoseconds = whole_nanoseconds,
+        .fractional_numerator = fractional_numerator,
+        .fractional_denominator = denominator,
+    };
+}
+
+std::optional<i64> FramePacingSchedule::GetTargetOffset(u64 frame_index) const noexcept
+{
+    if (!target_period_.has_value()) return std::nullopt;
+
+    constexpr u64 kMaximumDuration = static_cast<u64>(std::numeric_limits<i64>::max());
+    const TargetPeriod& period = *target_period_;
+    if (frame_index != 0 && period.whole_nanoseconds > kMaximumDuration / frame_index) return std::nullopt;
+    u64 offset = frame_index * period.whole_nanoseconds;
+
+    const u64 complete_denominators = frame_index / period.fractional_denominator;
+    if (complete_denominators != 0 && period.fractional_numerator > (kMaximumDuration - offset) / complete_denominators)
     {
         return std::nullopt;
     }
-    return *target_schedule_start_ + std::chrono::nanoseconds{offset_nanoseconds};
+    offset += complete_denominators * period.fractional_numerator;
+
+    const u64 remaining_numerator = (frame_index % period.fractional_denominator) * period.fractional_numerator;
+    const u64 remaining_offset = remaining_numerator / period.fractional_denominator;
+    if (remaining_offset > kMaximumDuration - offset) return std::nullopt;
+    return static_cast<i64>(offset + remaining_offset);
+}
+
+std::optional<std::chrono::nanoseconds> FramePacingSchedule::GetTargetDeadline(u64 frame_index) const noexcept
+{
+    const std::optional<i64> offset = GetTargetOffset(frame_index);
+    if (!offset.has_value() || target_schedule_start_->count() > std::numeric_limits<i64>::max() - *offset)
+    {
+        return std::nullopt;
+    }
+    return *target_schedule_start_ + std::chrono::nanoseconds{*offset};
 }
 
 void FramePacingSchedule::AdvancePast(std::chrono::nanoseconds now) noexcept
 {
-    const auto elapsed = now - *target_schedule_start_;
-    if (elapsed <= std::chrono::nanoseconds::zero()) return;
-
-    const long double elapsed_frames = static_cast<long double>(elapsed.count()) *
-                                       static_cast<long double>(*target_framerate_) / kNanosecondsPerSecond;
-    if (elapsed_frames >= static_cast<long double>(std::numeric_limits<u64>::max()))
+    u64 expired_frame = next_target_frame_;
+    u64 search_step = 1;
+    u64 future_frame = expired_frame;
+    while (future_frame != std::numeric_limits<u64>::max())
     {
-        next_target_frame_ = std::numeric_limits<u64>::max();
+        future_frame = search_step > std::numeric_limits<u64>::max() - expired_frame ? std::numeric_limits<u64>::max()
+                                                                                     : expired_frame + search_step;
+        const std::optional<std::chrono::nanoseconds> deadline = GetTargetDeadline(future_frame);
+        if (!deadline.has_value() || *deadline > now) break;
+        expired_frame = future_frame;
+        search_step =
+            search_step > std::numeric_limits<u64>::max() / 2 ? std::numeric_limits<u64>::max() : search_step * 2;
+    }
+
+    if (future_frame == expired_frame)
+    {
+        next_target_frame_ = future_frame;
         return;
     }
 
-    next_target_frame_ = std::max(next_target_frame_, static_cast<u64>(std::floor(elapsed_frames)) + 1);
-    for (std::optional<std::chrono::nanoseconds> deadline = GetTargetDeadline(next_target_frame_);
-         deadline.has_value() && *deadline <= now && next_target_frame_ != std::numeric_limits<u64>::max();
-         deadline = GetTargetDeadline(++next_target_frame_))
+    while (future_frame - expired_frame > 1)
     {
+        const u64 candidate = expired_frame + (future_frame - expired_frame) / 2;
+        const std::optional<std::chrono::nanoseconds> deadline = GetTargetDeadline(candidate);
+        if (deadline.has_value() && *deadline <= now)
+        {
+            expired_frame = candidate;
+        }
+        else
+        {
+            future_frame = candidate;
+        }
     }
+    next_target_frame_ = future_frame;
 }
 
 }  // namespace klvk
