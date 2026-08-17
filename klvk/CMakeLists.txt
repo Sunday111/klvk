@@ -10,13 +10,23 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application_imgui.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/camera/camera_3d.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_events.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_framebuffer_readback.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_framebuffer_readback.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_input_player.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_input_player.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_replay_scheduler.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_replay_scheduler.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_run_config.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_run_config_json.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_run_config_json.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_run_config_json_validation.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_run_config_json_writer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_runner.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_runner.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_video_encoder.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_video_encoder.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_video_recorder.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_video_recorder.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/input_recorder.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/input_recorder.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/events/event_manager.cpp

@@ -1,0 +1,1 @@
+target_link_libraries(klvk_diagnostic_replay_test PRIVATE PkgConfig::KLVK_FFMPEG)
