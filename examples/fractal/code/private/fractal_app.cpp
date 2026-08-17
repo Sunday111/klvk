@@ -45,11 +45,17 @@ void FractalApp::Initialize()
         klvk::ErrorHandling::Ensure(renderer.is_string(), "Diagnostic application.renderer must be a string");
         const std::string name = renderer.get<std::string>();
         if (name == "counting")
+        {
             renderer_index = 1;
+        }
         else if (name == "simple_cpu")
+        {
             renderer_index = 2;
+        }
         else
+        {
             klvk::ErrorHandling::Ensure(name == "simple_gpu", "Unknown diagnostic renderer '{}'", name);
+        }
     }
     renderer_combo_.SetSelectedIndex(renderer_index);
     renderer_ = renderer_combo_.GetSelectedItem()(*this, kMaxIterations);

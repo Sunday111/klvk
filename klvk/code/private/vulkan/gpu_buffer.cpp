@@ -21,7 +21,7 @@ GpuBuffer::GpuBuffer(
     vk::BufferUsageFlags usage,
     vk::DeviceSize size,
     GpuBufferHostAccess host_access)
-    : context_(&context),
+    : allocator_(context.GetAllocator()),
       size_(size),
       host_access_(host_access)
 {
@@ -53,8 +53,13 @@ GpuBuffer::GpuBuffer(
 }
 
 GpuBuffer::GpuBuffer(GpuBuffer&& other) noexcept
+    : allocator_(std::exchange(other.allocator_, nullptr)),
+      buffer_(std::exchange(other.buffer_, nullptr)),
+      allocation_(std::exchange(other.allocation_, nullptr)),
+      size_(std::exchange(other.size_, 0)),
+      mapped_(std::exchange(other.mapped_, nullptr)),
+      host_access_(std::exchange(other.host_access_, GpuBufferHostAccess::None))
 {
-    *this = std::move(other);
 }
 
 GpuBuffer& GpuBuffer::operator=(GpuBuffer&& other) noexcept
@@ -62,7 +67,7 @@ GpuBuffer& GpuBuffer::operator=(GpuBuffer&& other) noexcept
     if (this != &other)
     {
         Destroy();
-        context_ = std::exchange(other.context_, nullptr);
+        allocator_ = std::exchange(other.allocator_, nullptr);
         buffer_ = std::exchange(other.buffer_, nullptr);
         allocation_ = std::exchange(other.allocation_, nullptr);
         size_ = std::exchange(other.size_, 0);
@@ -81,7 +86,8 @@ void GpuBuffer::Destroy()
 {
     if (buffer_)
     {
-        vmaDestroyBuffer(context_->GetAllocator(), static_cast<VkBuffer>(buffer_), allocation_);
+        vmaDestroyBuffer(allocator_, static_cast<VkBuffer>(buffer_), allocation_);
+        allocator_ = nullptr;
         buffer_ = nullptr;
         allocation_ = nullptr;
         mapped_ = nullptr;
@@ -103,8 +109,7 @@ void GpuBuffer::Write(std::span<const std::byte> bytes, vk::DeviceSize offset)
         size_);
     if (bytes.empty()) return;
     std::memcpy(static_cast<std::byte*>(mapped_) + offset, bytes.data(), bytes.size());
-    VulkanCheck(
-        static_cast<vk::Result>(vmaFlushAllocation(context_->GetAllocator(), allocation_, offset, bytes.size())));
+    VulkanCheck(static_cast<vk::Result>(vmaFlushAllocation(allocator_, allocation_, offset, bytes.size())));
 }
 
 void GpuBuffer::Read(std::span<std::byte> bytes, vk::DeviceSize offset) const
@@ -119,8 +124,7 @@ void GpuBuffer::Read(std::span<std::byte> bytes, vk::DeviceSize offset) const
         offset,
         size_);
     if (bytes.empty()) return;
-    VulkanCheck(
-        static_cast<vk::Result>(vmaInvalidateAllocation(context_->GetAllocator(), allocation_, offset, bytes.size())));
+    VulkanCheck(static_cast<vk::Result>(vmaInvalidateAllocation(allocator_, allocation_, offset, bytes.size())));
     std::memcpy(bytes.data(), static_cast<const std::byte*>(mapped_) + offset, bytes.size());
 }
 

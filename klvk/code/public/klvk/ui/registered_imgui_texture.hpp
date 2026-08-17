@@ -23,7 +23,7 @@ public:
 
     [[nodiscard]] ImTextureID GetId() const noexcept
     {
-        const VkDescriptorSet descriptor = static_cast<VkDescriptorSet>(descriptor_);
+        const auto descriptor = static_cast<VkDescriptorSet>(descriptor_);
         return reinterpret_cast<ImTextureID>(descriptor);
     }
 

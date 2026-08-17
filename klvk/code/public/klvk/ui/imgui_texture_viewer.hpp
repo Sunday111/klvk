@@ -40,6 +40,7 @@ private:
     DeviceContext* registered_context_ = nullptr;
     vk::ImageView registered_view_ = nullptr;
     std::unique_ptr<RegisteredImGuiTexture> registered_texture_;
+    std::string formatted_text_buffer_;
     float zoom_ = 1.f;
     bool fit_ = true;
 };

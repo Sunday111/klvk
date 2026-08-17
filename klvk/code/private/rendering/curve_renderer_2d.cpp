@@ -61,6 +61,9 @@ constexpr auto kAccumulateBlend = vk::PipelineColorBlendAttachmentState{}
                                       .setDstAlphaBlendFactor(vk::BlendFactor::eOneMinusSrcAlpha)
                                       .setAlphaBlendOp(vk::BlendOp::eAdd)
                                       .setColorWriteMask(kColorWriteMask);
+constexpr vk::ShaderStageFlags kPushConstantStages =
+    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eTessellationControl |
+    vk::ShaderStageFlagBits::eTessellationEvaluation | vk::ShaderStageFlagBits::eGeometry;
 
 size_t GrowCapacity(size_t required)
 {
@@ -84,7 +87,20 @@ CurveRenderer2d::CurveRenderer2d(Application& app)
 
 CurveRenderer2d::CurveRenderer2d(Application& app, vk::Format color_format, CompositeMode composite)
     : app_(&app),
-      composite_(composite)
+      composite_(composite),
+      pipeline_layout_(
+          app.GetDeviceContext(),
+          {},
+          std::array{vk::PushConstantRange{kPushConstantStages, 0, sizeof(PushConstants)}}),
+      pipeline_(CreatePipeline(app, pipeline_layout_, color_format, composite))
+{
+}
+
+vk::UniquePipeline CurveRenderer2d::CreatePipeline(
+    Application& app,
+    const PipelineLayout& pipeline_layout,
+    vk::Format color_format,
+    CompositeMode composite)
 {
     auto& context = app.GetDeviceContext();
     ErrorHandling::Ensure(
@@ -92,26 +108,21 @@ CurveRenderer2d::CurveRenderer2d(Application& app, vk::Format color_format, Comp
         "CurveRenderer2d requires Vulkan tessellation-shader support");
     ErrorHandling::Ensure(context.IsGeometryShaderEnabled(), "CurveRenderer2d requires Vulkan geometry-shader support");
 
-    constexpr vk::ShaderStageFlags push_stages =
-        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eTessellationControl |
-        vk::ShaderStageFlagBits::eTessellationEvaluation | vk::ShaderStageFlagBits::eGeometry;
-    const std::array push_ranges{vk::PushConstantRange{push_stages, 0, sizeof(PushConstants)}};
-    pipeline_layout_ = PipelineLayout{context, {}, push_ranges};
-    pipeline_ = GraphicsPipelineBuilder(app)
-                    .Layout(pipeline_layout_)
-                    .VertexShaderFile(app.GetShaderDir() / "klvk/curve2d.vert.slang")
-                    .TessellationControlShaderFile(app.GetShaderDir() / "klvk/curve2d.hull.slang")
-                    .TessellationEvaluationShaderFile(app.GetShaderDir() / "klvk/curve2d.domain.slang")
-                    .GeometryShaderFile(app.GetShaderDir() / "klvk/curve2d.geom.slang")
-                    .FragmentShaderFile(app.GetShaderDir() / "klvk/curve2d.frag.slang")
-                    .Topology(vk::PrimitiveTopology::ePatchList)
-                    .PatchControlPoints(6)
-                    .VertexBinding(0, sizeof(ControlPoint), vk::VertexInputRate::eVertex)
-                    .VertexAttribute(0, 0, vk::Format::eR32G32Sfloat, offsetof(ControlPoint, position))
-                    .VertexAttribute(1, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(ControlPoint, color))
-                    .Blend(composite == CompositeMode::Accumulate ? kAccumulateBlend : kUnionBlend)
-                    .ColorFormat(color_format)
-                    .Build();
+    return GraphicsPipelineBuilder(app)
+        .Layout(pipeline_layout)
+        .VertexShaderFile(app.GetShaderDir() / "klvk/curve2d.vert.slang")
+        .TessellationControlShaderFile(app.GetShaderDir() / "klvk/curve2d.hull.slang")
+        .TessellationEvaluationShaderFile(app.GetShaderDir() / "klvk/curve2d.domain.slang")
+        .GeometryShaderFile(app.GetShaderDir() / "klvk/curve2d.geom.slang")
+        .FragmentShaderFile(app.GetShaderDir() / "klvk/curve2d.frag.slang")
+        .Topology(vk::PrimitiveTopology::ePatchList)
+        .PatchControlPoints(6)
+        .VertexBinding(0, sizeof(ControlPoint), vk::VertexInputRate::eVertex)
+        .VertexAttribute(0, 0, vk::Format::eR32G32Sfloat, offsetof(ControlPoint, position))
+        .VertexAttribute(1, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(ControlPoint, color))
+        .Blend(composite == CompositeMode::Accumulate ? kAccumulateBlend : kUnionBlend)
+        .ColorFormat(color_format)
+        .Build();
 }
 
 CurveRenderer2d::~CurveRenderer2d()

@@ -104,7 +104,7 @@ void ImGuiTextureViewer::Draw(
         ImGui::TextUnformatted("|");
         ImGui::SameLine();
     }
-    ImGui::Text("%u x %u texture", size.x(), size.y());
+    ImGuiHelper::FormattedText(formatted_text_buffer_, "{} x {} texture", size.x(), size.y());
 
     if (DrawSamplerControls()) RegisterTexture(context, image_view);
 
@@ -129,7 +129,9 @@ void ImGuiTextureViewer::Draw(
         fit_ = false;
         zoom_ = zoom_percent / 100.f;
     }
-    ImGui::TextDisabled("Ctrl+wheel to zoom, middle-drag to pan");
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::TextUnformatted("Ctrl+wheel to zoom, middle-drag to pan");
+    ImGui::PopStyleColor();
 
     constexpr auto canvas_flags = ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
     if (ImGui::BeginChild("Texture canvas", {}, ImGuiChildFlags_Border, canvas_flags))

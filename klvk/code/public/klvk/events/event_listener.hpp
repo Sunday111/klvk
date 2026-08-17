@@ -1,9 +1,9 @@
 #pragma once
 
-#include <refl/get_type_info.hpp>
 #include <concepts>
 #include <functional>
 #include <memory>
+#include <refl/get_type_info.hpp>
 
 #include "event_listener_interface.hpp"
 
@@ -20,10 +20,7 @@ public:
     template <size_t index>
     using EventTypeByIndex = std::tuple_element_t<index, std::tuple<EventTypes...>>;
 
-    std::vector<const refl::Type*> GetEventTypes() const override
-    {
-        return {refl::GetTypeInfo<EventTypes>()...};
-    }
+    std::vector<const refl::Type*> GetEventTypes() const override { return {refl::GetTypeInfo<EventTypes>()...}; }
 
     template <typename... Functors>
         requires(sizeof...(Functors) == kEventsCount && (std::invocable<Functors, EventTypes> && ... && true))

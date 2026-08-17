@@ -27,12 +27,22 @@ public:
     [[nodiscard]] std::optional<std::chrono::nanoseconds> GetDeadline(const FramePacingFrame& frame);
 
 private:
+    struct TargetPeriod
+    {
+        u64 whole_nanoseconds;
+        u64 fractional_numerator;
+        u64 fractional_denominator;
+    };
+
+    [[nodiscard]] static std::optional<TargetPeriod> CalculateTargetPeriod(float framerate) noexcept;
     [[nodiscard]] std::optional<std::chrono::nanoseconds> GetFixedStepDeadline(
         const FramePacingFrame& frame) const noexcept;
+    [[nodiscard]] std::optional<i64> GetTargetOffset(u64 frame_index) const noexcept;
     [[nodiscard]] std::optional<std::chrono::nanoseconds> GetTargetDeadline(u64 frame_index) const noexcept;
     void AdvancePast(std::chrono::nanoseconds now) noexcept;
 
     std::optional<float> target_framerate_;
+    std::optional<TargetPeriod> target_period_;
     std::optional<std::chrono::nanoseconds> target_schedule_start_;
     u64 next_target_frame_ = 1;
 };

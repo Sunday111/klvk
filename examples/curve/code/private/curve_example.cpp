@@ -1,7 +1,7 @@
 #include <imgui.h>
 
-#include <edt/math/math.hpp>
 #include <cmath>
+#include <edt/math/math.hpp>
 
 #include "klvk/application.hpp"
 #include "klvk/error_handling.hpp"

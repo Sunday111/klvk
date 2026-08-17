@@ -200,7 +200,7 @@ void TestExceptionFlushesMutations()
 class SwitchingListener final : public klvk::events::IEventListener
 {
 public:
-    std::vector<const refl::Type*> GetEventTypes() const override
+    [[nodiscard]] std::vector<const refl::Type*> GetEventTypes() const override
     {
         return {listen_to_b ? refl::GetTypeInfo<EventB>() : refl::GetTypeInfo<EventA>()};
     }
@@ -250,7 +250,10 @@ public:
 
     ~OwnedListener() override { *destroyed_ = true; }
 
-    std::vector<const refl::Type*> GetEventTypes() const override { return {refl::GetTypeInfo<EventA>()}; }
+    [[nodiscard]] std::vector<const refl::Type*> GetEventTypes() const override
+    {
+        return {refl::GetTypeInfo<EventA>()};
+    }
 
     CallbackFunction MakeCallbackFunction(size_t) override
     {

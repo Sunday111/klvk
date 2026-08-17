@@ -54,6 +54,11 @@ public:
         float segment_pixel_length);
 
 private:
+    [[nodiscard]] static vk::UniquePipeline CreatePipeline(
+        Application& app,
+        const PipelineLayout& pipeline_layout,
+        vk::Format color_format,
+        CompositeMode composite);
     void EnsureBuffers(size_t frame_index, size_t vertex_bytes, size_t index_bytes);
 
     Application* app_ = nullptr;
