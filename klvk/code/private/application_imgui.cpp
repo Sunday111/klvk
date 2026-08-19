@@ -20,6 +20,12 @@ namespace klvk
 namespace
 {
 
+constexpr float PointsToPixels(float points, float logical_dots_per_inch)
+{
+    constexpr float points_per_inch = 72.f;
+    return points * logical_dots_per_inch / points_per_inch;
+}
+
 VKAPI_ATTR void VKAPI_CALL UnusedPresentationFunction() {}
 
 bool IsPresentationFunction(std::string_view name)
@@ -74,8 +80,8 @@ void ApplicationImGui::Initialize(
     GlfwState& glfw,
     Window& window,
     bool offscreen,
-    float content_scale,
-    float layout_scale,
+    edt::Vec2f content_scale,
+    edt::Vec2f framebuffer_scale,
     const std::optional<std::filesystem::path>& ini_path,
     const std::filesystem::path& font_path)
 {
@@ -133,14 +139,17 @@ void ApplicationImGui::Initialize(
     ErrorHandling::Ensure(ImGui_ImplVulkan_Init(&init_info), "Failed to initialize imgui vulkan backend");
     vulkan_initialized_ = true;
 
-    ImGui::GetStyle().ScaleAllSizes(layout_scale);
+    ImGui::GetStyle().ScaleAllSizes(content_scale.x() / framebuffer_scale.x());
     ImGuiIO& io = ImGui::GetIO();
 
     ImFontConfig font_config{};
-    font_config.SizePixels = 13 * content_scale;
+    constexpr float font_size_points = 10.f;
+    constexpr float base_logical_dots_per_inch = 96.f;
+    font_config.SizePixels =
+        PointsToPixels(font_size_points, base_logical_dots_per_inch * content_scale.y()) / framebuffer_scale.y();
+    font_config.RasterizerDensity = framebuffer_scale.y();
     ImFont* font = io.Fonts->AddFontFromFileTTF(font_path.string().c_str(), font_config.SizePixels, &font_config);
     ErrorHandling::Ensure(font != nullptr, "Failed to load ImGui font from {}", font_path.string());
-    font->Scale = layout_scale / content_scale;
 }
 
 void ApplicationImGui::Shutdown(GlfwState& glfw)

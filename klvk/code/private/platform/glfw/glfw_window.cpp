@@ -358,6 +358,14 @@ Vec2f Window::GetFramebufferScale() const
     return framebuffer_size / window_size.Cast<float>();
 }
 
+Vec2f Window::GetContentScale() const
+{
+    ErrorHandling::Ensure(impl_->window != nullptr, "Cannot get content scale without a native window");
+    Vec2f content_scale{};
+    glfwGetWindowContentScale(impl_->window, &content_scale.x(), &content_scale.y());
+    return content_scale;
+}
+
 bool Window::IsHovered() const noexcept
 {
     return impl_->window && glfwGetWindowAttrib(impl_->window, GLFW_HOVERED);

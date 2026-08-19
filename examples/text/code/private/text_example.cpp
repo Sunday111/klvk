@@ -71,7 +71,7 @@ class TextApp : public klvk::Application
         GetWindow().SetSize(640, 480);
         GetWindow().SetTitle("Text");
 
-        font_ = klvk::FontFace::FromFile(GetContentDir() / "fonts" / "DejaVuSansMono.ttf");
+        font_ = klvk::FontFace::FromFile(GetContentDir() / "fonts" / "JetBrainsMonoNerdFontMono-Regular.ttf");
 
         klvk::DeviceContext& context = GetDeviceContext();
         descriptor_sets_ =
