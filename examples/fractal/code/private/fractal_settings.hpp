@@ -15,8 +15,6 @@ public:
 
     Vec2f fractal_constant{-0.4f, 0.6f};
 
-    float time = 0.0f;
-    bool use_current_time = true;
     int color_seed = 1234;
     bool interpolate_colors = true;
     bool interpolate_with_hsv = true;
@@ -26,20 +24,12 @@ public:
     bool changed = true;
     int color_mode = 0;
     Vec2f fractal_power{2.f, 0.f};
+    float view_rotation_radians = 0.f;
     klvk::Camera2d camera;
     klvk::Viewport viewport;
     size_t num_colors;
 
     void RandomizeColors();
-
-    void SetCurrentTime(float current_time)
-    {
-        if (use_current_time)
-        {
-            time = current_time;
-            changed = true;
-        }
-    }
 
     void SetViewport(const klvk::Viewport& new_viewport)
     {

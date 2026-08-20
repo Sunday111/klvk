@@ -92,7 +92,7 @@ void SimpleGpuRenderer::ApplySettings(const FractalSettings& settings)
 
 void SimpleGpuRenderer::Render(vk::CommandBuffer command_buffer, const FractalSettings& settings)
 {
-    render_transforms_.Update(settings.camera, settings.viewport);
+    UpdateFractalRenderTransforms(render_transforms_, settings);
 
     CmdSetGlStyleViewport(command_buffer, settings.viewport, app_->GetWindow().GetSize());
     command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "klvk/application.hpp"
+#include "klvk/camera/camera_2d.hpp"
 #include "klvk/camera/viewport.hpp"
 #include "klvk/shader/shader_stages.hpp"
 #include "klvk/vulkan/pipeline_layout.hpp"
@@ -17,6 +18,8 @@ struct FractalPushConstants
 };
 
 static_assert(sizeof(FractalPushConstants) == 72);
+
+void UpdateFractalRenderTransforms(klvk::RenderTransforms2d& render_transforms, const class FractalSettings& settings);
 
 [[nodiscard]] FractalPushConstants MakeFractalPushConstants(
     const class FractalSettings& settings,
