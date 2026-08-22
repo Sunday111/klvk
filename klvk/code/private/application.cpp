@@ -309,9 +309,8 @@ void Application::Initialize()
 
     const std::optional<std::filesystem::path> imgui_ini_path =
         state_->diagnostic_config_.has_value() ? std::nullopt : std::optional{state_->executable_dir_ / "imgui.ini"};
-    const auto font_path = GetContentDir() / "fonts" / "DejaVuSansMono.ttf";
-    const edt::Vec2f content_scale =
-        state_->offscreen_ ? edt::Vec2f{1.f, 1.f} : state_->glfw_.GetPrimaryMonitorContentScale();
+    const auto font_path = GetContentDir() / "fonts" / "JetBrainsMonoNerdFontMono-Regular.ttf";
+    const edt::Vec2f content_scale = state_->offscreen_ ? edt::Vec2f{1.f, 1.f} : state_->window_->GetContentScale();
     const edt::Vec2f framebuffer_scale =
         state_->offscreen_ ? edt::Vec2f{1.f, 1.f} : state_->window_->GetFramebufferScale();
     state_->imgui_.Initialize(
@@ -320,8 +319,8 @@ void Application::Initialize()
         state_->glfw_,
         *state_->window_,
         state_->offscreen_,
-        content_scale.x(),
-        content_scale.x() / framebuffer_scale.x(),
+        content_scale,
+        framebuffer_scale,
         imgui_ini_path,
         font_path);
 

@@ -8,6 +8,8 @@
             "glfw",
             "vulkan_headers"
         ],
-        "Private": []
+        "Private": [
+            "freetype"
+        ]
     }
 }

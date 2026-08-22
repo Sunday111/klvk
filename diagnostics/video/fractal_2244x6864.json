@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "presentation": "offscreen",
+  "framebuffer_size": [2244, 6864],
+  "clock": {
+    "mode": "fixed",
+    "step_ns": 33333333
+  },
+  "video": {
+    "path": "captures/fractal_2244x6864.mp4",
+    "encoding": "h264",
+    "compression_level": 0,
+    "include_ui": false,
+    "log_ffmpeg": false
+  },
+  "exit": {
+    "frame": 600
+  },
+  "application": {
+    "camera": {
+      "zoom": 2.2
+    },
+    "view_rotation_degrees": -10.0,
+    "color_mode": 0,
+    "colors": [
+      [0.035, 0.12, 0.16],
+      [0.04, 0.28, 0.32],
+      [0.08, 0.50, 0.52],
+      [0.22, 0.72, 0.62],
+      [0.65, 0.86, 0.70],
+      [0.96, 0.82, 0.46],
+      [0.98, 0.57, 0.34],
+      [0.87, 0.30, 0.34],
+      [0.45, 0.25, 0.50],
+      [0.08, 0.16, 0.28]
+    ],
+    "show_interpolation_widget": false,
+    "constant_animation": {
+      "center": [-0.4, 0.6],
+      "radius": [0.01, 0.01],
+      "period_seconds": 20.0,
+      "start_phase_turns": 0.0
+    }
+  }
+}

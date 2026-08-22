@@ -79,7 +79,7 @@ decoding library — today stb, which is convenient and not much more than that.
 replacing that file, or dropping it and linking a module that defines the same function; nothing else
 changes, because nothing else knows what the decoder is.
 
-`content/fonts` carries DejaVu Sans Mono and its licence so the examples need nothing installed.
+`content/fonts` carries JetBrains Mono Nerd Font Mono and its licence so the examples need nothing installed.
 
 `examples/text` is driven by the keyboard: **space** adds a random character at the current size, and
 **enter** starts the line again at the next size. Each size keeps its own atlas for the life of the

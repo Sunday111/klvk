@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 
+#include "edt/math/matrix.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/vulkan/vulkan_common.hpp"
 
@@ -24,8 +25,8 @@ public:
         GlfwState& glfw,
         Window& window,
         bool offscreen,
-        float content_scale,
-        float layout_scale,
+        edt::Vec2f content_scale,
+        edt::Vec2f framebuffer_scale,
         const std::optional<std::filesystem::path>& ini_path,
         const std::filesystem::path& font_path);
     void Shutdown(GlfwState& glfw);

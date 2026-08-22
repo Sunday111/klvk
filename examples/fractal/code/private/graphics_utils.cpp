@@ -5,6 +5,18 @@
 #include "klvk/vulkan/device_context.hpp"
 #include "klvk/vulkan/graphics_pipeline_builder.hpp"
 
+void UpdateFractalRenderTransforms(klvk::RenderTransforms2d& render_transforms, const FractalSettings& settings)
+{
+    render_transforms.Update(settings.camera, settings.viewport);
+    if (settings.view_rotation_radians == 0.f) return;
+
+    const edt::Mat3f view_rotation = edt::Math::MatMul(
+        edt::Math::TranslationMatrix(settings.camera.eye),
+        edt::Math::RotationMatrix2d(-settings.view_rotation_radians),
+        edt::Math::TranslationMatrix(-settings.camera.eye));
+    render_transforms.screen_to_world = edt::Math::MatMul(view_rotation, render_transforms.screen_to_world);
+}
+
 FractalPushConstants MakeFractalPushConstants(const FractalSettings& settings, const edt::Mat3f& screen_to_world)
 {
     FractalPushConstants push_constants{

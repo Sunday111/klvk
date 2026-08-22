@@ -151,7 +151,7 @@ void SimpleCpuRenderer::PrepareFrame(vk::CommandBuffer command_buffer, const Fra
 {
     if (!image_) return;
 
-    render_transforms_.Update(settings.camera, settings.viewport);
+    UpdateFractalRenderTransforms(render_transforms_, settings);
 
     const auto [w, h] = image_size_.Tuple();
     image_buffer_.resize(w * h);
@@ -164,8 +164,7 @@ void SimpleCpuRenderer::PrepareFrame(vk::CommandBuffer command_buffer, const Fra
             edt::Vec2<size_t> frag_coord_u{x, y};
             auto frag_coord_f = frag_coord_u.Cast<float>();
 
-            auto world = edt::Math::TransformPos(render_transforms_.screen_to_world, frag_coord_f);
-
+            const auto world = edt::Math::TransformPos(render_transforms_.screen_to_world, frag_coord_f);
             auto z = world;
 
             size_t i = 0;

@@ -228,7 +228,7 @@ void CountingRenderer::PrepareFrame(vk::CommandBuffer command_buffer, const Frac
         app_->GetDeviceContext().GetDevice().updateDescriptorSets(writes, {});
     }
 
-    render_transforms_.Update(settings.camera, settings.viewport);
+    UpdateFractalRenderTransforms(render_transforms_, settings);
 
     auto global_barrier = [&](vk::PipelineStageFlags2 source_stage,
                               vk::AccessFlags2 source_access,

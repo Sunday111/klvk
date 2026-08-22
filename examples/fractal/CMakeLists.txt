@@ -6,6 +6,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/clipboard_windows.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/fractal_app.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/fractal_app.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/fractal_diagnostic_config.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/fractal_diagnostic_config.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/fractal_example_main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/fractal_settings.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/fractal_settings.hpp

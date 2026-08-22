@@ -2,7 +2,9 @@
 
 #include <klvk/events/event_listener_interface.hpp>
 #include <klvk/events/event_manager.hpp>
+#include <optional>
 
+#include "fractal_diagnostic_config.hpp"
 #include "fractal_settings.hpp"
 #include "klvk/application.hpp"
 #include "klvk/ui/imgui_value_combo.hpp"
@@ -43,6 +45,12 @@ public:
     FractalSettings settings_{10};
     bool screenshot = false;
     bool screenshot_with_ui = false;
+    bool show_interpolation_widget_ = true;
+
+    std::optional<FractalDiagnosticConfig::ConstantAnimation> constant_animation_;
+
+    void ApplyDiagnosticConfig();
+    void UpdateAnimation();
 
     template <typename T>
     [[nodiscard]] static std::unique_ptr<FractalRenderer> RendererFactoryFn(

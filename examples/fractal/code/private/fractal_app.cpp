@@ -1,6 +1,7 @@
 #include "fractal_app.hpp"
 
-#include <klvk/error_handling.hpp>
+#include <cmath>
+#include <numbers>
 
 #include "clipboard.hpp"
 #include "imgui.h"
@@ -16,6 +17,54 @@
 
 FractalApp::FractalApp() = default;
 FractalApp::~FractalApp() noexcept = default;
+
+void FractalApp::ApplyDiagnosticConfig()
+{
+    const std::optional config = FractalDiagnosticConfig::FromJSON(GetDiagnosticApplicationConfig());
+    if (!config) return;
+
+    if (config->renderer)
+    {
+        size_t index = 0;
+        if (*config->renderer == FractalDiagnosticConfig::Renderer::Counting) index = 1;
+        if (*config->renderer == FractalDiagnosticConfig::Renderer::SimpleCpu) index = 2;
+        renderer_combo_.SetSelectedIndex(index);
+    }
+    if (config->camera)
+    {
+        if (config->camera->eye) settings_.camera.eye = *config->camera->eye;
+        if (config->camera->zoom)
+        {
+            settings_.camera.zoom = *config->camera->zoom;
+            zoom_power_ = std::log(settings_.camera.zoom) / std::log(1.05f);
+        }
+    }
+    if (config->color_mode) settings_.color_mode = *config->color_mode;
+    if (config->colors)
+    {
+        settings_.colors = *config->colors;
+        settings_.num_colors = settings_.colors.size();
+        settings_.color_positions.assign(settings_.num_colors, 0.f);
+        settings_.DistributePositionsUniformly();
+    }
+    if (config->show_interpolation_widget)
+    {
+        show_interpolation_widget_ = *config->show_interpolation_widget;
+    }
+    if (config->view_rotation_radians) settings_.view_rotation_radians = *config->view_rotation_radians;
+    constant_animation_ = config->constant_animation;
+}
+
+void FractalApp::UpdateAnimation()
+{
+    if (!constant_animation_) return;
+
+    const float phase =
+        2.f * std::numbers::pi_v<float> *
+        (GetTimeSeconds() / constant_animation_->period_seconds + constant_animation_->start_phase_turns);
+    settings_.fractal_constant =
+        constant_animation_->center + constant_animation_->radius * edt::Vec2f{std::cos(phase), std::sin(phase)};
+}
 
 void FractalApp::Initialize()
 {
@@ -37,27 +86,7 @@ void FractalApp::Initialize()
     renderer_combo_.EmplaceItem("Simple GPU", RendererFactoryFn<SimpleGpuRenderer>);
     renderer_combo_.EmplaceItem("Counting", RendererFactoryFn<CountingRenderer>);
     renderer_combo_.EmplaceItem("Simple CPU", RendererFactoryFn<SimpleCpuRenderer>);
-
-    size_t renderer_index = 0;
-    if (const nlohmann::json* config = GetDiagnosticApplicationConfig(); config && config->contains("renderer"))
-    {
-        const auto& renderer = config->at("renderer");
-        klvk::ErrorHandling::Ensure(renderer.is_string(), "Diagnostic application.renderer must be a string");
-        const std::string name = renderer.get<std::string>();
-        if (name == "counting")
-        {
-            renderer_index = 1;
-        }
-        else if (name == "simple_cpu")
-        {
-            renderer_index = 2;
-        }
-        else
-        {
-            klvk::ErrorHandling::Ensure(name == "simple_gpu", "Unknown diagnostic renderer '{}'", name);
-        }
-    }
-    renderer_combo_.SetSelectedIndex(renderer_index);
+    ApplyDiagnosticConfig();
     renderer_ = renderer_combo_.GetSelectedItem()(*this, kMaxIterations);
 }
 
@@ -100,7 +129,7 @@ void FractalApp::BeforeSwapchainRender(vk::CommandBuffer command_buffer)
     }
 
     HandleInput();
-    settings_.SetCurrentTime(GetTimeSeconds());
+    UpdateAnimation();
 
     settings_.SetViewport(
         klvk::Viewport{
@@ -129,10 +158,13 @@ void FractalApp::Tick()
         screenshot = false;
     }
 
-    klvk::Viewport widget_viewport;
-    widget_viewport.MatchWindowSize(GetWindow().GetSize());
-    widget_viewport.size.y() = 50;
-    interpolation_widget_->Render(GetCurrentCommandBuffer(), widget_viewport, settings_);
+    if (show_interpolation_widget_)
+    {
+        klvk::Viewport widget_viewport;
+        widget_viewport.MatchWindowSize(GetWindow().GetSize());
+        widget_viewport.size.y() = 50;
+        interpolation_widget_->Render(GetCurrentCommandBuffer(), widget_viewport, settings_);
+    }
 
     if (ImGui::Begin("Settings"))
     {
