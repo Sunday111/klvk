@@ -1,13 +1,13 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
 
+#include "json/json_reader.hpp"
 #include "klvk/diagnostics/diagnostic_run_config.hpp"
 
 namespace klvk
 {
-
-class JsonReader;
 
 // The diagnostic document, read and written in one place. Reading produces a
 // whole DiagnosticRunConfig with every field validated and every path resolved,
@@ -30,6 +30,41 @@ public:
     [[nodiscard]] static std::optional<DiagnosticPresentation> PresentationFromName(std::string_view name) noexcept;
 
 private:
+    static constexpr auto kPresentationNames = std::to_array<JsonReader::EnumName<DiagnosticPresentation>>({
+        {.name = "visible", .value = DiagnosticPresentation::Visible},
+        {.name = "hidden", .value = DiagnosticPresentation::Hidden},
+        {.name = "offscreen", .value = DiagnosticPresentation::Offscreen},
+    });
+    static constexpr std::string_view kPresentationExpectation = "'visible', 'hidden', or 'offscreen'";
+
+    static constexpr auto kEncodingNames = std::to_array<JsonReader::EnumName<DiagnosticVideoEncoding>>({
+        {.name = "av1", .value = DiagnosticVideoEncoding::Av1},
+        {.name = "h264", .value = DiagnosticVideoEncoding::H264},
+        {.name = "mpeg4", .value = DiagnosticVideoEncoding::Mpeg4},
+    });
+    static constexpr std::string_view kEncodingExpectation = "'av1', 'h264', or 'mpeg4'";
+
+    static constexpr auto kEncodingDeviceNames = std::to_array<JsonReader::EnumName<DiagnosticVideoEncodingDevice>>({
+        {.name = "cpu", .value = DiagnosticVideoEncodingDevice::Cpu},
+        {.name = "gpu", .value = DiagnosticVideoEncodingDevice::Gpu},
+    });
+    static constexpr std::string_view kEncodingDeviceExpectation = "'cpu' or 'gpu'";
+
+    static constexpr auto kActionNames = std::to_array<JsonReader::EnumName<InputAction>>({
+        {.name = "press", .value = InputAction::Press},
+        {.name = "release", .value = InputAction::Release},
+    });
+    static constexpr std::string_view kActionExpectation = "'press' or 'release'";
+
+    static constexpr auto kMouseButtonNames = std::to_array<JsonReader::EnumName<MouseButton>>({
+        {.name = "left", .value = MouseButton::Left},
+        {.name = "right", .value = MouseButton::Right},
+        {.name = "middle", .value = MouseButton::Middle},
+        {.name = "button4", .value = MouseButton::Button4},
+        {.name = "button5", .value = MouseButton::Button5},
+    });
+    static constexpr std::string_view kMouseButtonExpectation = "'left', 'right', 'middle', 'button4', or 'button5'";
+
     // Exactly one of these is present on every scheduled entry, spelled as a
     // frame or as a time. Read in one place so captures, input and exit agree.
     struct Trigger

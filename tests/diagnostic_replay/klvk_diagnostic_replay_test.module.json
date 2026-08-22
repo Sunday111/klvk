@@ -1,0 +1,5 @@
+{
+    "ModuleType": "Executable",
+    "Dependencies": {"Public": ["klvk"]},
+    "ExtraCMakeFiles": ["ffmpeg", "private_headers"]
+}
