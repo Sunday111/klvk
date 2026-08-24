@@ -117,6 +117,24 @@ timers.
 
 ## Diagnostic runs, framebuffer capture, and video
 
+Ordinary interactive applications include a collapsed `klvk Diagnostics` ImGui window. Its CPU profiler starts Linux
+`perf` only when requested and attaches it to the running process. A record can be paused, resumed, and stopped. Once
+stopped, it can be exported to the Linux perf text format accepted by [Speedscope](https://www.speedscope.app). Export
+runs in the background and the window reports the number of bytes written. Profiles are written under
+`perf-recordings/klvk-profile-<process-id>` next to the executable's `content` directory, with a numeric suffix when
+that session directory already exists. Configured diagnostic runs do not create the window, so it cannot affect
+deterministic captures.
+
+The profiler is also available independently of ImGui through `klvk/diagnostics/perf_recorder.hpp`. Construct a
+`PerfRecorder` with an output directory, call `Start`, use `Pause` and `Resume` to select regions of interest, and call
+`Update` to process state changes. `Stop` requests finalization; `Finish` and destruction stop and finish an active
+record if needed. The recorder produces raw `perf.data` files only.
+
+`SpeedscopeExporter`, available through
+`klvk/diagnostics/speedscope_exporter.hpp`, independently converts one raw recording to the Linux perf text format,
+supports cancellation, and exposes thread-safe byte progress. Each exporter processes one operation at a time. `perf`
+must be installed and permitted to profile the process.
+
 `Application::RunWithArguments(argc, argv)` recognizes `--klvk-diagnostics <file>` and
 `--klvk-diagnostics=<file>`. The JSON file
 controls presentation, deterministic timing, framebuffer and video capture, and automatic exit. All klvk examples use

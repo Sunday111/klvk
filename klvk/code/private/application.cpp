@@ -11,8 +11,11 @@
 #include "application_frame_clock.hpp"
 #include "application_imgui.hpp"
 #include "diagnostics/diagnostic_runner.hpp"
+#include "diagnostics/diagnostic_window.hpp"
 #include "diagnostics/input_recorder.hpp"
 #include "edt/functional/on_scope_leave.hpp"
+#include "klvk/diagnostics/perf_recorder.hpp"
+#include "klvk/diagnostics/speedscope_exporter.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/events/application_events.hpp"
 #include "klvk/events/event_listener_method.hpp"
@@ -72,6 +75,9 @@ struct Application::State
     std::optional<std::filesystem::path> input_record_path_;
     std::optional<std::filesystem::path> write_checkpoints_path_;
     std::unique_ptr<DiagnosticInputRecorder> input_recorder_;
+    std::unique_ptr<PerfRecorder> perf_recorder_;
+    std::unique_ptr<SpeedscopeExporter> speedscope_exporter_;
+    std::unique_ptr<DiagnosticWindow> diagnostic_window_;
 
     // Depth and stencil share one image, so either one being enabled binds it.
     [[nodiscard]] bool DepthStencilAttachmentEnabled() const
@@ -203,6 +209,9 @@ Application::~Application()
         state_->device_context_->WaitIdle();
     }
     state_->diagnostic_runner_.reset();
+    state_->diagnostic_window_.reset();
+    state_->perf_recorder_.reset();
+    state_->speedscope_exporter_.reset();
     state_->imgui_.Shutdown(state_->glfw_);
     if (state_->device_context_)
     {
@@ -324,6 +333,23 @@ void Application::Initialize()
         imgui_ini_path,
         font_path);
 
+    if (!state_->diagnostic_config_.has_value())
+    {
+        const std::filesystem::path output_root = state_->executable_dir_ / "perf-recordings";
+        const std::string output_name = fmt::format("klvk-profile-{}", os::GetProcessId());
+        std::filesystem::path output_directory = output_root / output_name;
+        for (size_t sequence = 2; std::filesystem::exists(output_directory); ++sequence)
+        {
+            output_directory = output_root / fmt::format("{}-{}", output_name, sequence);
+        }
+        state_->perf_recorder_ = std::make_unique<PerfRecorder>(PerfRecorder::Config{
+            .output_directory = std::move(output_directory),
+        });
+        state_->speedscope_exporter_ = std::make_unique<SpeedscopeExporter>();
+        state_->diagnostic_window_ =
+            std::make_unique<DiagnosticWindow>(*state_->perf_recorder_, *state_->speedscope_exporter_);
+    }
+
     state_->InitTime();
 }
 
@@ -380,6 +406,7 @@ void Application::RunImpl()
             *state_->window_);
     }
     MainLoop();
+    if (state_->perf_recorder_) state_->perf_recorder_->Finish();
 
     // Make the device idle before returning, while the application object - and
     // any Vulkan resources it owns as members - are still alive. This is what
@@ -645,6 +672,8 @@ void Application::PostTick()
         state_->diagnostic_runner_->Advance(state_->completed_frames_ + 1, state_->GetElapsedTime());
     }
     const bool capture_without_ui = state_->diagnostic_runner_ && state_->diagnostic_runner_->NeedsReadback(false);
+
+    if (state_->diagnostic_window_) state_->diagnostic_window_->Draw();
 
     // ImGui's pipeline is color-only. End an application's depth-enabled pass and
     // resume rendering the same color image without a depth attachment for the UI.

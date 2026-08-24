@@ -9,6 +9,8 @@
 #include "klvk/camera/camera_3d.hpp"
 #include "klvk/camera/viewport.hpp"
 #include "klvk/diagnostics/diagnostic_run_config.hpp"
+#include "klvk/diagnostics/perf_recorder.hpp"
+#include "klvk/diagnostics/speedscope_exporter.hpp"
 #include "klvk/error_handling.hpp"
 #include "klvk/events/application_events.hpp"
 #include "klvk/events/detail.hpp"

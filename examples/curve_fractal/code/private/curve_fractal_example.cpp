@@ -8,8 +8,10 @@
 #include <bit>
 #include <condition_variable>
 #include <edt/math/math.hpp>
+#include <edt/threading/thread_name.hpp>
 #include <mutex>
 #include <random>
+#include <string>
 #include <thread>
 
 #include "klvk/application.hpp"
@@ -199,13 +201,16 @@ class CurveFractalApp : public klvk::Application
             {
                 const Vec2f tile_min = Vec2<size_t>{x, y}.Cast<float>() * thread_tile + world_range.Min();
                 const auto range = edt::FloatRange2Df::FromMinMax(tile_min, tile_min + thread_tile);
-                producers_.emplace_back([this, range](const std::stop_token& stop) { ProducerThread(stop, range); });
+                const size_t producer_index = producers_.size();
+                producers_.emplace_back([this, range, producer_index](const std::stop_token& stop)
+                                        { ProducerThread(stop, range, producer_index); });
             }
         }
     }
 
-    void ProducerThread(const std::stop_token& stop, const edt::FloatRange2Df world_range)
+    void ProducerThread(const std::stop_token& stop, const edt::FloatRange2Df world_range, size_t producer_index)
     {
+        edt::SetCurrentThreadName("klvk_curve_" + std::to_string(producer_index));
         constexpr size_t max_iterations = 2000;
         const int color_seed = std::bit_cast<int>(std::random_device()());
         Palette palette_settings{10};
