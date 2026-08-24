@@ -2,6 +2,7 @@
 
 #include <fmt/base.h>
 
+#include <edt/threading/thread_name.hpp>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -82,6 +83,7 @@ std::shared_ptr<const CompiledShader> ShaderCacheCoordinator::GetOrCompile(const
 
 void ShaderCacheCoordinator::WorkerMain()
 {
+    edt::SetCurrentThreadName("klvk_shader");
     auto next_flush = std::chrono::steady_clock::now() + flush_interval_;
     for (;;)
     {

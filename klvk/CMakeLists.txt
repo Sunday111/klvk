@@ -27,8 +27,14 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_video_encoder.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_video_recorder.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_video_recorder.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_window.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/diagnostic_window.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/input_recorder.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/input_recorder.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/perf_process.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/perf_process.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/perf_recorder.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostics/speedscope_exporter.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/events/event_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/filesystem/filesystem.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/image/image_decoder_stb.cpp
@@ -86,6 +92,8 @@ set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/camera/camera_3d.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/camera/viewport.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/diagnostics/diagnostic_run_config.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/diagnostics/perf_recorder.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/diagnostics/speedscope_exporter.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/error_handling.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/application_events.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/public/klvk/events/detail.hpp

@@ -22,6 +22,7 @@ extern "C"
 #include <cerrno>
 #include <condition_variable>
 #include <deque>
+#include <edt/threading/thread_name.hpp>
 #include <exception>
 #include <limits>
 #include <memory>
@@ -400,6 +401,7 @@ private:
 
     void WorkerMain() noexcept
     {
+        edt::SetCurrentThreadName("klvk_video");
         try
         {
             while (true)

@@ -9,6 +9,6 @@ list(APPEND imgui_sources ${YAE_imgui_sources_SOURCES}/backends/imgui_impl_vulka
 list(APPEND imgui_sources ${YAE_imgui_sources_SOURCES}/backends/imgui_impl_glfw.cpp)
 list(APPEND imgui_sources ${YAE_imgui_sources_SOURCES}/misc/freetype/imgui_freetype.cpp)
 add_library(${target_name} STATIC ${imgui_headers} ${imgui_sources})
-target_include_directories(${target_name} PUBLIC ${YAE_imgui_sources_SOURCES} SYSTEM)
+target_include_directories(${target_name} SYSTEM PUBLIC ${YAE_imgui_sources_SOURCES})
 target_compile_definitions(${target_name} PUBLIC IMGUI_ENABLE_FREETYPE IMGUI_IMPL_VULKAN_NO_PROTOTYPES VK_NO_PROTOTYPES)
 target_link_libraries(${target_name} PUBLIC glfw Vulkan-Headers PRIVATE freetype)

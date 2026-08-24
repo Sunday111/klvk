@@ -1,4 +1,5 @@
 .cache
+__pycache__/
 build
 cloned_repositories
 local-config.json
