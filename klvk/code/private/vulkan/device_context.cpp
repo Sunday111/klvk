@@ -289,17 +289,15 @@ void DeviceContext::CreateDevice()
 
 void DeviceContext::CreateAllocator()
 {
-    const VmaVulkanFunctions functions{
-        .vkGetInstanceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetInstanceProcAddr,
-        .vkGetDeviceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceProcAddr,
-    };
-    const VmaAllocatorCreateInfo create_info{
-        .physicalDevice = static_cast<VkPhysicalDevice>(physical_device_),
-        .device = static_cast<VkDevice>(device_.get()),
-        .pVulkanFunctions = &functions,
-        .instance = static_cast<VkInstance>(instance_.get()),
-        .vulkanApiVersion = vk::ApiVersion13,
-    };
+    VmaVulkanFunctions functions{};
+    functions.vkGetInstanceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetInstanceProcAddr;
+    functions.vkGetDeviceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceProcAddr;
+    VmaAllocatorCreateInfo create_info{};
+    create_info.physicalDevice = static_cast<VkPhysicalDevice>(physical_device_);
+    create_info.device = static_cast<VkDevice>(device_.get());
+    create_info.pVulkanFunctions = &functions;
+    create_info.instance = static_cast<VkInstance>(instance_.get());
+    create_info.vulkanApiVersion = vk::ApiVersion13;
     VulkanCheck(static_cast<vk::Result>(vmaCreateAllocator(&create_info, &allocator_)));
 }
 

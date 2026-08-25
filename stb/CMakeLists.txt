@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.29)
 
 # stb is a pile of headers with no build of its own, so the checkout is added as
 # an include directory and the one translation unit that instantiates the

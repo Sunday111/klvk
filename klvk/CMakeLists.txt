@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.29)
 include(set_compiler_options)
 set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/application.cpp
@@ -174,12 +174,14 @@ target_link_libraries(klvk PRIVATE glfw
 target_include_directories(klvk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/code/public)
 target_include_directories(klvk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/code/private)
 include(${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/warnings.cmake)
 add_custom_target(klvk_copy_files ALL
     COMMAND ${Python3_EXECUTABLE} "${YAE_SUPPORT_ROOT}/scripts/stage_directories.py"
             --destination "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/content"
+            --destination-root "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
             --source "${CMAKE_CURRENT_SOURCE_DIR}/content"
-            --manifest "${CMAKE_CURRENT_BINARY_DIR}/klvk_copy_files_content.manifest"
+            --manifest "${YAE_STAGING_ROOT}/content/klvk_copy_files.manifest"
+            --active-manifests "${YAE_STAGING_PLAN}"
     COMMENT "stage content of klvk"
     VERBATIM)
+add_dependencies(klvk_copy_files yae_reconcile_staging)
 add_dependencies(klvk klvk_copy_files)

@@ -38,7 +38,8 @@ AllocatedImage CreateImage(
                                 .setUsage(usage)
                                 .setSharingMode(vk::SharingMode::eExclusive)
                                 .setInitialLayout(vk::ImageLayout::eUndefined);
-    const VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+    VmaAllocationCreateInfo allocation_info{};
+    allocation_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     const VkImageCreateInfo& raw_image_info = image_info;
     AllocatedImage result;
     VkImage image = VK_NULL_HANDLE;
@@ -71,9 +72,14 @@ AllocatedImage CreateImage(
 
 }  // namespace
 
-OffscreenRenderTarget::OffscreenRenderTarget(DeviceContext& context, edt::Vec2<u32> size, size_t image_count)
+OffscreenRenderTarget::OffscreenRenderTarget(
+    DeviceContext& context,
+    edt::Vec2<u32> size,
+    size_t image_count,
+    vk::ImageUsageFlags additional_color_usage)
     : context_(&context),
       depth_stencil_format_(SelectDepthStencilFormat(context.GetPhysicalDevice())),
+      additional_color_usage_(additional_color_usage),
       extent_{size.x(), size.y()}
 {
     ErrorHandling::Ensure(extent_.width != 0 && extent_.height != 0, "Offscreen render target size must be positive");
@@ -102,7 +108,7 @@ void OffscreenRenderTarget::CreateImages(size_t image_count)
                 *context_,
                 extent_,
                 kColorFormat,
-                vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc,
+                vk::ImageUsageFlagBits::eColorAttachment | additional_color_usage_,
                 vk::ImageAspectFlagBits::eColor);
             color_images_.push_back(color.image);
             color_allocations_.push_back(color.allocation);

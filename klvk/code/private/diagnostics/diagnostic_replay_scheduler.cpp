@@ -23,15 +23,23 @@ DiagnosticReplayScheduler::DiagnosticReplayScheduler(
     captures_.reserve(config.captures.size());
     queued_without_ui_.reserve(config.captures.size());
     queued_with_ui_.reserve(config.captures.size());
-    for (const DiagnosticCaptureConfig& capture : config.captures) captures_.push_back({.config = capture});
+    for (const DiagnosticCaptureConfig& capture : config.captures)
+    {
+        Capture scheduled{};
+        scheduled.config = capture;
+        captures_.push_back(std::move(scheduled));
+    }
     if (config.checkpoints.has_value())
     {
         ErrorHandling::Ensure(config.exit.frame.has_value(), "Diagnostic checkpoints were not validated");
         const u64 every = config.checkpoints->every_frames;
         for (u64 frame = every; frame <= *config.exit.frame; frame += every)
         {
-            captures_.push_back(
-                {.config = {.frame = frame, .include_ui = config.checkpoints->include_ui}, .checkpoint_frame = frame});
+            Capture scheduled{};
+            scheduled.config.frame = frame;
+            scheduled.config.include_ui = config.checkpoints->include_ui;
+            scheduled.checkpoint_frame = frame;
+            captures_.push_back(std::move(scheduled));
             if (frame > std::numeric_limits<u64>::max() - every) break;
         }
     }
@@ -139,7 +147,9 @@ bool DiagnosticReplayScheduler::HasCaptureDue(bool include_ui) const noexcept
 DiagnosticCaptureBatch DiagnosticReplayScheduler::GetCaptureBatch(bool include_ui) const
 {
     const auto& queue = include_ui ? queued_with_ui_ : queued_without_ui_;
-    DiagnosticCaptureBatch batch{.capture_indices = queue, .include_ui = include_ui};
+    DiagnosticCaptureBatch batch{};
+    batch.capture_indices = queue;
+    batch.include_ui = include_ui;
     batch.paths.reserve(queue.size());
     for (size_t capture_index : queue)
     {
