@@ -74,7 +74,14 @@ public:
         const std::filesystem::path& log_path,
         const std::stop_token& stop_token) const
     {
-        if (stop_token.stop_requested()) return {.state = ResultState::Cancelled};
+        const auto result_with_state = [](ResultState state)
+        {
+            Result result{};
+            result.state = state;
+            return result;
+        };
+
+        if (stop_token.stop_requested()) return result_with_state(ResultState::Cancelled);
 
         bool expected = false;
         if (!exporting_.compare_exchange_strong(expected, true, std::memory_order_acquire))
@@ -106,9 +113,8 @@ public:
         {
             if (stop_token.stop_requested())
             {
-                return CancelExport(process, output_path)
-                           ? Result{.state = ResultState::Cancelled}
-                           : Result{.state = ResultState::Failed, .error = "Failed to cancel perf script"};
+                if (CancelExport(process, output_path)) return result_with_state(ResultState::Cancelled);
+                return {.state = ResultState::Failed, .error = "Failed to cancel perf script"};
             }
 
             int status = 0;
@@ -126,7 +132,7 @@ public:
 
                 const uintmax_t size = ExportedSize(output_path);
                 progress_.store(size, std::memory_order_relaxed);
-                return {.state = size == 0 ? ResultState::Empty : ResultState::Complete};
+                return result_with_state(size == 0 ? ResultState::Empty : ResultState::Complete);
             }
             if (wait_result < 0 && errno != EINTR)
             {

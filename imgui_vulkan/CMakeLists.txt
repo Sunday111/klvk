@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.29)
 
 set(target_name imgui_vulkan)
 file(GLOB imgui_headers "${YAE_imgui_sources_SOURCES}/*.h")

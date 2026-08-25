@@ -23,8 +23,7 @@
         ]
     },
     "ExtraCMakeFiles": [
-        "ffmpeg",
-        "warnings"
+        "ffmpeg"
     ],
     "CopyDirectoriesAfterBuild": [
         "content"

@@ -37,6 +37,9 @@ void EnsureThrows(Function&& function, std::string_view message)
 FramePacingFrame OrdinaryFrame(std::chrono::nanoseconds frame_start, std::chrono::nanoseconds now)
 {
     return FramePacingFrame{
+        .fixed_step_nanoseconds = std::nullopt,
+        .pace_fixed_step_to_real_time = false,
+        .completed_frames = 0,
         .application_start = 1s,
         .frame_start = frame_start,
         .now = now,

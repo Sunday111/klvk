@@ -297,7 +297,8 @@ class CurveFractalApp : public klvk::Application
                 .setUsage(vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled)
                 .setSharingMode(vk::SharingMode::eExclusive)
                 .setInitialLayout(vk::ImageLayout::eUndefined);
-        const VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+        VmaAllocationCreateInfo allocation_info{};
+        allocation_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
         const VkImageCreateInfo& raw_image_info = image_info;
         VkImage raw_image = nullptr;
         klvk::VulkanCheck(

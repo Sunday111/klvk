@@ -18,7 +18,11 @@ class OffscreenRenderTarget final : public RenderTarget
 public:
     static constexpr vk::Format kColorFormat = vk::Format::eR8G8B8A8Unorm;
 
-    OffscreenRenderTarget(DeviceContext& context, edt::Vec2<u32> size, size_t image_count);
+    OffscreenRenderTarget(
+        DeviceContext& context,
+        edt::Vec2<u32> size,
+        size_t image_count,
+        vk::ImageUsageFlags additional_color_usage = vk::ImageUsageFlagBits::eTransferSrc);
     OffscreenRenderTarget(const OffscreenRenderTarget&) = delete;
     OffscreenRenderTarget(OffscreenRenderTarget&&) = delete;
     ~OffscreenRenderTarget() override;
@@ -41,6 +45,7 @@ private:
 
     DeviceContext* context_ = nullptr;
     vk::Format depth_stencil_format_ = vk::Format::eUndefined;
+    vk::ImageUsageFlags additional_color_usage_;
     vk::Extent2D extent_{};
     std::vector<vk::Image> color_images_;
     std::vector<VmaAllocation> color_allocations_;

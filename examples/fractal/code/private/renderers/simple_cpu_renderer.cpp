@@ -97,7 +97,8 @@ void SimpleCpuRenderer::ApplySettings(const FractalSettings& settings)
                 .setUsage(vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst)
                 .setSharingMode(vk::SharingMode::eExclusive)
                 .setInitialLayout(vk::ImageLayout::eUndefined);
-        const VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO};
+        VmaAllocationCreateInfo allocation_info{};
+        allocation_info.usage = VMA_MEMORY_USAGE_AUTO;
         const VkImageCreateInfo& raw_image_info = image_info;
         VkImage raw_image = nullptr;
         klvk::VulkanCheck(

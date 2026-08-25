@@ -28,7 +28,8 @@ GpuBuffer::GpuBuffer(
     const auto buffer_info =
         vk::BufferCreateInfo{}.setSize(size).setUsage(usage).setSharingMode(vk::SharingMode::eExclusive);
 
-    VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO};
+    VmaAllocationCreateInfo allocation_info{};
+    allocation_info.usage = VMA_MEMORY_USAGE_AUTO;
     if (host_access != GpuBufferHostAccess::None)
     {
         const VmaAllocationCreateFlags access_flag = host_access == GpuBufferHostAccess::SequentialWrite

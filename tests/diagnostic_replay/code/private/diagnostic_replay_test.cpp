@@ -50,11 +50,14 @@ void TestFramePhasesAndCompletion()
     klvk::events::EventManager events;
     QuitObserver quit(events);
     klvk::DiagnosticRunConfig config;
-    config.input = {
-        {.frame = 1, .event = klvk::DiagnosticKeyInput{.key = klvk::Key::W, .action = klvk::InputAction::Press}}};
+    config.input = {{
+        .frame = 1,
+        .time_ns = std::nullopt,
+        .event = klvk::DiagnosticKeyInput{.key = klvk::Key::W, .action = klvk::InputAction::Press},
+    }};
     config.captures = {
-        {.frame = 1, .path = "before_ui.ppm", .include_ui = false},
-        {.frame = 2, .path = "after_ui.ppm", .include_ui = true}};
+        {.frame = 1, .time_ns = std::nullopt, .path = "before_ui.ppm", .include_ui = false},
+        {.frame = 2, .time_ns = std::nullopt, .path = "after_ui.ppm", .include_ui = true}};
     config.dialogs = {{.frame = 1, .answer = "chosen.json"}, {.frame = 2, .answer = std::nullopt}};
     config.exit.frame = 3;
 
@@ -97,12 +100,18 @@ void TestTimeCatchUpAndAfterLastCapture()
     QuitObserver quit(events);
     klvk::DiagnosticRunConfig config;
     config.input = {
-        {.time_ns = 5, .event = klvk::DiagnosticKeyInput{.key = klvk::Key::A, .action = klvk::InputAction::Press}},
-        {.time_ns = 10, .event = klvk::DiagnosticKeyInput{.key = klvk::Key::B, .action = klvk::InputAction::Press}},
-        {.time_ns = 10, .event = klvk::DiagnosticKeyInput{.key = klvk::Key::C, .action = klvk::InputAction::Press}}};
+        {.frame = std::nullopt,
+         .time_ns = 5,
+         .event = klvk::DiagnosticKeyInput{.key = klvk::Key::A, .action = klvk::InputAction::Press}},
+        {.frame = std::nullopt,
+         .time_ns = 10,
+         .event = klvk::DiagnosticKeyInput{.key = klvk::Key::B, .action = klvk::InputAction::Press}},
+        {.frame = std::nullopt,
+         .time_ns = 10,
+         .event = klvk::DiagnosticKeyInput{.key = klvk::Key::C, .action = klvk::InputAction::Press}}};
     config.captures = {
-        {.time_ns = 5, .path = "first.ppm", .include_ui = false},
-        {.time_ns = 10, .path = "second.ppm", .include_ui = false}};
+        {.frame = std::nullopt, .time_ns = 5, .path = "first.ppm", .include_ui = false},
+        {.frame = std::nullopt, .time_ns = 10, .path = "second.ppm", .include_ui = false}};
     config.exit.after_last_capture = true;
 
     std::vector<klvk::DiagnosticInputEvent> applied;
@@ -133,8 +142,8 @@ void TestCheckpointCapturePlan()
 {
     klvk::events::EventManager events;
     klvk::DiagnosticRunConfig config;
-    config.captures = {{.frame = 2, .path = "frame.ppm", .include_ui = false}};
-    config.checkpoints = klvk::DiagnosticCheckpointConfig{.every_frames = 2, .include_ui = false};
+    config.captures = {{.frame = 2, .time_ns = std::nullopt, .path = "frame.ppm", .include_ui = false}};
+    config.checkpoints = klvk::DiagnosticCheckpointConfig{.every_frames = 2, .include_ui = false, .expected = {}};
     config.exit.frame = 5;
 
     klvk::DiagnosticReplayScheduler replay(config, events, [](const klvk::DiagnosticInputEvent&) {});
@@ -157,8 +166,8 @@ void TestCaptureBatchStateTransitions()
     klvk::events::EventManager events;
     klvk::DiagnosticRunConfig config;
     config.captures = {
-        {.frame = 1, .path = "first.ppm", .include_ui = false},
-        {.frame = 2, .path = "second.ppm", .include_ui = false}};
+        {.frame = 1, .time_ns = std::nullopt, .path = "first.ppm", .include_ui = false},
+        {.frame = 2, .time_ns = std::nullopt, .path = "second.ppm", .include_ui = false}};
     config.exit.frame = 3;
 
     klvk::DiagnosticReplayScheduler replay(config, events, [](const klvk::DiagnosticInputEvent&) {});
