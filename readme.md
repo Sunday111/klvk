@@ -1,306 +1,38 @@
 # klvk
 
-Vulkan rendering library. A Vulkan counterpart of [klgl](https://github.com/Sunday111/klgl) with the same high-level
-API (`Application`, `Window`, events, camera) built on Vulkan 1.3 with dynamic rendering.
+klvk is a C++23 Vulkan rendering library for compact interactive applications, visualizations, and experiments. It
+provides an application loop, window and input events, dynamic rendering, resource ownership, shader compilation and
+reflection, ImGui integration, cameras, text, and focused 2D renderers without hiding Vulkan command recording.
 
-- Vulkan API types, dynamic dispatch, and traced system exceptions via
-  [Vulkan-Hpp](https://github.com/Sunday111/Vulkan-Hpp/tree/cpptrace).
-- Memory management via [VulkanMemoryAllocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator).
-- Slang shaders are staged at build time and compiled to SPIR-V on demand, then cached on disk.
-- Slang shader files must currently be self-contained. Imports and includes fail explicitly until persistent shader
-  cache entries track and validate transitive source dependencies.
-- `ShaderCacheManager` coalesces concurrent requests, retains SPIR-V in memory, and periodically persists validated,
-  content-addressed entries from its worker thread. By default the persistent `shader_cache` directory is created next
-  to the executable's `content` directory; embedders may provide an explicit path.
-- ImGui with the GLFW + Vulkan backends.
+## Highlights
 
-This is a [yae](https://github.com/Sunday111/yae) package: add it as a package dependency and link the `klvk` module.
-The current `yae-slang` package provides a verified binary artifact only for Linux x86-64, so Slang-enabled klvk builds
-through yae are currently limited to that host. Supporting another host requires adding its official artifact URL and
-checksum to `yae-slang`; platform selection remains generic yae functionality.
+- **A useful application layer.** `Application` owns the window or offscreen target, Vulkan device, frame resources,
+  dynamic-rendering pass, ImGui frame, event manager, and engine-thread timer manager.
+- **Vulkan with less ceremony.** Move-only buffers, textures, pipeline layouts, descriptor sets, render targets, and a
+  fluent graphics-pipeline builder remove repetitive ownership and setup code while retaining Vulkan-Hpp types.
+- **Reflected Slang shaders.** Shader stages compile to SPIR-V on demand, cache in memory and on disk, and expose their
+  reflected interfaces for descriptor, push-constant, and stage validation.
+- **Deterministic diagnostics.** Applications can replay recorded input with a fixed clock, render without a display
+  server, capture framebuffers and video, and compare periodic framebuffer checkpoints.
+- **Ready-made rendering tools.** Cameras, procedural meshes and textures, curve and sprite renderers, font outlines,
+  an incrementally updated glyph atlas, and ImGui helpers cover common small-application needs.
+- **Traceable failures.** Vulkan-Hpp exceptions retain their `vk::Result` and carry cpptrace stack traces.
 
-## Integral aliases
+klvk is distributed as a [YAE](https://github.com/Sunday111/yae) package. Applications declare the package and link
+the `klvk` module; the repository's examples are available to any YAE project that consumes the package.
 
-`klvk/integral_aliases.hpp` brings `u8`-`u64` and `i8`-`i64` into scope, and
-`klvk/float_aliases.hpp` brings `f32` and `f64`. Both hoist the corresponding
-namespace from edt, which is where the aliases are defined.
+## Documentation
 
-Sizes, counts, dimensions, indices, masks, and identifiers are unsigned; reach for a signed
-alias only for a domain that can meaningfully be negative, or to match an explicitly signed
-external ABI.
+| Topic | What's in it |
+| --- | --- |
+| [Getting started](documentation/getting-started.md) | Requirements, adding the package, building, and running examples. |
+| [Application model](documentation/application.md) | Lifecycle, frame recording, windows, content paths, and frame pacing. |
+| [Rendering and resources](documentation/rendering.md) | Pipelines, descriptors, buffers, textures, render targets, depth, and stencil. |
+| [Shaders](documentation/shaders.md) | Slang source layout, compilation cache, reflection, and specialization constants. |
+| [Input, events, and timers](documentation/input-events-timers.md) | Typed events, subscription lifetime, input vocabulary, and scheduling. |
+| [Text and utilities](documentation/text-and-utilities.md) | Fonts, glyph atlases, cameras, procedural data, ImGui, and numeric aliases. |
+| [Diagnostics](documentation/diagnostics.md) | Deterministic runs, input recording and replay, captures, video, checkpoints, and profiling. |
+| [Examples](documentation/examples.md) | What each example demonstrates and how to choose a starting point. |
+| [Vulkan conventions](documentation/vulkan.md) | Vulkan-Hpp configuration, ownership, errors, and synchronization boundaries. |
 
-## Depth and stencil
-
-The depth-stencil format is chosen at runtime from what the device supports as an optimally tiled attachment,
-preferring a combined format (`D32_SFLOAT_S8_UINT`, then `D24_UNORM_S8_UINT`, then depth-only `D32_SFLOAT`).
-`RenderTarget::GetDepthStencilFormat` reports the choice and `Application::GetDepthFormat` forwards it;
-`klvk/vulkan/depth_stencil_format.hpp` answers whether a format carries a stencil plane and which aspects a view
-of it must name.
-
-Depth and stencil are enabled independently. `Application::SetStencilBufferEnabled` attaches the stencil plane and
-clears it to zero each frame without turning on depth testing, which is what a stencil-only technique wants.
-`GraphicsPipelineBuilder::StencilTest` takes the front and back `vk::StencilOpState` and declares the stencil
-attachment format on its own, `DynamicStencilMasks` moves compare mask, write mask and reference to the command
-buffer so one pipeline covers every combination, and `ColorWriteMask(0)` gives a pass that accumulates coverage
-without touching color.
-
-`examples/stencil` draws a self-intersecting star twice with stencil-then-cover: a winding pass fans the outline
-into the stencil, then a cover pass paints and resets the marked pixels. The two stars differ only in the stencil
-ops and the write mask, and come out solid under the non-zero rule and hollow under even-odd.
-
-## Text
-
-`klvk/text/font_face.hpp` opens a font through FreeType and hands a glyph over in either of two
-shapes: an outline in font units, which scales to any size and can be filled, stroked or transformed
-like any other geometry, or a coverage bitmap at a chosen pixel size.
-
-`klvk/text/glyph_atlas.hpp` packs the bitmaps of one face at one size into a single coverage texture,
-as they are first asked for. `Add` rasterizes and packs; `RecordPendingUploads` records the copies and
-the barrier that makes them visible to sampling, and belongs before the pass that draws the text.
-`Texture::RecordRegionUpdates` is the general form of that.
-
-Packing is **append-only**, and that is what makes it safe to write into the texture while an earlier
-frame is still sampling it: no frame can be reading space that no frame before it knew about. A
-barrier inside one command buffer does not order an earlier frame's reads, so reclaiming space would
-need more than one. Staging is per frame in flight for the same reason.
-
-**When the texture fills up, nothing is evicted and nothing grows.** `Add` returns false and leaves
-that glyph unpacked, so `Find` reports it missing; what to do about it is the caller's to decide -
-raise the size, use a second atlas, or draw without it. Rasterizing costs real time, so a caller that
-knows what it will draw should `Add` it up front; anything it did not is packed the first frame it
-appears.
-
-`Texture::CreateFromEncoded` decodes an encoded image and uploads it as four channels. A caller hands
-over the bytes it read and gets back a texture, and never links or includes a decoder itself.
-
-Which decoder that is sits behind one declaration, `DecodeImage` in `klvk/image/image_decoder.hpp`.
-Exactly one translation unit implements it, and that file is the only place in klvk that names a
-decoding library — today stb, which is convenient and not much more than that. Replacing it is
-replacing that file, or dropping it and linking a module that defines the same function; nothing else
-changes, because nothing else knows what the decoder is.
-
-`content/fonts` carries JetBrains Mono Nerd Font Mono and its licence so the examples need nothing installed.
-
-`examples/text` is driven by the keyboard: **space** adds a random character at the current size, and
-**enter** starts the line again at the next size. Each size keeps its own atlas for the life of the
-run, so returning to a size finds the glyphs it packed before still resident - only the line being
-displayed is cleared. Six characters are precached and the rest are packed the frame they first
-appear, which is the path worth exercising.
-`examples/text` cycles through three sizes, clearing and rebuilding the atlas at each. It precaches
-only a handful of characters, so most of what it then picks at random arrives a glyph at a time
-through the update path. Its diagnostic config captures every frame, so a change in packing, metrics
-or rasterization shows up as a differing image.
-
-## Timers
-
-`klvk/timing/timer_manager.hpp` provides render-thread scheduling in elapsed-time and frame domains. It uses indexed
-binary min-heaps and generational handles: finding the next timer is O(1), while scheduling and immediate cancellation
-are O(log n) without cancelled tombstones. Equal deadlines are FIFO.
-
-Timers may be one-shot or fixed-rate repeating. Repeating timers explicitly choose whether missed occurrences are all
-invoked or coalesced into the latest logical occurrence. Callbacks may schedule timers, cancel themselves or other
-timers, and clear the manager. Work scheduled by a callback is deliberately deferred until the next `Advance`, which
-prevents recursive starvation. `Advance` also has a callback budget. `InvokeAll` occurrences are merged chronologically
-with other due work in the same domain rather than dispatched as one timer-sized batch; a rotating readiness order
-between the otherwise incomparable time and frame domains prevents either from monopolizing a small budget. Remaining
-catch-up work resumes on the next advance without skipping occurrences. A callback that throws cancels that timer,
-preserves all other due timers, and propagates the exception. `TimerManager` is intentionally not synchronized; advance
-it and mutate it from its owning engine thread. Supply logical elapsed time to `Advance` rather than letting the manager
-read a wall clock, so fixed-step and deterministic runtimes use the same scheduler.
-
-Every `Application` owns a `TimerManager`, exposed through `GetTimerManager()`. The main loop advances it after
-`PreTick` and immediately before the application's `Tick`, using the application's logical elapsed time and one-based
-rendered-frame number. Applications therefore receive timer callbacks at a stable point after frame setup and before
-their per-frame logic. Diagnostics use a separate manager so application catch-up work cannot delay deterministic
-captures. The main loop owns `Advance`; application code uses the returned manager only to schedule, cancel, and inspect
-timers.
-
-## Diagnostic runs, framebuffer capture, and video
-
-Ordinary interactive applications include a collapsed `klvk Diagnostics` ImGui window. Its CPU profiler starts Linux
-`perf` only when requested and attaches it to the running process. A record can be paused, resumed, and stopped. Once
-stopped, it can be exported to the Linux perf text format accepted by [Speedscope](https://www.speedscope.app). Export
-runs in the background and the window reports the number of bytes written. Profiles are written under
-`perf-recordings/klvk-profile-<process-id>` next to the executable's `content` directory, with a numeric suffix when
-that session directory already exists. Configured diagnostic runs do not create the window, so it cannot affect
-deterministic captures.
-
-The profiler is also available independently of ImGui through `klvk/diagnostics/perf_recorder.hpp`. Construct a
-`PerfRecorder` with an output directory, call `Start`, use `Pause` and `Resume` to select regions of interest, and call
-`Update` to process state changes. `Stop` requests finalization; `Finish` and destruction stop and finish an active
-record if needed. The recorder produces raw `perf.data` files only.
-
-`SpeedscopeExporter`, available through
-`klvk/diagnostics/speedscope_exporter.hpp`, independently converts one raw recording to the Linux perf text format,
-supports cancellation, and exposes thread-safe byte progress. Each exporter processes one operation at a time. `perf`
-must be installed and permitted to profile the process.
-
-`Application::RunWithArguments(argc, argv)` recognizes `--klvk-diagnostics <file>` and
-`--klvk-diagnostics=<file>`. The JSON file
-controls presentation, deterministic timing, framebuffer and video capture, and automatic exit. All klvk examples use
-this entry point.
-
-```json
-{
-  "version": 1,
-  "presentation": "offscreen",
-  "framebuffer_size": [800, 600],
-  "clock": {"mode": "fixed", "step_seconds": 0.016666666666666666},
-  "input": [
-    {"frame": 1, "type": "mouse_move", "position": [400, 300]},
-    {"frame": 1, "type": "mouse_button", "button": "left", "action": "press"},
-    {"frame": 2, "type": "mouse_button", "button": "left", "action": "release"},
-    {"time_seconds": 0.25, "type": "mouse_scroll", "offset": [0, 1]},
-    {"time_seconds": 0.25, "type": "key", "key": "w", "action": "press"},
-    {"time_seconds": 0.5, "type": "key", "key": "w", "action": "release"}
-  ],
-  "captures": [
-    {"frame": 1, "path": "captures/first.ppm", "include_ui": false},
-    {"time_seconds": 0.25, "path": "captures/quarter-second.ppm"},
-    {"time_seconds": 0.5, "path": "captures/half-second.ppm"}
-  ],
-  "video": {
-    "path": "captures/run.mp4",
-    "encoding": "h264",
-    "encoding_device": "gpu",
-    "compression_level": 3,
-    "include_ui": true
-  },
-  "exit": {"after_last_capture": true},
-  "application": {"seed": 7}
-}
-```
-
-- `presentation` is `visible`, `hidden`, or `offscreen`. Offscreen presentation uses ordinary Vulkan color and depth
-  images, does not initialize GLFW, and requires neither a native window nor a display server. It provides a logical
-  window with the configured framebuffer size so existing applications keep the same viewport API. Hidden presentation
-  retains the GLFW window, Vulkan surface, and swapchain path. On X11, klvk briefly realizes the undecorated hidden
-  window outside the desktop before hiding it because some Vulkan drivers otherwise report a fallback surface extent.
-- `framebuffer_size` is required when captures are present and is enforced exactly, including after an example changes
-  its window size during initialization.
-- **Time is exact nanoseconds.** Every trigger is stored and compared as a `u64` nanosecond count, and under a fixed
-  clock logical time is the integer product `frame * step`, never an accumulated float. Any trigger may therefore be
-  written either as `time_seconds` (convenient when authoring by hand, rounded to nanoseconds once at parse time) or as
-  `time_ns` (exact). The clock step is likewise `clock.step_seconds` or `clock.step_ns`. The two spellings are mutually
-  exclusive on a single trigger and on the clock. Prefer `time_ns` wherever a run must reproduce another run exactly:
-  a value such as 1/60 s has no exact binary representation, so only the integer form round-trips unchanged. The video
-  stream timebase is built from `step_ns` directly, so the file's timebase matches the clock the frames were rendered on.
-  `Application::GetTimeSeconds()` and the other `float` accessors remain for application convenience and are lossy by
-  construction; they are not part of the diagnostic timing path.
-- `input` schedules mouse and keyboard events before the target frame's application tick. Each event contains exactly
-  one trigger: one-based `frame`, `time_seconds`, or `time_ns`. Supported types are `mouse_move` with `position`,
-  `mouse_button` with `button` and `action`, `mouse_scroll` with `offset`, and `key` with `key` and `action`. Actions are
-  `press` and `release`; mouse buttons are `left`, `right`, `middle`, `button4`, and `button5`. Mouse positions use
-  logical window coordinates, matching native cursor events.
-- Key names are lowercase: `a` through `z`, `0` through `9`, `f1` through `f12`, arrows (`left`, `right`, `up`, `down`),
-  navigation and editing keys (`page_up`, `page_down`, `home`, `end`, `insert`, `delete`, `backspace`, `enter`, `escape`,
-  `space`, `tab`), punctuation names, keypad names prefixed with `keypad_`, and left/right modifiers such as
-  `left_ctrl`, `right_shift`, `left_alt`, and `right_super`.
-- `captures` is an array, so a run may contain any number of frame and time points. Each entry contains exactly one
-  trigger: one-based `frame`, `time_seconds`, or `time_ns`. A time capture occurs on the first rendered frame whose
-  diagnostic time reaches the requested point. `include_ui` defaults to `true`.
-- Capture files are binary RGB PPM (`P6`). Relative paths are resolved against the executable directory, not the process
-  working directory. Parent directories are created and completed files atomically replace older captures.
-- `video` records every rendered frame in an MP4 file. `encoding` is `av1` (the default), `h264`, or `mpeg4`.
-  `encoding_device` is `cpu` (the default) or `gpu`. CPU AV1 uses the system FFmpeg's `libaom-av1` encoder and falls
-  back to `librav1e`; CPU H.264 uses `libx264`. GPU AV1 and H.264 use FFmpeg's `av1_nvenc` and `h264_nvenc` encoders,
-  respectively, and require matching NVIDIA hardware support. Requesting unavailable GPU support fails during
-  initialization with an explicit error. MPEG-4 supports only CPU encoding. `compression_level` is an integer from 0
-  through 10 and defaults to 3. Higher values produce stronger compression and lower quality. Level 0 selects lossless
-  AV1 or H.264; MPEG-4 does not support lossless output, so level 0 selects its highest-quality quantizer. Video is
-  currently available only with `offscreen` presentation and requires a fixed clock and even framebuffer dimensions.
-  The fixed clock sets the output frame rate; `include_ui` defaults to `true`. The system FFmpeg development packages
-  must provide `libavformat`, `libavcodec`, `libavutil`, and `libswscale` through `pkg-config`. klvk links their shared
-  libraries and does not require a custom FFmpeg build. Pixel conversion and encoding run on a background thread behind
-  a bounded three-frame queue; rendering waits when that queue is full, and shutdown drains and joins the encoder.
-  Informational FFmpeg and encoder output is enabled by default through spdlog's `ffmpeg` logger; set `log_ffmpeg` to
-  `false` in the `video` object to silence it.
-- `checkpoints` hashes the rendered framebuffer every `every_frames` frames, answering the question a replay actually
-  needs answered: not "is this bit-exact" but "at which frame did it stop matching". Bless a run with
-  `--klvk-write-checkpoints <file>`, which writes the configuration back with a `hashes` array filled in; any later run
-  of that file compares against it and fails with the first diverging frame, its expected hash, and the hash it got.
-  Checkpoints require an explicit `framebuffer_size` and a frame-based `exit`, since the checkpoint frames are
-  enumerated up front. `include_ui` defaults to `false`. Blessing happens before the comparison, so re-blessing a
-  diverged run works.
-
-  ```sh
-  yae run klvk_geometry_shader_example -- --klvk-diagnostics run.json --klvk-write-checkpoints blessed.json
-  yae run klvk_geometry_shader_example -- --klvk-diagnostics blessed.json   # non-zero exit if it diverged
-  ```
-
-  A hash covers the framebuffer, not application state, so it detects divergence only once it becomes visible. Note
-  that a static scene hashes identically at every checkpoint, which proves nothing — check that the blessed hashes are
-  actually distinct before trusting a pass.
-- `exit` contains exactly one of `frame`, `time_seconds`, `time_ns`, or `after_last_capture`. The last form waits for
-  every requested capture to be submitted; klvk waits for GPU completion and finishes writing capture and video files
-  before `Run` returns.
-- Capture and exit points are one-shot `TimerManager` jobs. Their callbacks emit typed capture/application-quit events;
-  an interactive run creates no diagnostic timers and does no trigger-list polling.
-- A fixed clock controls klvk and ImGui frame time, and diagnostic runs ignore persisted `imgui.ini` state. Applications
-  can read their optional object through `GetDiagnosticApplicationConfig()`.
-
-With yae, pass application arguments after `--`:
-
-```sh
-yae run klvk_painter2d_example -- --klvk-diagnostics /tmp/painter-capture.json
-```
-
-### Recording real input for replay
-
-`--klvk-record-input <file>` writes the session's real mouse and keyboard input as a diagnostic configuration, so an
-interaction that reproduces a bug can be replayed headlessly and as often as needed. It needs no `--klvk-diagnostics`:
-the ordinary case is recording a normal interactive run.
-
-```sh
-yae run klvk_falling_sand_example -- --klvk-record-input /tmp/session.json   # interact, then close the window
-yae run klvk_falling_sand_example -- --klvk-diagnostics /tmp/session.json    # replay it
-```
-
-The recorder listens to the same four window entry points the replay path writes to, so the two share one vocabulary by
-construction; `DiagnosticRunConfigToJson` is the parser's inverse and is round-tripped in the tests. The file it writes
-is complete and immediately replayable — `offscreen` presentation (no display server needed), the recorded
-`framebuffer_size`, a fixed clock, the input, and an `exit` at the last frame of the session. Add `captures` or a
-`video` block to it to get output from the replay.
-
-- Events are pinned to the **frame** they arrived on, not to a timestamp. A frame trigger reproduces the original
-  input-to-frame association whatever clock the replay runs at, whereas a wall-clock timestamp recorded at a variable
-  frame rate would land on a different frame under a fixed step.
-- Redundant cursor events are collapsed to at most one per frame, which is all a replay can apply — input is dispatched
-  once per frame — and keeps the file small.
-#### Replaying in a real window
-
-By default a recording replays `offscreen`, which needs no display server and suits CI. To watch it instead, override the
-presentation on the command line rather than editing the file, so one recording serves both purposes:
-
-```sh
-yae run klvk_falling_sand_example -- --klvk-diagnostics /tmp/session.json --klvk-presentation visible
-```
-
-- `--klvk-presentation <visible|hidden|offscreen>` overrides the configuration's own `presentation`. It requires
-  `--klvk-diagnostics`, since there is nothing to override without it.
-- A **visible** replay is paced to real time: a fixed clock otherwise means "render as fast as possible", which is right
-  for an offscreen run but makes a windowed one flash past unwatchably. Each frame is held until the wall clock reaches
-  `frame * step`, so the replay runs at the rate it was recorded at. Offscreen and hidden runs are unaffected and still
-  render flat out.
-- While a configuration carrying `input` is replayed, real mouse and keyboard events are **dropped** before they reach
-  the application — otherwise moving the cursor across the window would alter the run being reproduced. One limitation:
-  klvk installs ImGui's own GLFW callbacks, so ImGui-side state such as hover still observes the real cursor. Keep the
-  pointer off the window if the application's UI feeds back into what you are reproducing.
-
-- Replay reproduces **input**, not the whole world. A live session has a variable frame duration while the replay uses a
-  fixed step, so anything else that is non-deterministic — an unseeded RNG, a wall-clock read, thread scheduling — still
-  has to be pinned for the replayed run to diverge from the recorded one. Applications can seed themselves from the
-  `application` object, which is carried through the recording unchanged.
-
-For repeatable main-versus-branch rendering checks, see the
-[diagnostic smoke-test suite](diagnostics/smoke/readme.md).
-
-## Vulkan API
-
-Include `klvk/vulkan/vulkan.hpp` for the project's Vulkan-Hpp configuration. It provides dynamic dispatch without
-Vulkan prototypes. Enhanced calls throw Vulkan-Hpp exceptions that retain their `vk::Result` and capture a cpptrace
-stack trace.
-
-`VulkanCheck` applies the same exception policy to raw `vk::Result` values returned at C API boundaries. Operations
-with multiple ordinary outcomes, such as swapchain acquire and present, are handled directly from their Vulkan-Hpp
-results.
+The rendering regression suite has its own [smoke-test guide](diagnostics/smoke/readme.md).
