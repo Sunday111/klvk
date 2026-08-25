@@ -1,6 +1,6 @@
 #include "klvk/diagnostics/perf_recorder.hpp"
 
-#include <fmt/core.h>
+#include <fmt/format.h>
 
 #include <chrono>
 #include <csignal>

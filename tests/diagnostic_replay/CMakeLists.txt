@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 include(set_compiler_options)
+include(yae_debug_info_compression)
 set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostic_framebuffer_readback_test.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/diagnostic_input_player_test.cpp
@@ -10,5 +11,6 @@ set_generic_compiler_options(klvk_diagnostic_replay_test PRIVATE)
 target_link_libraries(klvk_diagnostic_replay_test PUBLIC klvk)
 target_include_directories(klvk_diagnostic_replay_test PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/code/public)
 target_include_directories(klvk_diagnostic_replay_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/code/private)
+enable_debug_info_compression_for(klvk_diagnostic_replay_test)
 include(${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/private_headers.cmake)
