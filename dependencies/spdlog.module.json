@@ -1,9 +1,9 @@
 {
     "ModuleType": "GitClone",
     "GitUrl": "https://github.com/gabime/spdlog",
-    "GitTag": "v1.16.0",
+    "GitTag": "v1.17.0",
     "TargetName": "spdlog::spdlog",
-    "LocalPath": "gabime/spdlog/v1.16.0",
+    "LocalPath": "gabime/spdlog/v1.17.0",
     "Dependencies": {
         "Public": [
             "fmtlib"

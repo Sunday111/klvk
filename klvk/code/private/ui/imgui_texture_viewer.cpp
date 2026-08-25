@@ -134,7 +134,7 @@ void ImGuiTextureViewer::Draw(
     ImGui::PopStyleColor();
 
     constexpr auto canvas_flags = ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
-    if (ImGui::BeginChild("Texture canvas", {}, ImGuiChildFlags_Border, canvas_flags))
+    if (ImGui::BeginChild("Texture canvas", {}, ImGuiChildFlags_Borders, canvas_flags))
     {
         const ImVec2 canvas_origin = ImGui::GetCursorScreenPos();
         const ImVec2 canvas_size = ImGui::GetContentRegionAvail();
@@ -181,7 +181,7 @@ void ImGuiTextureViewer::Draw(
             static_cast<float>(size.x()) * zoom_,
             static_cast<float>(size.y()) * zoom_,
         };
-        ImGui::Image(registered_texture_->GetId(), display_size, {}, {1.f, 1.f});
+        registered_texture_->Draw(display_size);
 
         if (zoomed_scroll)
         {

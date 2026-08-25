@@ -21,15 +21,16 @@ public:
     RegisteredImGuiTexture(RegisteredImGuiTexture&&) = delete;
     ~RegisteredImGuiTexture();
 
-    [[nodiscard]] ImTextureID GetId() const noexcept
-    {
-        const auto descriptor = static_cast<VkDescriptorSet>(descriptor_);
-        return reinterpret_cast<ImTextureID>(descriptor);
-    }
+    void Draw(ImVec2 display_size, ImVec2 uv0 = {}, ImVec2 uv1 = {1.f, 1.f});
 
 private:
+    static void SetSampler(const ImDrawList*, const ImDrawCmd* command);
+
     vk::UniqueSampler sampler_;
-    vk::DescriptorSet descriptor_ = nullptr;
+    vk::UniqueDescriptorSetLayout sampler_descriptor_set_layout_;
+    vk::UniqueDescriptorPool sampler_descriptor_pool_;
+    vk::DescriptorSet sampler_descriptor_ = nullptr;
+    vk::DescriptorSet image_descriptor_ = nullptr;
 };
 
 }  // namespace klvk
