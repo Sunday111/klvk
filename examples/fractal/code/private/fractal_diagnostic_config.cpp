@@ -1,5 +1,7 @@
 #include "fractal_diagnostic_config.hpp"
 
+#include <fmt/format.h>
+
 #include <cmath>
 #include <nlohmann/json.hpp>
 #include <numbers>

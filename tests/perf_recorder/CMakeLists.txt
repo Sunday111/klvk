@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 include(set_compiler_options)
+include(yae_debug_info_compression)
 set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/perf_recorder_test.cpp)
 add_executable(klvk_perf_recorder_test ${module_source_files})
@@ -7,3 +8,4 @@ set_generic_compiler_options(klvk_perf_recorder_test PRIVATE)
 target_link_libraries(klvk_perf_recorder_test PUBLIC klvk)
 target_include_directories(klvk_perf_recorder_test PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/code/public)
 target_include_directories(klvk_perf_recorder_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/code/private)
+enable_debug_info_compression_for(klvk_perf_recorder_test)

@@ -1,6 +1,6 @@
 #include "klvk/application.hpp"
 
-#include <fmt/core.h>
+#include <fmt/format.h>
 
 #include <array>
 #include <limits>

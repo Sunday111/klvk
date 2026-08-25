@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 include(set_compiler_options)
+include(yae_debug_info_compression)
 set(module_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader_cache_component_tests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/code/private/shader_cache_component_tests.hpp
@@ -10,4 +11,5 @@ target_link_libraries(klvk_shader_cache_test PUBLIC klvk)
 target_link_libraries(klvk_shader_cache_test PRIVATE slang::slang)
 target_include_directories(klvk_shader_cache_test PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/code/public)
 target_include_directories(klvk_shader_cache_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/code/private)
+enable_debug_info_compression_for(klvk_shader_cache_test)
 include(${CMAKE_CURRENT_SOURCE_DIR}/private_headers.cmake)

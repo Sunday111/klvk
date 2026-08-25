@@ -3,7 +3,7 @@
 #if defined(__linux__)
 
 #include <fcntl.h>
-#include <fmt/core.h>
+#include <fmt/format.h>
 #include <poll.h>
 #include <sys/stat.h>
 #include <sys/wait.h>

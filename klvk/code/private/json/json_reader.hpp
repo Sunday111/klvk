@@ -1,5 +1,7 @@
 #pragma once
 
+#include <fmt/format.h>
+
 #include <array>
 #include <initializer_list>
 #include <nlohmann/json.hpp>

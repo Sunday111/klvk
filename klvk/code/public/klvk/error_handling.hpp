@@ -1,12 +1,7 @@
 #pragma once
 
-// libc++ does not expose C allocation functions transitively. fmt needs them
-// while parsing its headers, so this ordering is intentional.
-// clang-format off
-#include <cstdlib>
 #include <fmt/color.h>
-#include <fmt/core.h>
-// clang-format on
+#include <fmt/format.h>
 
 #include <cpptrace/cpptrace.hpp>
 #include <exception>
