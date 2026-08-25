@@ -1,9 +1,9 @@
 {
     "ModuleType": "GitClone",
     "GitUrl": "https://github.com/freetype/freetype",
-    "GitTag": "VER-2-13-3",
+    "GitTag": "VER-2-14-3",
     "TargetName": "freetype",
-    "LocalPath": "freetype/freetype/VER-2-13-3",
+    "LocalPath": "freetype/freetype/VER-2-14-3",
     "CMakeOptions": {
         "FT_DISABLE_HARFBUZZ": true,
         "FT_DISABLE_BROTLI": true,

@@ -104,10 +104,13 @@ void ApplicationImGui::Initialize(
     }
 
     const vk::Device device = device_context.GetDevice();
-    const std::array pool_sizes{vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 16}};
+    const std::array pool_sizes{
+        vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage, 16},
+        vk::DescriptorPoolSize{vk::DescriptorType::eSampler, 2},
+    };
     const auto pool_info = vk::DescriptorPoolCreateInfo{}
                                .setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet)
-                               .setMaxSets(16)
+                               .setMaxSets(18)
                                .setPoolSizes(pool_sizes);
     descriptor_pool_ = device.createDescriptorPoolUnique(pool_info);
 
@@ -118,9 +121,10 @@ void ApplicationImGui::Initialize(
         .presentation_enabled = device_context.GetSurface() != nullptr,
     };
     ErrorHandling::Ensure(
-        ImGui_ImplVulkan_LoadFunctions(LoadVulkanFunction, &loader_context),
+        ImGui_ImplVulkan_LoadFunctions(VK_API_VERSION_1_3, LoadVulkanFunction, &loader_context),
         "Failed to load imgui Vulkan functions");
     ImGui_ImplVulkan_InitInfo init_info{};
+    init_info.ApiVersion = VK_API_VERSION_1_3;
     init_info.Instance = loader_context.instance;
     init_info.PhysicalDevice = static_cast<VkPhysicalDevice>(device_context.GetPhysicalDevice());
     init_info.Device = static_cast<VkDevice>(device);
@@ -129,9 +133,9 @@ void ApplicationImGui::Initialize(
     init_info.DescriptorPool = static_cast<VkDescriptorPool>(descriptor_pool_.get());
     init_info.MinImageCount = 2;
     init_info.ImageCount = static_cast<u32>(render_target.GetImageCount());
-    init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
     init_info.UseDynamicRendering = true;
-    init_info.PipelineRenderingCreateInfo = {
+    init_info.PipelineInfoMain.PipelineRenderingCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
         .colorAttachmentCount = static_cast<u32>(color_formats.size()),
         .pColorAttachmentFormats = color_formats.data(),
