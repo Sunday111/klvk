@@ -1,0 +1,19 @@
+{
+    "ModuleType": "GitClone",
+    "GitUrl": "https://github.com/facebook/zstd",
+    "GitTag": "v1.5.7",
+    "TargetName": "libzstd_static",
+    "CMakeFilePath": "build/cmake",
+    "CMakeOptions": {
+        "ZSTD_BUILD_PROGRAMS": false,
+        "ZSTD_BUILD_CONTRIB": false,
+        "ZSTD_BUILD_TESTS": false,
+        "ZSTD_BUILD_STATIC": true,
+        "ZSTD_BUILD_SHARED": false,
+        "ZSTD_LEGACY_SUPPORT": false
+    },
+    "Dependencies": {
+        "Public": [],
+        "Private": []
+    }
+}

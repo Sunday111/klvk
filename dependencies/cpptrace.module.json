@@ -4,8 +4,13 @@
     "GitTag": "main",
     "TargetName": "cpptrace::cpptrace",
     "LocalPath": "jeremy-rifkin/cpptrace",
+    "CMakeOptions": {
+        "CPPTRACE_USE_EXTERNAL_LIBDWARF": true
+    },
     "Dependencies": {
         "Public": [],
-        "Private": []
+        "Private": [
+            "libdwarf"
+        ]
     }
 }
