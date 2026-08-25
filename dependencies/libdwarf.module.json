@@ -18,6 +18,7 @@
     "Dependencies": {
         "Public": [],
         "Private": [
+            "zlib",
             "zstd"
         ]
     }

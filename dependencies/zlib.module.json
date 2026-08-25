@@ -1,0 +1,19 @@
+{
+    "ModuleType": "GitClone",
+    "GitUrl": "https://github.com/madler/zlib",
+    "GitTag": "v1.3.2",
+    "TargetName": "zlibstatic",
+    "ExtraCMakeFiles": [
+        "zlib_target"
+    ],
+    "CMakeOptions": {
+        "ZLIB_BUILD_SHARED": false,
+        "ZLIB_BUILD_STATIC": true,
+        "ZLIB_BUILD_TESTING": false,
+        "ZLIB_INSTALL": false
+    },
+    "Dependencies": {
+        "Public": [],
+        "Private": []
+    }
+}
