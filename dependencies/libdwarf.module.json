@@ -1,0 +1,24 @@
+{
+    "ModuleType": "GitClone",
+    "GitUrl": "https://github.com/davea42/libdwarf-code",
+    "GitTag": "v2.1.0",
+    "TargetName": "libdwarf::dwarf-static",
+    "ExtraCMakeFiles": [
+        "Findlibdwarf"
+    ],
+    "CMakeOptions": {
+        "BUILD_NON_SHARED": true,
+        "BUILD_SHARED": false,
+        "BUILD_DWARFDUMP": false,
+        "BUILD_DWARFGEN": false,
+        "BUILD_DWARFEXAMPLE": false,
+        "DO_TESTING": false,
+        "PIC_ALWAYS": true
+    },
+    "Dependencies": {
+        "Public": [],
+        "Private": [
+            "zstd"
+        ]
+    }
+}
