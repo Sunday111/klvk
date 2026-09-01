@@ -38,7 +38,8 @@ AllocatedImage CreateImage(
                                 .setUsage(usage)
                                 .setSharingMode(vk::SharingMode::eExclusive)
                                 .setInitialLayout(vk::ImageLayout::eUndefined);
-    const VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+    VmaAllocationCreateInfo allocation_info{};
+    allocation_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     const VkImageCreateInfo& raw_image_info = image_info;
     AllocatedImage result;
     VkImage image = VK_NULL_HANDLE;

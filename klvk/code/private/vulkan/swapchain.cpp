@@ -202,7 +202,8 @@ void Swapchain::Create(edt::Vec2<u32> framebuffer_size, vk::SwapchainKHR old_swa
                                                    .setUsage(vk::ImageUsageFlagBits::eDepthStencilAttachment)
                                                    .setSharingMode(vk::SharingMode::eExclusive)
                                                    .setInitialLayout(vk::ImageLayout::eUndefined);
-        const VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+        VmaAllocationCreateInfo allocation_info{};
+        allocation_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
         const VkImageCreateInfo& raw_image_info = image_info;
         VkImage raw_depth_image = nullptr;
         VulkanCheck(

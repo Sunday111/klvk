@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.29)
 include(set_compiler_options)
 include(yae_debug_info_compression)
 set(module_source_files
@@ -12,8 +12,11 @@ enable_debug_info_compression_for(klvk_compute_shader_example)
 add_custom_target(klvk_compute_shader_example_copy_files ALL
     COMMAND ${Python3_EXECUTABLE} "${YAE_SUPPORT_ROOT}/scripts/stage_directories.py"
             --destination "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/content"
+            --destination-root "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
             --source "${CMAKE_CURRENT_SOURCE_DIR}/content"
-            --manifest "${CMAKE_CURRENT_BINARY_DIR}/klvk_compute_shader_example_copy_files_content.manifest"
+            --manifest "${YAE_STAGING_ROOT}/content/klvk_compute_shader_example_copy_files.manifest"
+            --active-manifests "${YAE_STAGING_PLAN}"
     COMMENT "stage content of klvk_compute_shader_example"
     VERBATIM)
+add_dependencies(klvk_compute_shader_example_copy_files yae_reconcile_staging)
 add_dependencies(klvk_compute_shader_example klvk_compute_shader_example_copy_files)

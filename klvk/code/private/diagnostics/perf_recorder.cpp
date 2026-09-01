@@ -40,7 +40,9 @@ using File = std::unique_ptr<std::FILE, decltype(&std::fclose)>;
 
 [[nodiscard]] bool WaitUntilReadable(int file, std::chrono::steady_clock::time_point deadline) noexcept
 {
-    pollfd descriptor{.fd = file, .events = POLLIN};
+    pollfd descriptor{};
+    descriptor.fd = file;
+    descriptor.events = POLLIN;
     for (;;)
     {
         const auto remaining = deadline - std::chrono::steady_clock::now();
@@ -89,12 +91,11 @@ public:
 
         const size_t number = captures_.size() + 1;
         const std::string stem = fmt::format("profile-{:03}", number);
-        Capture capture{
-            .number = number,
-            .state = CaptureState::Recording,
-            .data_path = config_.output_directory / (stem + ".data"),
-            .log_path = config_.output_directory / (stem + ".log"),
-        };
+        Capture capture{};
+        capture.number = number;
+        capture.state = CaptureState::Recording;
+        capture.data_path = config_.output_directory / (stem + ".data");
+        capture.log_path = config_.output_directory / (stem + ".log");
 
         const std::filesystem::path control_path = config_.output_directory / (stem + ".control");
         const std::filesystem::path acknowledge_path = config_.output_directory / (stem + ".ack");
