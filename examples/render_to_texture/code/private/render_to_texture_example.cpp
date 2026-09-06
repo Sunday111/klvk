@@ -110,7 +110,8 @@ class RenderToTextureApp : public klvk::Application
                 .setSharingMode(vk::SharingMode::eExclusive)
                 .setInitialLayout(vk::ImageLayout::eUndefined);
         const VkImageCreateInfo& raw_image_info = image_info;
-        const VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+        VmaAllocationCreateInfo allocation_info{};
+        allocation_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
         for (size_t index = 0; index != targets_.size(); ++index)
         {
             OffscreenTarget& target = targets_[index];

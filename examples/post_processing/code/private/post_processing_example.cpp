@@ -100,7 +100,8 @@ class PostProcessingApp : public klvk::Application
                 .setSharingMode(vk::SharingMode::eExclusive)
                 .setInitialLayout(vk::ImageLayout::eUndefined);
         const VkImageCreateInfo& raw_image_info = image_info;
-        const VmaAllocationCreateInfo allocation_info{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+        VmaAllocationCreateInfo allocation_info{};
+        allocation_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
         for (size_t i = 0; i != targets_.size(); ++i)
         {
             auto& target = targets_[i];

@@ -135,11 +135,10 @@ void ApplicationImGui::Initialize(
     init_info.ImageCount = static_cast<u32>(render_target.GetImageCount());
     init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
     init_info.UseDynamicRendering = true;
-    init_info.PipelineInfoMain.PipelineRenderingCreateInfo = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
-        .colorAttachmentCount = static_cast<u32>(color_formats.size()),
-        .pColorAttachmentFormats = color_formats.data(),
-    };
+    init_info.PipelineInfoMain.PipelineRenderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
+    init_info.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount =
+        static_cast<u32>(color_formats.size());
+    init_info.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = color_formats.data();
     ErrorHandling::Ensure(ImGui_ImplVulkan_Init(&init_info), "Failed to initialize imgui vulkan backend");
     vulkan_initialized_ = true;
 
