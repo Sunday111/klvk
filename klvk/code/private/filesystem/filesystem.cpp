@@ -26,6 +26,8 @@ void Filesystem::WriteFile(const std::filesystem::path& path, std::string_view b
     std::ofstream file(path);
     klvk::ErrorHandling::Ensure(file.is_open(), "Failed to open file \"{}\" for write", path);
     file << buffer;
+    file.close();
+    klvk::ErrorHandling::Ensure(file.good(), "Failed to write file \"{}\"", path);
 }
 
 void Filesystem::AppendFileContentToBuffer(const std::filesystem::path& path, std::string& buffer)
