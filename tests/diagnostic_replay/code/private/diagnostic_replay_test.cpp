@@ -20,6 +20,7 @@ extern "C"
 #include "edt/functional/on_scope_leave.hpp"
 #include "klvk/events/application_events.hpp"
 #include "klvk/events/event_listener.hpp"
+#include "klvk/filesystem/filesystem.hpp"
 
 namespace
 {
@@ -263,6 +264,36 @@ void TestVideoRecording()
     Ensure(frame_packets == 3, "recorded video has the wrong frame count");
 }
 
+void TestDiagnosticOutputWrites()
+{
+    const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
+    const std::filesystem::path root =
+        std::filesystem::temp_directory_path() / ("klvk_diagnostic_output_test_" + std::to_string(nonce));
+    std::filesystem::create_directories(root);
+    auto cleanup = edt::OnScopeLeave([&] { std::filesystem::remove_all(root); });
+
+    const std::filesystem::path path = root / "checkpoints.json";
+    klvk::Filesystem::WriteFile(path, "previous checkpoint contents");
+    constexpr std::string_view contents = "{\"checkpoints\": []}";
+    klvk::Filesystem::WriteFile(path, contents);
+    std::string written;
+    klvk::Filesystem::ReadFile(path, written);
+    Ensure(written == contents, "diagnostic output was not flushed or truncated");
+    EnsureThrows(
+        [&] { klvk::Filesystem::WriteFile(root / "missing" / "recording.json", contents); },
+        "an output open failure was ignored");
+
+#if defined(__linux__)
+    Ensure(std::filesystem::exists("/dev/full"), "the full-device fixture is unavailable");
+    EnsureThrows(
+        [&] { klvk::Filesystem::WriteFile("/dev/full", contents); },
+        "a buffered output failure during close was ignored");
+    EnsureThrows(
+        [] { klvk::Filesystem::WriteFile("/dev/full", std::string(16'384, 'x')); },
+        "a large output write failure was ignored");
+#endif
+}
+
 void Run()
 {
     TestFramePhasesAndCompletion();
@@ -271,6 +302,7 @@ void Run()
     TestCaptureBatchStateTransitions();
     TestDisabledVideoRecording();
     TestVideoRecording();
+    TestDiagnosticOutputWrites();
     klvk::tests::RunDiagnosticFramebufferReadbackTests();
     klvk::tests::RunDiagnosticInputPlayerTests();
 }
