@@ -290,7 +290,9 @@ void Application::Initialize()
     else
     {
         const vk::ImageUsageFlags diagnostic_usage =
-            state_->diagnostic_config_.has_value() && !state_->diagnostic_config_->captures.empty()
+            state_->diagnostic_config_.has_value() &&
+                    (!state_->diagnostic_config_->captures.empty() || state_->diagnostic_config_->video.has_value() ||
+                     state_->diagnostic_config_->checkpoints.has_value())
                 ? vk::ImageUsageFlagBits::eTransferSrc
                 : vk::ImageUsageFlags{};
         auto swapchain = std::make_unique<Swapchain>(
