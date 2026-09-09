@@ -18,7 +18,7 @@ namespace klvk
 
 slang::IGlobalSession& SlangShaderCompiler::GetGlobalSession()
 {
-    static Slang::ComPtr<slang::IGlobalSession> session = []
+    static thread_local Slang::ComPtr<slang::IGlobalSession> session = []
     {
         Slang::ComPtr<slang::IGlobalSession> created;
         ErrorHandling::Ensure(
