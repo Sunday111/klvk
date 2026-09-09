@@ -258,6 +258,9 @@ void TestStubbornRecorderShutdown()
         .output_directory = output,
         .executable = std::filesystem::canonical("/proc/self/exe").string(),
         .frequency = 1,
+        .finalize_timeout = std::chrono::milliseconds{100},
+        .terminate_timeout = std::chrono::milliseconds{100},
+        .kill_timeout = std::chrono::milliseconds{100},
     });
 
     Ensure(recorder.Start(), recorder.GetLastError());
@@ -267,7 +270,8 @@ void TestStubbornRecorderShutdown()
     const auto captures = recorder.GetCaptures();
     Ensure(captures.size() == 1, "Stubborn perf recording did not create one segment");
     Ensure(captures.front().state == klvk::PerfRecorder::CaptureState::Failed, "Stubborn perf recording did not fail");
-    Ensure(captures.front().error.contains("did not stop within"), captures.front().error);
+    Ensure(captures.front().error.contains("did not stop within 100 milliseconds"), captures.front().error);
+    Ensure(captures.front().error.contains(fmt::format("terminated by signal {}", SIGKILL)), captures.front().error);
     std::filesystem::remove_all(output);
 }
 
