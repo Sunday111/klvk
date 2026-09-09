@@ -34,7 +34,6 @@ namespace
 constexpr auto kRecordFinalizeTimeout = std::chrono::seconds{2};
 constexpr auto kTerminateTimeout = std::chrono::milliseconds{500};
 constexpr auto kKillTimeout = std::chrono::milliseconds{500};
-constexpr auto kControlTimeout = std::chrono::seconds{1};
 
 using File = std::unique_ptr<std::FILE, decltype(&std::fclose)>;
 
@@ -276,7 +275,7 @@ private:
 
         std::array<char, 16> response{};
         size_t response_size = 0;
-        const auto deadline = std::chrono::steady_clock::now() + kControlTimeout;
+        const auto deadline = std::chrono::steady_clock::now() + config_.control_timeout;
         while (response_size != response.size())
         {
             if (!WaitUntilReadable(::fileno(acknowledge_file_.get()), deadline)) return false;

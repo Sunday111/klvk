@@ -109,7 +109,7 @@ int RunFakePerf(int argc, char** argv)
                 {
                     Ensure(std::fwrite("a", 1, 1, acknowledge.get()) == 1, "Could not write partial acknowledgement");
                     Ensure(std::fflush(acknowledge.get()) == 0, "Could not flush partial acknowledgement");
-                    std::this_thread::sleep_for(std::chrono::milliseconds{200});
+                    std::this_thread::sleep_for(std::chrono::milliseconds{50});
                 }
                 return 0;
             }
@@ -280,6 +280,7 @@ void TestControlTimeout()
         .output_directory = output,
         .executable = std::filesystem::canonical("/proc/self/exe").string(),
         .frequency = 2,
+        .control_timeout = std::chrono::milliseconds{100},
     });
 
     Ensure(recorder.Start(), recorder.GetLastError());
@@ -287,7 +288,7 @@ void TestControlTimeout()
     const auto start = std::chrono::steady_clock::now();
     recorder.Pause();
     const auto elapsed = std::chrono::steady_clock::now() - start;
-    Ensure(elapsed < std::chrono::milliseconds{1'500}, "Partial perf acknowledgement extended the control timeout");
+    Ensure(elapsed < std::chrono::milliseconds{300}, "Partial perf acknowledgement extended the control timeout");
     Ensure(!recorder.IsPaused(), "Recorder accepted a partial perf acknowledgement");
     recorder.Finish();
     std::filesystem::remove_all(output);
