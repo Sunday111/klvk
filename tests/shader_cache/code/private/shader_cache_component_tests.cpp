@@ -38,8 +38,14 @@ void ShaderCacheComponentTests::TestCompiler(const std::filesystem::path& root)
     Ensure(key == klvk::SlangShaderCompiler::MakeKey(source), "compiler key was not deterministic");
     Ensure(key != klvk::SlangShaderCompiler::MakeKey(source + "\n"), "compiler key ignored shader source changes");
 
-    klvk::SlangShaderCompiler compiler;
-    const std::shared_ptr<const klvk::CompiledShader> compiled = compiler.Compile(source, path);
+    std::shared_ptr<const klvk::CompiledShader> compiled;
+    {
+        klvk::SlangShaderCompiler compiler;
+        compiled = compiler.Compile(source, path);
+        const auto repeated = compiler.Compile(source, path);
+        Ensure(*repeated->spirv == *compiled->spirv, "reusing a compiler changed SPIR-V");
+        Ensure(*repeated->interface == *compiled->interface, "reusing a compiler changed reflection");
+    }
     Ensure(compiled->spirv != nullptr && !compiled->spirv->empty(), "compiler returned no SPIR-V");
     Ensure(compiled->spirv->front() == 0x07230203, "compiler returned invalid SPIR-V");
     Ensure(compiled->interface != nullptr, "compiler returned no reflection");

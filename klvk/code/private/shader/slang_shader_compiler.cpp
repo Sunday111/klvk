@@ -18,15 +18,15 @@ namespace klvk
 
 slang::IGlobalSession& SlangShaderCompiler::GetGlobalSession()
 {
-    static Slang::ComPtr<slang::IGlobalSession> session = []
+    if (!global_session_)
     {
         Slang::ComPtr<slang::IGlobalSession> created;
         ErrorHandling::Ensure(
             SLANG_SUCCEEDED(slang::createGlobalSession(created.writeRef())) && created,
             "Failed to create Slang global session");
-        return created;
-    }();
-    return *session;
+        global_session_ = std::move(created);
+    }
+    return *global_session_;
 }
 
 std::string SlangShaderCompiler::GetBlobText(slang::IBlob* blob)
@@ -79,7 +79,7 @@ u64 SlangShaderCompiler::MakeKey(std::string_view source) noexcept
 
 std::shared_ptr<const CompiledShader> SlangShaderCompiler::Compile(
     const std::string& source,
-    const std::filesystem::path& source_path) const
+    const std::filesystem::path& source_path)
 {
     slang::IGlobalSession& global = GetGlobalSession();
 
