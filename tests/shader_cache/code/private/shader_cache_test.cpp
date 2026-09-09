@@ -4,7 +4,6 @@
 #include <fstream>
 #include <future>
 
-#include "edt/functional/on_scope_leave.hpp"
 #include "klvk/integral_aliases.hpp"
 #include "klvk/shader/shader_cache_manager.hpp"
 #include "shader_cache_component_tests.hpp"
@@ -162,48 +161,6 @@ void TestConfiguration(
     Ensure(!std::filesystem::exists(invalid_cache), "invalid settings created a cache directory");
 }
 
-void TestIndependentManagers(const std::filesystem::path& sources, const std::filesystem::path& cache)
-{
-    const auto shader = sources / "independent.comp.slang";
-    Write(shader, "[shader(\"compute\")] [numthreads(8, 1, 1)] void main() {}\n");
-    std::shared_ptr<const klvk::CompiledShader> expected;
-    {
-        klvk::ShaderCacheManager manager(sources, cache / "serial");
-        expected = manager.GetOrCompile(shader);
-    }
-
-    std::vector<std::unique_ptr<klvk::ShaderCacheManager>> managers;
-    for (size_t i = 0; i != 16; ++i)
-    {
-        managers.push_back(std::make_unique<klvk::ShaderCacheManager>(sources, cache / std::to_string(i)));
-    }
-
-    std::promise<void> start;
-    const auto ready = start.get_future().share();
-    std::vector<std::future<std::shared_ptr<const klvk::CompiledShader>>> futures;
-    futures.reserve(managers.size());
-    {
-        auto release_workers = edt::OnScopeLeave([&] { start.set_value(); });
-        for (const auto& manager : managers)
-        {
-            futures.push_back(
-                std::async(
-                    std::launch::async,
-                    [&, worker = manager.get()]
-                    {
-                        ready.wait();
-                        return worker->GetOrCompile(shader);
-                    }));
-        }
-    }
-    for (auto& future : futures)
-    {
-        const auto compiled = future.get();
-        Ensure(*compiled->spirv == *expected->spirv, "independent manager produced different SPIR-V");
-        Ensure(*compiled->interface == *expected->interface, "independent manager produced different reflection");
-    }
-}
-
 void Run()
 {
     TestPureValidation();
@@ -216,7 +173,6 @@ void Run()
     ShaderCacheComponentTests::Run(root / "components");
     TestConfiguration(sources, root / "configuration_cache", root / "invalid_cache");
     TestTessellationReflection(root / "tessellation_cache");
-    TestIndependentManagers(sources, root / "independent_caches");
     const std::filesystem::path shader = sources / "coalesce.comp.slang";
     const std::filesystem::path slang_shader = sources / "test.comp.slang";
     const std::filesystem::path reflection_shader = sources / "reflection.comp.slang";

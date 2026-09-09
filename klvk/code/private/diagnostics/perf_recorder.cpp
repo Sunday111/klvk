@@ -31,11 +31,6 @@ namespace klvk
 namespace
 {
 
-constexpr auto kRecordFinalizeTimeout = std::chrono::seconds{2};
-constexpr auto kTerminateTimeout = std::chrono::milliseconds{500};
-constexpr auto kKillTimeout = std::chrono::milliseconds{500};
-constexpr auto kControlTimeout = std::chrono::seconds{1};
-
 using File = std::unique_ptr<std::FILE, decltype(&std::fclose)>;
 
 [[nodiscard]] bool WaitUntilReadable(int file, std::chrono::steady_clock::time_point deadline) noexcept
@@ -276,7 +271,7 @@ private:
 
         std::array<char, 16> response{};
         size_t response_size = 0;
-        const auto deadline = std::chrono::steady_clock::now() + kControlTimeout;
+        const auto deadline = std::chrono::steady_clock::now() + config_.control_timeout;
         while (response_size != response.size())
         {
             if (!WaitUntilReadable(::fileno(acknowledge_file_.get()), deadline)) return false;
@@ -322,7 +317,7 @@ private:
     {
         if (recording_process_ == perf_process::kNoProcess) return;
 
-        perf_process::WaitResult wait = perf_process::Wait(recording_process_, kRecordFinalizeTimeout);
+        perf_process::WaitResult wait = perf_process::Wait(recording_process_, config_.finalize_timeout);
         if (wait.state == perf_process::WaitState::Complete)
         {
             CompleteRecording(wait.status);
@@ -339,7 +334,7 @@ private:
             FailActiveCapture(fmt::format("Failed to terminate perf record: {}", std::strerror(errno)));
             return;
         }
-        wait = perf_process::Wait(recording_process_, kTerminateTimeout);
+        wait = perf_process::Wait(recording_process_, config_.terminate_timeout);
         if (wait.state == perf_process::WaitState::TimedOut)
         {
             if (::kill(recording_process_, SIGKILL) != 0 && errno != ESRCH)
@@ -347,7 +342,7 @@ private:
                 FailActiveCapture(fmt::format("Failed to kill perf record: {}", std::strerror(errno)));
                 return;
             }
-            wait = perf_process::Wait(recording_process_, kKillTimeout);
+            wait = perf_process::Wait(recording_process_, config_.kill_timeout);
         }
 
         if (wait.state == perf_process::WaitState::Failed)
@@ -362,8 +357,8 @@ private:
         }
         FailActiveCapture(
             fmt::format(
-                "perf record did not stop within {} seconds and was {}; see {}",
-                kRecordFinalizeTimeout.count(),
+                "perf record did not stop within {} milliseconds and was {}; see {}",
+                config_.finalize_timeout.count(),
                 perf_process::Status(wait.status),
                 captures_[*active_capture_].log_path.string()));
     }

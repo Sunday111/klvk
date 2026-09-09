@@ -109,7 +109,7 @@ int RunFakePerf(int argc, char** argv)
                 {
                     Ensure(std::fwrite("a", 1, 1, acknowledge.get()) == 1, "Could not write partial acknowledgement");
                     Ensure(std::fflush(acknowledge.get()) == 0, "Could not flush partial acknowledgement");
-                    std::this_thread::sleep_for(std::chrono::milliseconds{200});
+                    std::this_thread::sleep_for(std::chrono::milliseconds{50});
                 }
                 return 0;
             }
@@ -204,7 +204,12 @@ void TestRecorder()
         Ensure(!std::filesystem::exists(SpeedscopePath(capture)), "Recorder wrote a Speedscope export");
     }
 
-    klvk::SpeedscopeExporter exporter({.executable = std::filesystem::canonical("/proc/self/exe").string()});
+    klvk::SpeedscopeExporter exporter({
+        .executable = std::filesystem::canonical("/proc/self/exe").string(),
+        .poll_interval = std::chrono::milliseconds{1},
+        .terminate_timeout = std::chrono::milliseconds{100},
+        .kill_timeout = std::chrono::milliseconds{100},
+    });
     for (const klvk::PerfRecorder::Capture& capture : captures)
     {
         const auto result = exporter.Export(capture.data_path, SpeedscopePath(capture), capture.log_path, {});
@@ -258,6 +263,9 @@ void TestStubbornRecorderShutdown()
         .output_directory = output,
         .executable = std::filesystem::canonical("/proc/self/exe").string(),
         .frequency = 1,
+        .finalize_timeout = std::chrono::milliseconds{100},
+        .terminate_timeout = std::chrono::milliseconds{100},
+        .kill_timeout = std::chrono::milliseconds{100},
     });
 
     Ensure(recorder.Start(), recorder.GetLastError());
@@ -267,7 +275,8 @@ void TestStubbornRecorderShutdown()
     const auto captures = recorder.GetCaptures();
     Ensure(captures.size() == 1, "Stubborn perf recording did not create one segment");
     Ensure(captures.front().state == klvk::PerfRecorder::CaptureState::Failed, "Stubborn perf recording did not fail");
-    Ensure(captures.front().error.contains("did not stop within"), captures.front().error);
+    Ensure(captures.front().error.contains("did not stop within 100 milliseconds"), captures.front().error);
+    Ensure(captures.front().error.contains(fmt::format("terminated by signal {}", SIGKILL)), captures.front().error);
     std::filesystem::remove_all(output);
 }
 
@@ -280,6 +289,7 @@ void TestControlTimeout()
         .output_directory = output,
         .executable = std::filesystem::canonical("/proc/self/exe").string(),
         .frequency = 2,
+        .control_timeout = std::chrono::milliseconds{100},
     });
 
     Ensure(recorder.Start(), recorder.GetLastError());
@@ -287,7 +297,7 @@ void TestControlTimeout()
     const auto start = std::chrono::steady_clock::now();
     recorder.Pause();
     const auto elapsed = std::chrono::steady_clock::now() - start;
-    Ensure(elapsed < std::chrono::milliseconds{1'500}, "Partial perf acknowledgement extended the control timeout");
+    Ensure(elapsed < std::chrono::milliseconds{300}, "Partial perf acknowledgement extended the control timeout");
     Ensure(!recorder.IsPaused(), "Recorder accepted a partial perf acknowledgement");
     recorder.Finish();
     std::filesystem::remove_all(output);
@@ -304,7 +314,12 @@ void TestCancelledExport()
     const auto log = output / "cancel.log";
     std::ofstream(perf_data) << "fake perf data\n";
 
-    klvk::SpeedscopeExporter exporter({.executable = std::filesystem::canonical("/proc/self/exe").string()});
+    klvk::SpeedscopeExporter exporter({
+        .executable = std::filesystem::canonical("/proc/self/exe").string(),
+        .poll_interval = std::chrono::milliseconds{1},
+        .terminate_timeout = std::chrono::milliseconds{100},
+        .kill_timeout = std::chrono::milliseconds{100},
+    });
     std::ofstream(speedscope) << "preserve\n";
     std::stop_source already_stopped;
     already_stopped.request_stop();

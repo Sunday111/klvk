@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <memory>
@@ -37,6 +38,10 @@ public:
         std::filesystem::path output_directory;
         std::string executable = "perf";
         u32 frequency = 999;
+        std::chrono::milliseconds control_timeout{1'000};
+        std::chrono::milliseconds finalize_timeout{2'000};
+        std::chrono::milliseconds terminate_timeout{500};
+        std::chrono::milliseconds kill_timeout{500};
     };
 
     explicit PerfRecorder(Config config);

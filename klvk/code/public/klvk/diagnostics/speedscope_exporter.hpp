@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -31,6 +32,9 @@ public:
     struct Config
     {
         std::string executable = "perf";
+        std::chrono::milliseconds poll_interval{50};
+        std::chrono::milliseconds terminate_timeout{500};
+        std::chrono::milliseconds kill_timeout{500};
     };
 
     SpeedscopeExporter();
