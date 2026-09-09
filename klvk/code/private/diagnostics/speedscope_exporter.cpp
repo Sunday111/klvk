@@ -25,29 +25,11 @@ namespace klvk
 namespace
 {
 
-constexpr auto kProgressInterval = std::chrono::milliseconds{50};
-constexpr auto kTerminateTimeout = std::chrono::milliseconds{500};
-constexpr auto kKillTimeout = std::chrono::milliseconds{500};
-
 [[nodiscard]] uintmax_t ExportedSize(const std::filesystem::path& output_path) noexcept
 {
     std::error_code error;
     const uintmax_t size = std::filesystem::file_size(output_path, error);
     return error ? 0 : size;
-}
-
-[[nodiscard]] bool CancelExport(perf_process::Id process, const std::filesystem::path& output_path) noexcept
-{
-    if (::kill(process, SIGTERM) != 0 && errno != ESRCH) return false;
-    perf_process::WaitResult result = perf_process::Wait(process, kTerminateTimeout);
-    if (result.state == perf_process::WaitState::TimedOut)
-    {
-        if (::kill(process, SIGKILL) != 0 && errno != ESRCH) return false;
-        result = perf_process::Wait(process, kKillTimeout);
-    }
-    std::error_code ignored;
-    std::filesystem::remove(output_path, ignored);
-    return result.state == perf_process::WaitState::Complete;
 }
 
 }  // namespace
@@ -141,11 +123,25 @@ public:
                     .error = fmt::format("Failed to wait for perf script: {}", std::strerror(errno)),
                 };
             }
-            std::this_thread::sleep_for(kProgressInterval);
+            std::this_thread::sleep_for(config_.poll_interval);
         }
     }
 
 private:
+    [[nodiscard]] bool CancelExport(perf_process::Id process, const std::filesystem::path& output_path) const noexcept
+    {
+        if (::kill(process, SIGTERM) != 0 && errno != ESRCH) return false;
+        perf_process::WaitResult result = perf_process::Wait(process, config_.terminate_timeout);
+        if (result.state == perf_process::WaitState::TimedOut)
+        {
+            if (::kill(process, SIGKILL) != 0 && errno != ESRCH) return false;
+            result = perf_process::Wait(process, config_.kill_timeout);
+        }
+        std::error_code ignored;
+        std::filesystem::remove(output_path, ignored);
+        return result.state == perf_process::WaitState::Complete;
+    }
+
     Config config_;
     mutable std::atomic<uintmax_t> progress_ = 0;
     mutable std::atomic<bool> exporting_ = false;

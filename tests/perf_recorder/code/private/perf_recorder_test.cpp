@@ -204,7 +204,12 @@ void TestRecorder()
         Ensure(!std::filesystem::exists(SpeedscopePath(capture)), "Recorder wrote a Speedscope export");
     }
 
-    klvk::SpeedscopeExporter exporter({.executable = std::filesystem::canonical("/proc/self/exe").string()});
+    klvk::SpeedscopeExporter exporter({
+        .executable = std::filesystem::canonical("/proc/self/exe").string(),
+        .poll_interval = std::chrono::milliseconds{1},
+        .terminate_timeout = std::chrono::milliseconds{100},
+        .kill_timeout = std::chrono::milliseconds{100},
+    });
     for (const klvk::PerfRecorder::Capture& capture : captures)
     {
         const auto result = exporter.Export(capture.data_path, SpeedscopePath(capture), capture.log_path, {});
@@ -309,7 +314,12 @@ void TestCancelledExport()
     const auto log = output / "cancel.log";
     std::ofstream(perf_data) << "fake perf data\n";
 
-    klvk::SpeedscopeExporter exporter({.executable = std::filesystem::canonical("/proc/self/exe").string()});
+    klvk::SpeedscopeExporter exporter({
+        .executable = std::filesystem::canonical("/proc/self/exe").string(),
+        .poll_interval = std::chrono::milliseconds{1},
+        .terminate_timeout = std::chrono::milliseconds{100},
+        .kill_timeout = std::chrono::milliseconds{100},
+    });
     std::ofstream(speedscope) << "preserve\n";
     std::stop_source already_stopped;
     already_stopped.request_stop();
