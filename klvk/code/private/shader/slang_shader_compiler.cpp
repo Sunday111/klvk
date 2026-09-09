@@ -81,6 +81,7 @@ std::shared_ptr<const CompiledShader> SlangShaderCompiler::Compile(
     const std::string& source,
     const std::filesystem::path& source_path)
 {
+    std::lock_guard lock(mutex_);
     slang::IGlobalSession& global = GetGlobalSession();
 
     slang::TargetDesc target{};

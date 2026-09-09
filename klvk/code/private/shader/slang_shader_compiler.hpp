@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 
@@ -46,6 +47,7 @@ private:
     [[nodiscard]] static std::string GetBlobText(slang::IBlob* blob);
     static void EnsureSelfContained(slang::IModule& module, const std::filesystem::path& source_path);
 
+    std::mutex mutex_;
     Slang::ComPtr<slang::IGlobalSession> global_session_;
 };
 

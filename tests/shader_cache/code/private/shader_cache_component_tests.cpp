@@ -2,11 +2,13 @@
 
 #include <array>
 #include <fstream>
+#include <future>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "edt/functional/on_scope_leave.hpp"
 #include "shader/shader_cache_hash.hpp"
 #include "shader/shader_cache_store.hpp"
 #include "shader/slang_shader_compiler.hpp"
@@ -45,6 +47,46 @@ void ShaderCacheComponentTests::TestCompiler(const std::filesystem::path& root)
         const auto repeated = compiler.Compile(source, path);
         Ensure(*repeated->spirv == *compiled->spirv, "reusing a compiler changed SPIR-V");
         Ensure(*repeated->interface == *compiled->interface, "reusing a compiler changed reflection");
+    }
+    {
+        klvk::SlangShaderCompiler compiler;
+        std::promise<void> start;
+        const auto ready = start.get_future().share();
+        std::vector<std::future<std::shared_ptr<const klvk::CompiledShader>>> requests;
+        requests.reserve(16);
+        {
+            auto release = edt::OnScopeLeave([&] { start.set_value(); });
+            for (size_t index = 0; index != 16; ++index)
+            {
+                requests.push_back(
+                    std::async(
+                        std::launch::async,
+                        [&, ready, index]
+                        {
+                            ready.wait();
+                            if (index % 2 == 0)
+                            {
+                                bool failed = false;
+                                try
+                                {
+                                    (void)compiler.Compile("invalid shader", path);
+                                }
+                                catch (const std::exception&)
+                                {
+                                    failed = true;
+                                }
+                                Ensure(failed, "compiler accepted invalid source");
+                            }
+                            return compiler.Compile(source, path);
+                        }));
+            }
+        }
+        for (auto& request : requests)
+        {
+            const auto result = request.get();
+            Ensure(*result->spirv == *compiled->spirv, "concurrent compilation changed SPIR-V");
+            Ensure(*result->interface == *compiled->interface, "concurrent compilation changed reflection");
+        }
     }
     Ensure(compiled->spirv != nullptr && !compiled->spirv->empty(), "compiler returned no SPIR-V");
     Ensure(compiled->spirv->front() == 0x07230203, "compiler returned invalid SPIR-V");
