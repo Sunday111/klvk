@@ -189,13 +189,44 @@ RasterizedGlyph FontFace::Rasterize(u32 glyph_index, u32 pixel_size) const
     const size_t pixel_count = static_cast<size_t>(glyph.size.x()) * glyph.size.y();
     if (pixel_count == 0) return glyph;
 
-    // FreeType rows can be padded, so they are copied one at a time rather than
-    // as one block.
+    u32 bits_per_pixel{};
+    switch (slot->bitmap.pixel_mode)
+    {
+    case FT_PIXEL_MODE_MONO:
+        bits_per_pixel = 1;
+        break;
+    case FT_PIXEL_MODE_GRAY2:
+        bits_per_pixel = 2;
+        break;
+    case FT_PIXEL_MODE_GRAY4:
+        bits_per_pixel = 4;
+        break;
+    case FT_PIXEL_MODE_GRAY:
+        bits_per_pixel = 8;
+        break;
+    default:
+        ErrorHandling::ThrowWithMessage("Unsupported glyph bitmap pixel mode {}", slot->bitmap.pixel_mode);
+    }
+    const u32 sample_mask = (1U << bits_per_pixel) - 1;
+    const u32 maximum_coverage = bits_per_pixel == 8 ? slot->bitmap.num_grays - 1U : sample_mask;
+    ErrorHandling::Ensure(maximum_coverage > 0 && maximum_coverage <= 255, "Invalid glyph coverage range");
     glyph.coverage.resize(pixel_count);
     for (u32 row = 0; row != glyph.size.y(); ++row)
     {
         const u8* source = slot->bitmap.buffer + (static_cast<ptrdiff_t>(row) * slot->bitmap.pitch);
-        std::copy_n(source, glyph.size.x(), glyph.coverage.begin() + (static_cast<ptrdiff_t>(row) * glyph.size.x()));
+        if (bits_per_pixel == 8 && maximum_coverage == 255)
+        {
+            std::copy_n(source, glyph.size.x(), glyph.coverage.data() + static_cast<size_t>(row) * glyph.size.x());
+            continue;
+        }
+        for (u32 column = 0; column != glyph.size.x(); ++column)
+        {
+            const size_t bit_offset = static_cast<size_t>(column) * bits_per_pixel;
+            const u32 shift = 8U - bits_per_pixel - static_cast<u32>(bit_offset % 8);
+            const u32 sample = (source[bit_offset / 8] >> shift) & sample_mask;
+            glyph.coverage[static_cast<size_t>(row) * glyph.size.x() + column] =
+                static_cast<u8>(sample * 255U / maximum_coverage);
+        }
     }
     return glyph;
 }
