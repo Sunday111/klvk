@@ -29,6 +29,7 @@ size_t ImGuiCombo::AddItem(std::string_view name)
     {
         names_ptrs_.push_back(names_.back().data());
     }
+    if (index == 0) selected_ = 0;
     return index;
 }
 
