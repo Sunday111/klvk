@@ -168,19 +168,22 @@ struct Application::State
         }
     }
 
-    void RecreateSwapchain()
+    bool RecreateSwapchain(const Application& application)
     {
-        // Wait until the window is not minimized.
         auto framebuffer_size = window_->GetFramebufferSize();
         while (framebuffer_size.x() == 0 || framebuffer_size.y() == 0)
         {
+            if (application.WantsToClose()) return false;
             glfw_.WaitEvents();
             framebuffer_size = window_->GetFramebufferSize();
         }
 
+        if (application.WantsToClose()) return false;
+
         ErrorHandling::Ensure(swapchain_ != nullptr, "Cannot recreate an offscreen render target");
         swapchain_->Recreate(framebuffer_size);
         CreateRenderFinishedSemaphores();
+        return true;
     }
 
     bool auto_clear_ = true;
@@ -389,7 +392,7 @@ void Application::RunImpl()
             if (state_->swapchain_ &&
                 (target_extent.width != framebuffer_size.x() || target_extent.height != framebuffer_size.y()))
             {
-                state_->RecreateSwapchain();
+                state_->RecreateSwapchain(*this);
             }
         }
         // A replay that carries its own input must not also receive the real
@@ -500,7 +503,7 @@ void Application::PreTick()
         const vk::Extent2D extent = state_->render_target_->GetExtent();
         if (state_->swapchain_ && (framebuffer_size.x() != extent.width || framebuffer_size.y() != extent.height))
         {
-            state_->RecreateSwapchain();
+            if (!state_->RecreateSwapchain(*this)) return;
         }
     }
 
@@ -537,7 +540,7 @@ void Application::PreTick()
             }
             if (outcome.result == vk::Result::eErrorOutOfDateKHR)
             {
-                state_->RecreateSwapchain();
+                if (!state_->RecreateSwapchain(*this)) return;
                 continue;
             }
             ErrorHandling::Ensure(
@@ -784,7 +787,7 @@ void Application::PostTick()
         const vk::Result result = state_->device_context_->GetGraphicsQueue().presentKHR(present_info);
         if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR)
         {
-            state_->RecreateSwapchain();
+            state_->RecreateSwapchain(*this);
         }
         else
         {
@@ -807,6 +810,7 @@ void Application::MainLoop()
         state_->RegisterFrameStartTime();
 
         PreTick();
+        if (!state_->frame_active_ && WantsToClose()) break;
         [[maybe_unused]] const u64 timer_callback_count =
             state_->timer_manager_.Advance(state_->GetElapsedTime(), state_->completed_frames_ + 1);
         Tick();
