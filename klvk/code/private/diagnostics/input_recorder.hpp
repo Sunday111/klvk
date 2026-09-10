@@ -16,14 +16,6 @@
 namespace klvk
 {
 
-// Records real input into a diagnostic configuration that replays through
-// --klvk-diagnostics. It listens to the same four window entry points the replay
-// path writes to, so recording and replay share one vocabulary by construction.
-//
-// Events are pinned to the one-based frame they arrived on rather than to a
-// timestamp: a frame trigger reproduces the original input-to-frame association
-// whatever clock the replay runs at, while a wall-clock timestamp recorded at a
-// variable frame rate would land on a different frame under a fixed step.
 class DiagnosticInputRecorder
 {
 public:
@@ -62,6 +54,7 @@ private:
     void OnMouseButton(const events::OnMouseButton& event);
     void OnMouseScroll(const events::OnMouseScroll& event);
     void OnKey(const events::OnKey& event);
+    void OnTextInput(const events::OnTextInput& event);
 
     void Append(DiagnosticInputEvent event);
 

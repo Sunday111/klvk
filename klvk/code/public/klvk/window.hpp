@@ -79,7 +79,7 @@ private:
     // While a recorded run is replaying, real cursor and key events must not
     // reach the application: they would change the very run being reproduced.
     // Only events delivered by the platform are dropped; the replay injects
-    // through OnMouseMove/OnMouseButton/OnMouseScroll/OnKey directly.
+    // through OnMouseMove/OnMouseButton/OnMouseScroll/OnKey/OnTextInput directly.
     void SetPlatformInputEnabled(bool enabled) noexcept;
     [[nodiscard]] bool IsPlatformInputEnabled() const noexcept;
     static u32 MakeWindowId();
@@ -91,6 +91,7 @@ private:
     void OnMouseButton(MouseButton button, InputAction action);
     void OnMouseScroll([[maybe_unused]] float dx, float dy);
     void OnKey(Key key, InputAction action);
+    void OnTextInput(u32 codepoint);
 
     [[nodiscard]] void* GetPlatformHandle() const noexcept;
     [[nodiscard]] std::vector<const char*> GetRequiredVulkanInstanceExtensions() const;

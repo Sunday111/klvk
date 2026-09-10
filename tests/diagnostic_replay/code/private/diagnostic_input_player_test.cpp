@@ -2,11 +2,17 @@
 
 #include <imgui.h>
 
+#include <array>
+#include <chrono>
 #include <cmath>
+#include <filesystem>
 #include <memory>
 #include <optional>
+#include <string>
+#include <string_view>
 
 #include "diagnostic_test_support.hpp"
+#include "diagnostics/input_recorder.hpp"
 #include "edt/functional/on_scope_leave.hpp"
 #include "klvk/application.hpp"
 #include "klvk/events/event_listener.hpp"
@@ -121,6 +127,44 @@ public:
         tests::Ensure(!window->IsKeyPressed(Key::RightCtrl), "replayed right modifier release was not stored");
         tests::Ensure(!io.KeyCtrl, "replayed final modifier release did not reach ImGui");
         ImGui::EndFrame();
+
+        const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
+        const auto recording_path =
+            std::filesystem::temp_directory_path() / ("klvk_text_input_test_" + std::to_string(nonce) + ".json");
+        auto remove_recording = edt::OnScopeLeave([&] { std::filesystem::remove(recording_path); });
+        constexpr auto kCodepoints = std::to_array<u32>({'7', 0xE9, 0x4E2D});
+        {
+            DiagnosticInputRecorder recorder(recording_path, application.GetEventManager());
+            recorder.BeginFrame(3);
+            for (u32 codepoint : kCodepoints) window->OnTextInput(codepoint);
+            tests::Ensure(recorder.GetRecordedEventCount() == kCodepoints.size(), "typing was not recorded");
+            recorder.Write({320, 240}, 16'666'667, nlohmann::json::object(), recording_path.parent_path());
+        }
+        const auto recording = LoadDiagnosticRunConfig(recording_path, recording_path.parent_path());
+        tests::Ensure(recording.input.size() == kCodepoints.size(), "recorded typing did not survive JSON");
+        for (size_t index = 0; index != kCodepoints.size(); ++index)
+        {
+            tests::Ensure(recording.input[index].frame == 3, "recorded typing lost its frame");
+            tests::Ensure(
+                std::get<DiagnosticTextInput>(recording.input[index].event).codepoint == kCodepoints[index],
+                "recorded typing changed its Unicode codepoint");
+        }
+
+        std::array<char, 64> text{};
+        auto draw_text_input = [&](bool focus)
+        {
+            BeginImGuiFrame();
+            ImGui::Begin("Text input test");
+            if (focus) ImGui::SetKeyboardFocusHere();
+            ImGui::InputText("Text", text.data(), text.size());
+            ImGui::End();
+            ImGui::EndFrame();
+        };
+        draw_text_input(true);
+        draw_text_input(false);
+        for (const DiagnosticInputConfig& input : recording.input) player.Apply(input.event);
+        draw_text_input(false);
+        tests::Ensure(std::string_view(text.data()) == "7é中", "replayed Unicode typing did not edit the widget");
     }
 
 private:

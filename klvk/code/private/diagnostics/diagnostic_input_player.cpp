@@ -66,6 +66,11 @@ void DiagnosticInputPlayer::Apply(const DiagnosticInputEvent& input)
                 io.AddKeyEvent(static_cast<ImGuiKey>(KeyToImGui(event.key)), pressed);
                 ApplyModifier(event.key);
             }
+            else if constexpr (std::is_same_v<Event, DiagnosticTextInput>)
+            {
+                window_.OnTextInput(event.codepoint);
+                io.AddInputCharacter(event.codepoint);
+            }
         },
         input);
 }

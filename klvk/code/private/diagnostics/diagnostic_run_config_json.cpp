@@ -160,11 +160,22 @@ DiagnosticInputConfig DiagnosticRunConfigJson::ReadInput(const JsonReader& value
             .action = value.Field("action").EnumValue(kActionNames, kActionExpectation),
         };
     }
+    else if (type == "text")
+    {
+        value.EnsureKnownKeys({"frame", "time_seconds", "time_ns", "type", "codepoint"});
+        const JsonReader field = value.Field("codepoint");
+        const u64 codepoint = field.UInt();
+        ErrorHandling::Ensure(
+            codepoint <= 0x10FFFF && (codepoint < 0xD800 || codepoint > 0xDFFF),
+            "Field '{}' must be a Unicode scalar value",
+            field.Path());
+        result.event = DiagnosticTextInput{.codepoint = static_cast<u32>(codepoint)};
+    }
     else
     {
         ErrorHandling::ThrowWithMessage(
             "Unknown diagnostic input type '{}' in '{}' "
-            "(expected 'mouse_move', 'mouse_button', 'mouse_scroll', or 'key')",
+            "(expected 'mouse_move', 'mouse_button', 'mouse_scroll', 'key', or 'text')",
             type,
             value.Path());
     }

@@ -21,7 +21,8 @@ DiagnosticInputRecorder::DiagnosticInputRecorder(std::filesystem::path path, eve
         &DiagnosticInputRecorder::OnMouseMove,
         &DiagnosticInputRecorder::OnMouseButton,
         &DiagnosticInputRecorder::OnMouseScroll,
-        &DiagnosticInputRecorder::OnKey>::CreatePtr(this);
+        &DiagnosticInputRecorder::OnKey,
+        &DiagnosticInputRecorder::OnTextInput>::CreatePtr(this);
     event_subscription_ = event_manager_.AddEventListener(*event_listener_);
 }
 
@@ -68,6 +69,11 @@ void DiagnosticInputRecorder::OnMouseScroll(const events::OnMouseScroll& event)
 void DiagnosticInputRecorder::OnKey(const events::OnKey& event)
 {
     Append(DiagnosticKeyInput{.key = event.key, .action = event.action});
+}
+
+void DiagnosticInputRecorder::OnTextInput(const events::OnTextInput& event)
+{
+    Append(DiagnosticTextInput{.codepoint = event.codepoint});
 }
 
 void DiagnosticInputRecorder::RecordDialog(
