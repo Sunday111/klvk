@@ -115,9 +115,13 @@ Events are pinned to the frame on which they arrived rather than wall-clock time
 at most one per frame. This preserves the original input-to-frame association and keeps recordings compact.
 
 Ordinary recordings preserve each measured frame duration in `clock: {"mode": "recorded", "frame_durations_ns": [...]}`.
-Replay uses those durations for application and ImGui delta time and accumulates them for logical frame timestamps.
-A replay extended beyond the recording uses its final duration for the additional frames. Recording an explicitly
-fixed-clock run preserves that fixed step. Captures and checkpoints accept either clock; video requires a fixed clock.
+Replay uses those durations for application delta time and accumulates them for logical frame timestamps.
+The optional `clock.imgui_frame_durations_seconds` array preserves the separate ImGui delta time, including delays
+while waiting for a frame to become available. It contains one positive finite float duration per application frame;
+recordings without it use the application duration for ImGui. Visible replay waits for each recorded frame timestamp
+before rendering that frame. A replay extended beyond the recording uses its final durations for the additional frames.
+Recording an explicitly fixed-clock run preserves that fixed step. Captures and checkpoints accept either clock;
+video requires a fixed clock.
 Mid-frame wall-clock observations and external clocks are not recorded.
 
 File-dialog answers are stored under `dialogs` in request order:

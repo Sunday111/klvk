@@ -17,8 +17,17 @@ namespace klvk
 class ApplicationFrameClock
 {
 public:
-    void Initialize(std::optional<u64> fixed_step_nanoseconds, std::span<const u64> frame_durations_ns = {});
-    void RegisterFrameStart();
+    using Clock = std::chrono::steady_clock;
+    using TimePoint = Clock::time_point;
+
+    void Initialize(
+        std::optional<u64> fixed_step_nanoseconds,
+        std::span<const u64> frame_durations_ns = {},
+        TimePoint application_start = Clock::now());
+    void RegisterFrameStart(
+        bool pace_recorded_to_real_time = false,
+        std::optional<TimePoint> frame_start = std::nullopt);
+    [[nodiscard]] std::optional<TimePoint> GetNextRecordedFrameStartDeadline() const;
     [[nodiscard]] u64 GetLastFrameDurationNanoseconds() const noexcept { return last_frame_duration_ns_; }
     void SetTargetFramerate(std::optional<float> framerate);
     void AlignWithFramerate(bool pace_fixed_step_to_real_time, u64 completed_frames);
@@ -30,9 +39,6 @@ public:
     [[nodiscard]] float GetLastFrameDurationSeconds() const noexcept;
 
 private:
-    using Clock = std::chrono::steady_clock;
-    using TimePoint = Clock::time_point;
-
     static constexpr size_t kFrameTimeHistorySize = 128;
 
     template <std::floating_point Result = float, typename Duration>

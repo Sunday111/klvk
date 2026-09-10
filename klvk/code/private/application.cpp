@@ -2,6 +2,7 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <array>
 #include <limits>
 #include <span>
@@ -104,7 +105,7 @@ struct Application::State
                                : std::span<const u64>{});
     }
 
-    void RegisterFrameStartTime() { frame_clock_.RegisterFrameStart(); }
+    void RegisterFrameStartTime() { frame_clock_.RegisterFrameStart(ShouldPaceToRealTime()); }
 
     [[nodiscard]] float GetRelativeTimeSeconds() const
     {
@@ -663,10 +664,24 @@ void Application::PreTick()
     {
         state_->diagnostic_runner_->AdvanceInput(state_->completed_frames_ + 1, state_->GetElapsedTime());
     }
-    const bool recorded_clock =
-        state_->diagnostic_config_ && !state_->diagnostic_config_->clock.frame_durations_ns.empty();
-    ApplicationImGui::BeginFrame(
-        recorded_clock ? state_->frame_clock_.GetLastFrameDurationNanoseconds() : state_->GetFixedStepNanoseconds());
+    std::optional<u64> imgui_step = state_->GetFixedStepNanoseconds();
+    std::optional<float> recorded_imgui_duration;
+    if (state_->diagnostic_config_ && !state_->diagnostic_config_->clock.frame_durations_ns.empty())
+    {
+        imgui_step = state_->frame_clock_.GetLastFrameDurationNanoseconds();
+        const auto& durations = state_->diagnostic_config_->clock.imgui_frame_durations_seconds;
+        if (!durations.empty())
+        {
+            recorded_imgui_duration = durations[std::min(state_->completed_frames_, durations.size() - 1)];
+        }
+    }
+    const float imgui_duration = ApplicationImGui::BeginFrame(imgui_step, recorded_imgui_duration);
+    if (state_->input_recorder_ && !state_->GetFixedStepNanoseconds().has_value())
+    {
+        state_->input_recorder_->RecordFrameDuration(
+            state_->frame_clock_.GetLastFrameDurationNanoseconds(),
+            imgui_duration);
+    }
 }
 
 void Application::Tick() {}
@@ -812,11 +827,6 @@ void Application::MainLoop()
     while (!WantsToClose())
     {
         state_->RegisterFrameStartTime();
-        if (state_->input_recorder_ && !state_->GetFixedStepNanoseconds().has_value())
-        {
-            state_->input_recorder_->RecordFrameDuration(state_->frame_clock_.GetLastFrameDurationNanoseconds());
-        }
-
         PreTick();
         [[maybe_unused]] const u64 timer_callback_count =
             state_->timer_manager_.Advance(state_->GetElapsedTime(), state_->completed_frames_ + 1);

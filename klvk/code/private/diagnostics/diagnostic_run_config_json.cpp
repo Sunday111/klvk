@@ -86,12 +86,12 @@ DiagnosticClockConfig DiagnosticRunConfigJson::ReadClock(const JsonReader& root)
 {
     const auto clock = root.OptionalField("clock");
     if (!clock) return {};
-    clock->EnsureKnownKeys({"mode", "step_seconds", "step_ns", "frame_durations_ns"});
+    clock->EnsureKnownKeys({"mode", "step_seconds", "step_ns", "frame_durations_ns", "imgui_frame_durations_seconds"});
 
     const std::string mode = clock->Field("mode").String();
     if (mode == "recorded")
     {
-        clock->EnsureKnownKeys({"mode", "frame_durations_ns"});
+        clock->EnsureKnownKeys({"mode", "frame_durations_ns", "imgui_frame_durations_seconds"});
         DiagnosticClockConfig config;
         u64 elapsed = 0;
         for (const JsonReader& duration : clock->Field("frame_durations_ns").Elements())
@@ -103,6 +103,20 @@ DiagnosticClockConfig DiagnosticRunConfigJson::ReadClock(const JsonReader& root)
             config.frame_durations_ns.push_back(step);
         }
         ErrorHandling::Ensure(!config.frame_durations_ns.empty(), "Recorded clock requires frame durations");
+        if (const auto imgui_durations = clock->OptionalField("imgui_frame_durations_seconds"))
+        {
+            for (const JsonReader& duration : imgui_durations->Elements())
+            {
+                const float seconds = duration.Float();
+                ErrorHandling::Ensure(
+                    std::isfinite(seconds) && seconds > 0.f,
+                    "Recorded ImGui frame durations must be finite and positive");
+                config.imgui_frame_durations_seconds.push_back(seconds);
+            }
+            ErrorHandling::Ensure(
+                config.imgui_frame_durations_seconds.size() == config.frame_durations_ns.size(),
+                "Recorded application and ImGui frame durations must have equal lengths");
+        }
         return config;
     }
     clock->EnsureKnownKeys({"mode", "step_seconds", "step_ns"});
@@ -134,7 +148,7 @@ DiagnosticClockConfig DiagnosticRunConfigJson::ReadClock(const JsonReader& root)
     ErrorHandling::Ensure(
         std::isfinite(runtime_step) && runtime_step > 0.f && std::isfinite(1.f / runtime_step),
         "The fixed diagnostic clock step must have a finite positive float duration and reciprocal");
-    return {.fixed_step_ns = step_ns, .frame_durations_ns = {}};
+    return {.fixed_step_ns = step_ns, .frame_durations_ns = {}, .imgui_frame_durations_seconds = {}};
 }
 
 DiagnosticInputConfig DiagnosticRunConfigJson::ReadInput(const JsonReader& value)

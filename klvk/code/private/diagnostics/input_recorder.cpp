@@ -1,6 +1,7 @@
 #include "input_recorder.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 #include <utility>
 
@@ -87,10 +88,14 @@ void DiagnosticInputRecorder::RecordDialog(
     dialogs_.push_back(std::move(recorded));
 }
 
-void DiagnosticInputRecorder::RecordFrameDuration(u64 duration_ns)
+void DiagnosticInputRecorder::RecordFrameDuration(u64 duration_ns, float imgui_duration_seconds)
 {
     ErrorHandling::Ensure(duration_ns > 0, "Recorded frame duration must be positive");
+    ErrorHandling::Ensure(
+        std::isfinite(imgui_duration_seconds) && imgui_duration_seconds > 0.f,
+        "Recorded ImGui frame duration must be finite and positive");
     frame_durations_ns_.push_back(duration_ns);
+    imgui_frame_durations_seconds_.push_back(imgui_duration_seconds);
 }
 
 void DiagnosticInputRecorder::Write(
@@ -104,7 +109,11 @@ void DiagnosticInputRecorder::Write(
     config.presentation = DiagnosticPresentation::Offscreen;
     config.framebuffer_size = framebuffer_size;
     config.clock.fixed_step_ns = fixed_step_ns;
-    if (!fixed_step_ns.has_value()) config.clock.frame_durations_ns = frame_durations_ns_;
+    if (!fixed_step_ns.has_value())
+    {
+        config.clock.frame_durations_ns = frame_durations_ns_;
+        config.clock.imgui_frame_durations_seconds = imgui_frame_durations_seconds_;
+    }
     config.input = input_;
     config.dialogs = dialogs_;
     config.application = application;
