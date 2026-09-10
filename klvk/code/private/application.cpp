@@ -965,6 +965,11 @@ vk::CommandBuffer Application::GetCurrentCommandBuffer() const
     return state_->frames_[state_->frame_index_].command_buffer;
 }
 
+u64 Application::GetFrameNumber() const
+{
+    return state_->completed_frames_ + 1;
+}
+
 size_t Application::GetFrameInFlightIndex() const
 {
     return state_->frame_index_;

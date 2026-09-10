@@ -24,19 +24,14 @@ struct PushConstants
 InstancedSpriteRenderer2d::InstancedSpriteRenderer2d(Application& app, const Texture& texture) : app_(&app)
 {
     DeviceContext& context = app.GetDeviceContext();
-    descriptor_sets_ = DescriptorSets::Builder(context)
-                           .Binding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
-                           .Binding(1, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eVertex)
-                           .Build(Application::kFramesInFlight);
-    for (size_t frame = 0; frame != Application::kFramesInFlight; ++frame)
-    {
-        descriptor_sets_.WriteImage(frame, 0, texture.GetView(), texture.GetSampler());
-    }
+    texture_view_ = texture.GetView();
+    texture_sampler_ = texture.GetSampler();
+    frames_.front().batches.push_back(CreateBatch());
 
     {
         const std::array push_constant_ranges{
             vk::PushConstantRange{vk::ShaderStageFlagBits::eVertex, 0, sizeof(PushConstants)}};
-        const std::array set_layouts{descriptor_sets_.GetLayoutView()};
+        const std::array set_layouts{frames_.front().batches.front().descriptor_sets.GetLayoutView()};
         pipeline_layout_ = PipelineLayout{context, set_layouts, push_constant_ranges};
     }
 
@@ -56,31 +51,49 @@ InstancedSpriteRenderer2d::~InstancedSpriteRenderer2d()
     app_->GetDeviceContext().WaitIdle();
 }
 
-void InstancedSpriteRenderer2d::EnsureFrameBufferCapacity(size_t frame_index, size_t bytes)
+InstancedSpriteRenderer2d::Batch InstancedSpriteRenderer2d::CreateBatch()
 {
-    GpuBuffer& buffer = instance_buffers_[frame_index];
-    if (buffer.IsValid() && buffer.GetSize() >= bytes) return;
+    Batch batch;
+    batch.descriptor_sets =
+        DescriptorSets::Builder(app_->GetDeviceContext())
+            .Binding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
+            .Binding(1, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eVertex)
+            .Build();
+    batch.descriptor_sets.WriteImage(0, 0, texture_view_, texture_sampler_);
+    return batch;
+}
 
-    size_t new_size = 1024;
-    while (new_size < bytes) new_size *= 2;
-
-    // The application waited on this frame slot's fence in PreTick, so the GPU
-    // is done with the old buffer and it can be destroyed right away.
-    buffer = GpuBuffer(app_->GetDeviceContext(), vk::BufferUsageFlagBits::eStorageBuffer, new_size, true);
-    descriptor_sets_.WriteBuffer(frame_index, 1, buffer.GetHandle(), vk::WholeSize);
+InstancedSpriteRenderer2d::Batch& InstancedSpriteRenderer2d::AcquireBatch(size_t bytes)
+{
+    auto& frame = frames_[app_->GetFrameInFlightIndex()];
+    if (frame.frame_number != app_->GetFrameNumber())
+    {
+        frame.frame_number = app_->GetFrameNumber();
+        frame.next_batch = 0;
+    }
+    if (frame.next_batch == frame.batches.size()) frame.batches.push_back(CreateBatch());
+    auto& batch = frame.batches[frame.next_batch];
+    if (!batch.buffer.IsValid() || batch.buffer.GetSize() < bytes)
+    {
+        size_t capacity = 1024;
+        while (capacity < bytes) capacity *= 2;
+        batch.buffer = GpuBuffer(app_->GetDeviceContext(), vk::BufferUsageFlagBits::eStorageBuffer, capacity, true);
+        batch.descriptor_sets.WriteBuffer(0, 1, batch.buffer.GetHandle(), vk::WholeSize);
+    }
+    ++frame.next_batch;
+    return batch;
 }
 
 void InstancedSpriteRenderer2d::Render(const Mat3f& world_to_view)
 {
     if (instances_.empty()) return;
 
-    const size_t frame_index = app_->GetFrameInFlightIndex();
     vk::CommandBuffer command_buffer = app_->GetCurrentCommandBuffer();
 
-    EnsureFrameBufferCapacity(frame_index, instances_.size() * sizeof(Instance));
-    instance_buffers_[frame_index].Write(std::as_bytes(std::span{instances_}));
+    auto& batch = AcquireBatch(instances_.size() * sizeof(Instance));
+    batch.buffer.Write(std::as_bytes(std::span{instances_}));
 
-    const std::array descriptor_sets{descriptor_sets_.Get(frame_index)};
+    const std::array descriptor_sets{batch.descriptor_sets.Get(0)};
     command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
     command_buffer
         .bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout_.GetHandle(), 0, descriptor_sets, {});

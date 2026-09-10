@@ -18,8 +18,7 @@ using namespace edt::lazy_matrix_aliases;  // NOLINT
 class Texture;
 
 // Draws textured quads with a translation, scale and color per instance.
-// Instances are collected on the CPU every frame and uploaded to a per-frame
-// storage buffer, so the caller just re-adds everything each tick.
+// Each Render snapshots the collected instances into its own batch for the current frame.
 class InstancedSpriteRenderer2d
 {
 public:
@@ -55,15 +54,30 @@ public:
     void Render(const Mat3f& world_to_view);
 
 private:
-    void EnsureFrameBufferCapacity(size_t frame_index, size_t bytes);
+    struct Batch
+    {
+        GpuBuffer buffer;
+        DescriptorSets descriptor_sets;
+    };
+
+    struct FrameBatches
+    {
+        std::vector<Batch> batches;
+        u64 frame_number = 0;
+        size_t next_batch = 0;
+    };
+
+    [[nodiscard]] Batch CreateBatch();
+    [[nodiscard]] Batch& AcquireBatch(size_t bytes);
 
     Application* app_ = nullptr;
     std::vector<Instance> instances_;
 
-    DescriptorSets descriptor_sets_;
+    vk::ImageView texture_view_;
+    vk::Sampler texture_sampler_;
     PipelineLayout pipeline_layout_;
     vk::UniquePipeline pipeline_;
-    std::array<GpuBuffer, Application::kFramesInFlight> instance_buffers_{};
+    std::array<FrameBatches, Application::kFramesInFlight> frames_{};
 };
 
 }  // namespace klvk

@@ -127,6 +127,7 @@ public:
     // and the index of the frame-in-flight slot it belongs to.
     [[nodiscard]] vk::CommandBuffer GetCurrentCommandBuffer() const;
     [[nodiscard]] size_t GetFrameInFlightIndex() const;
+    [[nodiscard]] u64 GetFrameNumber() const;
 
 private:
     void RunImpl();
