@@ -39,6 +39,7 @@ bool ImGuiCombo::TryRemoveItem(size_t index) noexcept
     auto off = static_cast<std::ptrdiff_t>(index);
     names_.erase(std::next(names_.begin(), off));
     names_ptrs_.erase(std::next(names_ptrs_.begin(), off));
+    for (size_t i = index; i < names_.size(); ++i) names_ptrs_[i] = names_[i].data();
     int size = static_cast<int>(names_.size());
     selected_ = size ? std::min(selected_, size - 1) : -1;
     return true;
