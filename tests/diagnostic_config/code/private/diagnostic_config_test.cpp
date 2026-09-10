@@ -127,6 +127,7 @@ void TestConfigSerializationRoundTrip()
     klvk::DiagnosticRunConfig original;
     original.presentation = klvk::DiagnosticPresentation::Offscreen;
     original.framebuffer_size = edt::Vec2<u32>{640, 480};
+    original.initial_cursor_position = edt::Vec2f{123.5f, -7.25f};
     original.clock.fixed_step_ns = 16'666'667;
     original.input = {
         {.frame = 1, .time_ns = std::nullopt, .event = klvk::DiagnosticMouseMoveInput{.position = {12.5f, 34.25f}}},
@@ -163,6 +164,9 @@ void TestConfigSerializationRoundTrip()
 
     Ensure(parsed.presentation == original.presentation, "presentation did not survive the round trip");
     Ensure(parsed.framebuffer_size == original.framebuffer_size, "framebuffer_size did not survive the round trip");
+    Ensure(
+        parsed.initial_cursor_position == original.initial_cursor_position,
+        "initial cursor position did not survive the round trip");
     Ensure(parsed.clock.fixed_step_ns == original.clock.fixed_step_ns, "clock step did not survive the round trip");
     Ensure(parsed.exit.frame == original.exit.frame, "exit did not survive the round trip");
     Ensure(parsed.application == original.application, "application config did not survive the round trip");
@@ -442,6 +446,9 @@ void Run()
         R"({"version":1,"input":[{"type":"key","key":"w","action":"press"}],"exit":{"frame":1}})",
         R"({"version":1,"input":[{"frame":1,"time_seconds":0,"type":"key","key":"w","action":"press"}],"exit":{"frame":1}})",
         R"({"version":1,"input":[{"frame":1,"type":"unknown"}],"exit":{"frame":1}})",
+        R"({"version":1,"initial_cursor_position":[1],"exit":{"frame":1}})",
+        R"({"version":1,"initial_cursor_position":[1,"x"],"exit":{"frame":1}})",
+        R"({"version":1,"initial_cursor_position":[1,2,3],"exit":{"frame":1}})",
         R"({"version":1,"input":[{"frame":1,"type":"key","key":"unknown","action":"press"}],"exit":{"frame":1}})",
         R"({"version":1,"input":[{"frame":1,"type":"key","key":"w","action":"repeat"}],"exit":{"frame":1}})",
         R"({"version":1,"input":[{"frame":1,"type":"mouse_button","button":"button6","action":"press"}],"exit":{"frame":1}})",

@@ -151,6 +151,7 @@ struct DiagnosticRunConfig
 
     DiagnosticPresentation presentation = DiagnosticPresentation::Hidden;
     std::optional<edt::Vec2<u32>> framebuffer_size;
+    std::optional<edt::Vec2f> initial_cursor_position;
     DiagnosticClockConfig clock;
     std::vector<DiagnosticInputConfig> input;
     std::vector<DiagnosticCaptureConfig> captures;
