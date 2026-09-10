@@ -28,6 +28,7 @@ enum class DiagnosticPresentation : u8
 struct DiagnosticClockConfig
 {
     std::optional<u64> fixed_step_ns;
+    std::vector<u64> frame_durations_ns;
 };
 
 struct DiagnosticCaptureConfig

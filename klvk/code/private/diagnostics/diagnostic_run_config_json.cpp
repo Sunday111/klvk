@@ -82,14 +82,31 @@ std::optional<edt::Vec2<u32>> DiagnosticRunConfigJson::ReadFramebufferSize(const
     return edt::Vec2<u32>{static_cast<u32>(width), static_cast<u32>(height)};
 }
 
-std::optional<u64> DiagnosticRunConfigJson::ReadClock(const JsonReader& root)
+DiagnosticClockConfig DiagnosticRunConfigJson::ReadClock(const JsonReader& root)
 {
     const auto clock = root.OptionalField("clock");
-    if (!clock) return std::nullopt;
-    clock->EnsureKnownKeys({"mode", "step_seconds", "step_ns"});
+    if (!clock) return {};
+    clock->EnsureKnownKeys({"mode", "step_seconds", "step_ns", "frame_durations_ns"});
 
     const std::string mode = clock->Field("mode").String();
-    ErrorHandling::Ensure(mode == "fixed", "Unknown diagnostic clock mode '{}' (expected 'fixed')", mode);
+    if (mode == "recorded")
+    {
+        clock->EnsureKnownKeys({"mode", "frame_durations_ns"});
+        DiagnosticClockConfig config;
+        u64 elapsed = 0;
+        for (const JsonReader& duration : clock->Field("frame_durations_ns").Elements())
+        {
+            const u64 step = duration.UInt();
+            ErrorHandling::Ensure(step > 0, "Recorded frame durations must be positive");
+            ErrorHandling::Ensure(step <= std::numeric_limits<u64>::max() - elapsed, "Recorded clock overflows");
+            elapsed += step;
+            config.frame_durations_ns.push_back(step);
+        }
+        ErrorHandling::Ensure(!config.frame_durations_ns.empty(), "Recorded clock requires frame durations");
+        return config;
+    }
+    clock->EnsureKnownKeys({"mode", "step_seconds", "step_ns"});
+    ErrorHandling::Ensure(mode == "fixed", "Unknown diagnostic clock mode '{}' (expected 'fixed' or 'recorded')", mode);
 
     const auto seconds = clock->OptionalField("step_seconds");
     const auto nanoseconds = clock->OptionalField("step_ns");
@@ -117,7 +134,7 @@ std::optional<u64> DiagnosticRunConfigJson::ReadClock(const JsonReader& root)
     ErrorHandling::Ensure(
         std::isfinite(runtime_step) && runtime_step > 0.f && std::isfinite(1.f / runtime_step),
         "The fixed diagnostic clock step must have a finite positive float duration and reciprocal");
-    return step_ns;
+    return {.fixed_step_ns = step_ns, .frame_durations_ns = {}};
 }
 
 DiagnosticInputConfig DiagnosticRunConfigJson::ReadInput(const JsonReader& value)
@@ -311,7 +328,7 @@ DiagnosticRunConfig DiagnosticRunConfigJson::Read(
         config.presentation = presentation->EnumValue(kPresentationNames, kPresentationExpectation);
     }
     config.framebuffer_size = ReadFramebufferSize(root);
-    config.clock.fixed_step_ns = ReadClock(root);
+    config.clock = ReadClock(root);
 
     if (const auto input = root.OptionalField("input"))
     {

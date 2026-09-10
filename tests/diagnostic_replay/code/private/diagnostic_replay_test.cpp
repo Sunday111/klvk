@@ -6,17 +6,21 @@ extern "C"
 }
 
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "application_frame_clock.hpp"
 #include "diagnostic_test_support.hpp"
 #include "diagnostics/diagnostic_replay_scheduler.hpp"
 #include "diagnostics/diagnostic_video_recorder.hpp"
+#include "diagnostics/input_recorder.hpp"
 #include "edt/functional/on_scope_leave.hpp"
 #include "klvk/events/application_events.hpp"
 #include "klvk/events/event_listener.hpp"
@@ -294,8 +298,77 @@ void TestDiagnosticOutputWrites()
 #endif
 }
 
+void TestRecordedFrameClock()
+{
+    const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
+    const auto path =
+        std::filesystem::temp_directory_path() / ("klvk_recorded_clock_" + std::to_string(nonce) + ".json");
+    auto cleanup = edt::OnScopeLeave([&] { std::filesystem::remove(path); });
+    klvk::events::EventManager events;
+    klvk::DiagnosticInputRecorder recorder(path, events);
+    std::vector<u64> durations(120, 8'333'333);
+    durations.push_back(42'000'000);
+    durations.push_back(5'000'000);
+    float recorded_distance = 0.f;
+    for (size_t frame = 0; frame != durations.size(); ++frame)
+    {
+        recorder.BeginFrame(frame + 1);
+        recorder.RecordFrameDuration(durations[frame]);
+        if (frame == 19) events.Emit(klvk::events::OnKey{.key = klvk::Key::W, .action = klvk::InputAction::Press});
+        recorded_distance += static_cast<float>(static_cast<double>(durations[frame]) / 1'000'000'000.0);
+    }
+    recorder.Write({320, 240}, std::nullopt, nlohmann::json::object(), path.parent_path());
+    const auto config = klvk::LoadDiagnosticRunConfig(path, path.parent_path());
+    Ensure(!config.clock.fixed_step_ns.has_value(), "recording substituted a fixed simulation clock");
+    Ensure(config.input.size() == 1 && config.input.front().frame == 20, "recording changed input frame association");
+    Ensure(config.clock.frame_durations_ns == durations, "recording did not preserve measured frame durations");
+    klvk::ApplicationFrameClock clock;
+    clock.Initialize(config.clock.fixed_step_ns, config.clock.frame_durations_ns);
+    u64 elapsed = 0;
+    float replayed_distance = 0.f;
+    for (size_t frame = 0; frame != durations.size(); ++frame)
+    {
+        clock.RegisterFrameStart();
+        elapsed += durations[frame];
+        replayed_distance += clock.GetLastFrameDurationSeconds();
+        Ensure(clock.GetLastFrameDurationNanoseconds() == durations[frame], "replay changed a frame duration");
+        Ensure(clock.GetElapsedTime(frame).count() == elapsed, "recorded logical time did not accumulate durations");
+        Ensure(
+            std::abs(clock.GetCurrentFrameStartTime(frame) - clock.GetRelativeTimeSeconds(frame)) < 0.000'001f,
+            "recorded frame timestamp used wall time");
+    }
+    Ensure(
+        std::abs(replayed_distance - recorded_distance) < 0.000'001f,
+        "replayed delta-time movement diverged from recording");
+    clock.RegisterFrameStart();
+    Ensure(
+        clock.GetLastFrameDurationNanoseconds() == durations.back(),
+        "extended replay did not retain its final duration");
+    clock.Initialize(20'000'000);
+    clock.RegisterFrameStart();
+    Ensure(clock.GetLastFrameDurationNanoseconds() == 20'000'000, "fixed clock did not survive recorded-clock reset");
+    Ensure(clock.GetElapsedTime(3).count() == 60'000'000, "fixed clock logical time changed");
+    for (const auto& invalid : std::vector<nlohmann::json>{
+             {{"mode", "recorded"}, {"frame_durations_ns", nlohmann::json::array()}},
+             {{"mode", "recorded"}, {"frame_durations_ns", {0}}},
+             {{"mode", "recorded"}, {"frame_durations_ns", {-1}}},
+             {{"mode", "recorded"}, {"frame_durations_ns", {1.5}}},
+             {{"mode", "recorded"}, {"frame_durations_ns", {std::numeric_limits<u64>::max(), 1}}},
+             {{"mode", "recorded"}, {"frame_durations_ns", {10}}, {"step_ns", 10}},
+             {{"mode", "fixed"}, {"frame_durations_ns", {10}}, {"step_ns", 10}}})
+    {
+        auto document = klvk::DiagnosticRunConfigToJson(config);
+        document["clock"] = invalid;
+        klvk::Filesystem::WriteFile(path, document.dump());
+        EnsureThrows(
+            [&] { (void)klvk::LoadDiagnosticRunConfig(path, path.parent_path()); },
+            "invalid recorded clock was accepted");
+    }
+}
+
 void Run()
 {
+    TestRecordedFrameClock();
     TestFramePhasesAndCompletion();
     TestTimeCatchUpAndAfterLastCapture();
     TestCheckpointCapturePlan();

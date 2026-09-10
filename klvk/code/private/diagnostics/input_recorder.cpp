@@ -87,9 +87,15 @@ void DiagnosticInputRecorder::RecordDialog(
     dialogs_.push_back(std::move(recorded));
 }
 
+void DiagnosticInputRecorder::RecordFrameDuration(u64 duration_ns)
+{
+    ErrorHandling::Ensure(duration_ns > 0, "Recorded frame duration must be positive");
+    frame_durations_ns_.push_back(duration_ns);
+}
+
 void DiagnosticInputRecorder::Write(
     edt::Vec2<u32> framebuffer_size,
-    u64 fixed_step_ns,
+    std::optional<u64> fixed_step_ns,
     const nlohmann::json& application,
     const std::filesystem::path& executable_directory) const
 {
@@ -98,6 +104,7 @@ void DiagnosticInputRecorder::Write(
     config.presentation = DiagnosticPresentation::Offscreen;
     config.framebuffer_size = framebuffer_size;
     config.clock.fixed_step_ns = fixed_step_ns;
+    if (!fixed_step_ns.has_value()) config.clock.frame_durations_ns = frame_durations_ns_;
     config.input = input_;
     config.dialogs = dialogs_;
     config.application = application;

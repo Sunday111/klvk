@@ -107,12 +107,18 @@ yae run klvk_falling_sand_example -- --klvk-record-input /tmp/session.json
 yae run klvk_falling_sand_example -- --klvk-diagnostics /tmp/session.json
 ```
 
-The result uses offscreen presentation, the recorded framebuffer size, a fixed clock, frame-triggered input, and an
+The result uses offscreen presentation, the recorded framebuffer size, a recorded clock, frame-triggered input, and an
 exit at the session's final frame. File-dialog answers obtained through `Application::OpenFileDialog` and
-`SaveFileDialog` are recorded too. Add `captures`, `checkpoints`, or `video` to derive output from the replay.
+`SaveFileDialog` are recorded too. Add `captures` or `checkpoints` to derive output from the replay.
 
 Events are pinned to the frame on which they arrived rather than wall-clock time. Redundant cursor events collapse to
 at most one per frame. This preserves the original input-to-frame association and keeps recordings compact.
+
+Ordinary recordings preserve each measured frame duration in `clock: {"mode": "recorded", "frame_durations_ns": [...]}`.
+Replay uses those durations for application and ImGui delta time and accumulates them for logical frame timestamps.
+A replay extended beyond the recording uses its final duration for the additional frames. Recording an explicitly
+fixed-clock run preserves that fixed step. Captures and checkpoints accept either clock; video requires a fixed clock.
+Mid-frame wall-clock observations and external clocks are not recorded.
 
 File-dialog answers are stored under `dialogs` in request order:
 

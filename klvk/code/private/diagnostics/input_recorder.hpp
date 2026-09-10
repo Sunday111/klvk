@@ -16,14 +16,6 @@
 namespace klvk
 {
 
-// Records real input into a diagnostic configuration that replays through
-// --klvk-diagnostics. It listens to the same four window entry points the replay
-// path writes to, so recording and replay share one vocabulary by construction.
-//
-// Events are pinned to the one-based frame they arrived on rather than to a
-// timestamp: a frame trigger reproduces the original input-to-frame association
-// whatever clock the replay runs at, while a wall-clock timestamp recorded at a
-// variable frame rate would land on a different frame under a fixed step.
 class DiagnosticInputRecorder
 {
 public:
@@ -37,6 +29,7 @@ public:
 
     // Input arriving from now on belongs to this one-based frame.
     void BeginFrame(u64 frame) noexcept;
+    void RecordFrameDuration(u64 duration_ns);
 
     // A file dialog the application put in front of the user, and what came back.
     // Nothing means it was dismissed. The answer is stored relative to the
@@ -51,7 +44,7 @@ public:
     // unchanged so a replayed run sees the configuration the recorded one did.
     void Write(
         edt::Vec2<u32> framebuffer_size,
-        u64 fixed_step_ns,
+        std::optional<u64> fixed_step_ns,
         const nlohmann::json& application,
         const std::filesystem::path& executable_directory) const;
 
@@ -70,6 +63,7 @@ private:
     std::unique_ptr<events::IEventListener> event_listener_;
     events::EventSubscription event_subscription_;
     std::vector<DiagnosticInputConfig> input_;
+    std::vector<u64> frame_durations_ns_;
     std::vector<DiagnosticDialogConfig> dialogs_;
     std::optional<edt::Vec2f> last_recorded_position_;
     u64 current_frame_ = 1;

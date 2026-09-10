@@ -79,7 +79,7 @@ private:
 
     [[nodiscard]] static edt::Vec2f ReadFloatVector(const JsonReader& value);
     [[nodiscard]] static std::optional<edt::Vec2<u32>> ReadFramebufferSize(const JsonReader& root);
-    [[nodiscard]] static std::optional<u64> ReadClock(const JsonReader& root);
+    [[nodiscard]] static DiagnosticClockConfig ReadClock(const JsonReader& root);
     [[nodiscard]] static DiagnosticInputConfig ReadInput(const JsonReader& value);
     [[nodiscard]] static DiagnosticCaptureConfig ReadCapture(const JsonReader& value);
     [[nodiscard]] static DiagnosticDialogConfig ReadDialog(const JsonReader& value);
