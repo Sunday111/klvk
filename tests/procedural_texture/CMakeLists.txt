@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 3.29)
+include(set_compiler_options)
+include(yae_debug_info_compression)
+set(module_source_files
+    ${CMAKE_CURRENT_SOURCE_DIR}/code/private/procedural_texture_test.cpp)
+add_executable(klvk_procedural_texture_test ${module_source_files})
+set_generic_compiler_options(klvk_procedural_texture_test PRIVATE)
+target_link_libraries(klvk_procedural_texture_test PUBLIC klvk)
+target_include_directories(klvk_procedural_texture_test PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/code/public)
+target_include_directories(klvk_procedural_texture_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/code/private)
+enable_debug_info_compression_for(klvk_procedural_texture_test)
