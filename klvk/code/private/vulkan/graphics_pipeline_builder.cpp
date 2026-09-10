@@ -240,6 +240,12 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::PatchControlPoints(u32 count)
 
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::PolygonMode(vk::PolygonMode mode)
 {
+    ErrorHandling::Ensure(
+        mode == vk::PolygonMode::eFill || mode == vk::PolygonMode::eLine || mode == vk::PolygonMode::ePoint,
+        "GraphicsPipelineBuilder: unsupported polygon mode");
+    ErrorHandling::Ensure(
+        mode == vk::PolygonMode::eFill || context_->IsFillModeNonSolidEnabled(),
+        "GraphicsPipelineBuilder: line and point polygon modes require the fillModeNonSolid device feature");
     polygon_mode_ = mode;
     return *this;
 }
