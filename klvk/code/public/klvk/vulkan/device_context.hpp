@@ -53,6 +53,7 @@ public:
 
     // True when the tessellationShader feature was available and enabled on the device.
     [[nodiscard]] bool IsTessellationShaderEnabled() const noexcept { return tessellation_shader_enabled_; }
+    [[nodiscard]] bool IsFillModeNonSolidEnabled() const noexcept { return fill_mode_non_solid_enabled_; }
 
     // True when VK_KHR_external_memory_fd was available and enabled, which lets device
     // memory allocated here be exported as an opaque fd and imported by an external API.
@@ -99,6 +100,7 @@ private:
     vk::UniqueCommandPool one_time_pool_;
     bool geometry_shader_enabled_ = false;
     bool tessellation_shader_enabled_ = false;
+    bool fill_mode_non_solid_enabled_ = false;
     bool external_memory_fd_enabled_ = false;
     bool presentation_enabled_ = false;
     std::unique_ptr<ShaderCacheManager> shader_cache_;
