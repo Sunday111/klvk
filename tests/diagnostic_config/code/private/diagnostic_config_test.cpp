@@ -139,7 +139,8 @@ void TestConfigSerializationRoundTrip()
         {.frame = 3, .time_ns = std::nullopt, .event = klvk::DiagnosticMouseScrollInput{.offset = {-1.5f, 2.f}}},
         {.frame = 4,
          .time_ns = std::nullopt,
-         .event = klvk::DiagnosticKeyInput{.key = klvk::Key::LeftCtrl, .action = klvk::InputAction::Release}}};
+         .event = klvk::DiagnosticKeyInput{.key = klvk::Key::LeftCtrl, .action = klvk::InputAction::Release}},
+        {.frame = 4, .time_ns = std::nullopt, .event = klvk::DiagnosticTextInput{.codepoint = 0x1F642}}};
     original.captures = {{.frame = 5, .time_ns = std::nullopt, .path = "captures/a.ppm", .include_ui = false}};
     // A dismissed dialog is a recorded answer too, so both shapes go through.
     original.dialogs = {{.frame = 3, .answer = "presets/chosen.json"}, {.frame = 9, .answer = std::nullopt}};
@@ -442,6 +443,13 @@ void Run()
         R"({"version":1,"input":[{"type":"key","key":"w","action":"press"}],"exit":{"frame":1}})",
         R"({"version":1,"input":[{"frame":1,"time_seconds":0,"type":"key","key":"w","action":"press"}],"exit":{"frame":1}})",
         R"({"version":1,"input":[{"frame":1,"type":"unknown"}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"frame":1,"type":"text","codepoint":-1}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"frame":1,"type":"text","codepoint":55296}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"frame":1,"type":"text","codepoint":57343}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"frame":1,"type":"text","codepoint":1114112}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"frame":1,"type":"text","codepoint":4294967296}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"frame":1,"type":"text","codepoint":2.5}],"exit":{"frame":1}})",
+        R"({"version":1,"input":[{"frame":1,"type":"text","codepoint":"a"}],"exit":{"frame":1}})",
         R"({"version":1,"input":[{"frame":1,"type":"key","key":"unknown","action":"press"}],"exit":{"frame":1}})",
         R"({"version":1,"input":[{"frame":1,"type":"key","key":"w","action":"repeat"}],"exit":{"frame":1}})",
         R"({"version":1,"input":[{"frame":1,"type":"mouse_button","button":"button6","action":"press"}],"exit":{"frame":1}})",

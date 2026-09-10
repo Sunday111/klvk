@@ -45,14 +45,19 @@ nlohmann::json DiagnosticRunConfigJson::WriteInputEvent(const DiagnosticInputEve
                 result["type"] = "mouse_scroll";
                 result["offset"] = {value.offset.x(), value.offset.y()};
             }
-            else
+            else if constexpr (std::is_same_v<Event, DiagnosticKeyInput>)
             {
-                static_assert(std::is_same_v<Event, DiagnosticKeyInput>);
                 const std::optional<std::string_view> name = KeyToName(value.key);
                 ErrorHandling::Ensure(name.has_value(), "Recorded key has no diagnostic configuration name");
                 result["type"] = "key";
                 result["key"] = *name;
                 result["action"] = JsonReader::NameOf(kActionNames, value.action);
+            }
+            else
+            {
+                static_assert(std::is_same_v<Event, DiagnosticTextInput>);
+                result["type"] = "text";
+                result["codepoint"] = value.codepoint;
             }
         },
         event);

@@ -114,8 +114,19 @@ struct DiagnosticKeyInput
     friend bool operator==(const DiagnosticKeyInput&, const DiagnosticKeyInput&) = default;
 };
 
-using DiagnosticInputEvent =
-    std::variant<DiagnosticMouseMoveInput, DiagnosticMouseButtonInput, DiagnosticMouseScrollInput, DiagnosticKeyInput>;
+struct DiagnosticTextInput
+{
+    u32 codepoint = 0;
+
+    friend bool operator==(const DiagnosticTextInput&, const DiagnosticTextInput&) = default;
+};
+
+using DiagnosticInputEvent = std::variant<
+    DiagnosticMouseMoveInput,
+    DiagnosticMouseButtonInput,
+    DiagnosticMouseScrollInput,
+    DiagnosticKeyInput,
+    DiagnosticTextInput>;
 
 struct DiagnosticInputConfig
 {
