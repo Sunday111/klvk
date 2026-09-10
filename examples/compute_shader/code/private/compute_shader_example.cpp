@@ -410,7 +410,7 @@ class ComputeShaderApp : public klvk::Application
 
     void OnMouseMove(const klvk::events::OnMouseMove& event)
     {
-        if (!GetWindow().IsFocused() || !GetWindow().IsInInputMode() || ImGui::GetIO().WantCaptureMouse) return;
+        if (!GetWindow().HasInputFocus() || !GetWindow().IsInInputMode() || ImGui::GetIO().WantCaptureMouse) return;
         const Vec2f delta = (event.current - event.previous) * 0.01f;
         const auto rotation = camera_.GetRotation();
         camera_.SetRotation(

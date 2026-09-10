@@ -31,6 +31,7 @@ public:
     [[nodiscard]] u32 GetWidth() const noexcept { return width_; }
     [[nodiscard]] u32 GetHeight() const noexcept { return height_; }
     [[nodiscard]] bool IsFocused() const noexcept;
+    [[nodiscard]] bool HasInputFocus() const noexcept;
     [[nodiscard]] bool IsHovered() const noexcept;
     [[nodiscard]] Vec2f GetCursorPos() const noexcept { return cursor_; }
     [[nodiscard]] bool IsInInputMode() const noexcept { return input_mode_; }

@@ -9,6 +9,7 @@
 #include "diagnostic_test_support.hpp"
 #include "edt/functional/on_scope_leave.hpp"
 #include "klvk/application.hpp"
+#include "klvk/camera/camera_3d.hpp"
 #include "klvk/events/event_listener.hpp"
 #include "klvk/events/event_manager.hpp"
 #include "klvk/events/keyboard_events.hpp"
@@ -47,6 +48,21 @@ public:
                     [&](const events::OnKey& event) { key = event; });
         auto subscription = application.GetEventManager().AddEventListener(*listener);
         DiagnosticInputPlayer player(*window);
+        tests::Ensure(!window->HasInputFocus(), "an unfocused window accepted native input");
+        window->SetPlatformInputEnabled(false);
+        tests::Ensure(!window->IsFocused(), "replay changed native window focus");
+        Camera3d camera;
+        camera.SetRotation({.yaw = 0.f, .pitch = 0.f, .roll = 0.f});
+        auto camera_listener = events::EventListener<events::OnMouseMove>::PtrFromFunctions(
+            [&](const events::OnMouseMove& event)
+            {
+                if (!window->HasInputFocus() || !window->IsInInputMode() || io.WantCaptureMouse) return;
+                const Vec2f delta = (event.current - event.previous) * 0.01f;
+                const auto rotation = camera.GetRotation();
+                camera.SetRotation(
+                    {.yaw = rotation.yaw + delta.x(), .pitch = rotation.pitch + delta.y(), .roll = rotation.roll});
+            });
+        auto camera_subscription = application.GetEventManager().AddEventListener(*camera_listener);
 
         player.Apply(DiagnosticMouseMoveInput{.position = {12.5f, 34.25f}});
         BeginImGuiFrame();
@@ -68,6 +84,10 @@ public:
             "replayed mouse press did not emit the expected event");
         tests::Ensure(ImGui::IsMouseDown(ImGuiMouseButton_Right), "replayed mouse press did not reach ImGui");
         ImGui::EndFrame();
+        player.Apply(DiagnosticMouseMoveInput{.position = {22.5f, 54.25f}});
+        tests::Ensure(
+            Near(camera.GetRotation().yaw, 0.1f) && Near(camera.GetRotation().pitch, 0.2f),
+            "offscreen replay did not rotate the camera");
         player.Apply(DiagnosticMouseButtonInput{.button = MouseButton::Right, .action = InputAction::Release});
         BeginImGuiFrame();
         tests::Ensure(!window->IsMouseButtonPressed(MouseButton::Right), "replayed mouse release was not stored");
@@ -120,6 +140,8 @@ public:
         BeginImGuiFrame();
         tests::Ensure(!window->IsKeyPressed(Key::RightCtrl), "replayed right modifier release was not stored");
         tests::Ensure(!io.KeyCtrl, "replayed final modifier release did not reach ImGui");
+        window->SetPlatformInputEnabled(true);
+        tests::Ensure(!window->HasInputFocus(), "ending replay did not restore native focus gating");
         ImGui::EndFrame();
     }
 
