@@ -3,6 +3,7 @@
 #include <edt/math/float_range.hpp>
 #include <edt/math/math.hpp>
 
+#include "klvk/error_handling.hpp"
 #include "klvk/integral_aliases.hpp"
 
 namespace klvk
@@ -16,24 +17,25 @@ struct ProceduralTextureGenerator::Helper
         size_t upscale_factor,
         Callback&& callback)
     {
-        const auto sizef = size.Cast<float>();
-        const auto transform = edt::Math::TranslationMatrix(coord_range.Min())
-                                   .MatMul(edt::Math::ScaleMatrix(coord_range.Extent() / sizef));
+        ErrorHandling::Ensure(upscale_factor != 0, "Texture supersampling factor must be nonzero");
+        if (size.x() == 0 || size.y() == 0) return {};
+
+        const auto pixel_extent = coord_range.Extent() / size.Cast<float>();
 
         std::vector<u8> pixels;
         pixels.reserve(size.x() * size.y());
 
-        const auto samples_per_pixel = static_cast<float>(edt::Math::Sqr(upscale_factor));
+        const auto samples_per_pixel = edt::Math::Sqr(static_cast<float>(upscale_factor));
         const auto pixel_samples_per_axis = Vec2<size_t>{} + upscale_factor;
-        const auto sample_offset = 1.f / (2.f * sizef * pixel_samples_per_axis.Cast<float>());
+        const auto sample_extent = pixel_extent / static_cast<float>(upscale_factor);
 
         for (const Vec2f pixel_index : PixelIndicesF(size))
         {
-            const auto pixel_position = edt::Math::TransformPos(transform, pixel_index);
+            const auto pixel_position = coord_range.Min() + pixel_extent * pixel_index;
             float acc_color{};
             for (const Vec2f sample_idx : PixelIndicesF(pixel_samples_per_axis))
             {
-                const auto sample_position = pixel_position + sample_offset * sample_idx;
+                const auto sample_position = pixel_position + sample_extent * (sample_idx + 0.5f);
                 acc_color += callback(sample_position);
             }
 
