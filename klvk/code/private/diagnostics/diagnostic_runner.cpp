@@ -8,7 +8,7 @@ DiagnosticRunner::DiagnosticRunner(
     size_t frames_in_flight,
     events::EventManager& event_manager,
     Window& window)
-    : input_player_(window),
+    : input_player_(window, config.initial_cursor_position),
       replay_(config, event_manager, [this](const DiagnosticInputEvent& input) { input_player_.Apply(input); }),
       video_(config),
       readback_(frames_in_flight, config.checkpoints)

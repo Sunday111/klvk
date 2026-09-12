@@ -12,9 +12,14 @@
 namespace klvk
 {
 
-DiagnosticInputRecorder::DiagnosticInputRecorder(std::filesystem::path path, events::EventManager& event_manager)
+DiagnosticInputRecorder::DiagnosticInputRecorder(
+    std::filesystem::path path,
+    events::EventManager& event_manager,
+    std::optional<edt::Vec2f> initial_cursor_position)
     : path_(std::move(path)),
-      event_manager_(event_manager)
+      event_manager_(event_manager),
+      initial_cursor_position_(initial_cursor_position),
+      last_recorded_position_(initial_cursor_position)
 {
     ErrorHandling::Ensure(!path_.empty(), "Diagnostic input recording requires a non-empty path");
     event_listener_ = events::EventListenerMethodCallbacks<
@@ -39,19 +44,17 @@ void DiagnosticInputRecorder::Append(DiagnosticInputEvent event)
 
 void DiagnosticInputRecorder::OnMouseMove(const events::OnMouseMove& event)
 {
-    // A real session emits a cursor event per platform callback, far more than a
-    // replay can apply: input is dispatched once per frame, so only the last
-    // position of a frame is observable. Collapsing to that one position keeps
-    // the recording faithful and keeps the file small.
+    const bool initializes_cursor = !initial_cursor_position_ && !last_recorded_position_;
     if (last_recorded_position_.has_value() && *last_recorded_position_ == event.current) return;
     last_recorded_position_ = event.current;
 
-    if (!input_.empty() && input_.back().frame == current_frame_ &&
+    if (!input_.empty() && cursor_baseline_input_index_ != input_.size() - 1 && input_.back().frame == current_frame_ &&
         std::holds_alternative<DiagnosticMouseMoveInput>(input_.back().event))
     {
         input_.back().event = DiagnosticMouseMoveInput{.position = event.current};
         return;
     }
+    if (initializes_cursor) cursor_baseline_input_index_ = input_.size();
     Append(DiagnosticMouseMoveInput{.position = event.current});
 }
 
@@ -97,6 +100,7 @@ void DiagnosticInputRecorder::Write(
     // Offscreen needs no display server, so a recording replays in CI unchanged.
     config.presentation = DiagnosticPresentation::Offscreen;
     config.framebuffer_size = framebuffer_size;
+    config.initial_cursor_position = initial_cursor_position_;
     config.clock.fixed_step_ns = fixed_step_ns;
     config.input = input_;
     config.dialogs = dialogs_;

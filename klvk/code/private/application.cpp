@@ -372,13 +372,6 @@ void Application::RunImpl()
             }
         });
     Initialize();
-    // Recording is independent of replaying: the point is to capture an ordinary
-    // interactive session, which has no diagnostic configuration at all.
-    if (state_->input_record_path_.has_value())
-    {
-        state_->input_recorder_ =
-            std::make_unique<DiagnosticInputRecorder>(*state_->input_record_path_, state_->event_manager_);
-    }
     if (state_->diagnostic_config_.has_value())
     {
         if (state_->diagnostic_config_->framebuffer_size.has_value())
@@ -406,6 +399,19 @@ void Application::RunImpl()
             kFramesInFlight,
             state_->event_manager_,
             *state_->window_);
+    }
+    if (state_->input_record_path_.has_value())
+    {
+        std::optional<Vec2f> initial_cursor_position;
+        if (!state_->offscreen_ ||
+            (state_->diagnostic_config_ && state_->diagnostic_config_->initial_cursor_position.has_value()))
+        {
+            initial_cursor_position = state_->window_->GetCursorPos();
+        }
+        state_->input_recorder_ = std::make_unique<DiagnosticInputRecorder>(
+            *state_->input_record_path_,
+            state_->event_manager_,
+            initial_cursor_position);
     }
     MainLoop();
     if (state_->perf_recorder_) state_->perf_recorder_->Finish();

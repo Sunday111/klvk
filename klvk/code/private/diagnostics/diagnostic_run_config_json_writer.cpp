@@ -68,6 +68,10 @@ nlohmann::json DiagnosticRunConfigJson::Write(const DiagnosticRunConfig& config)
     {
         result["framebuffer_size"] = {config.framebuffer_size->x(), config.framebuffer_size->y()};
     }
+    if (config.initial_cursor_position.has_value())
+    {
+        result["initial_cursor_position"] = {config.initial_cursor_position->x(), config.initial_cursor_position->y()};
+    }
     if (config.clock.fixed_step_ns.has_value())
     {
         result["clock"] = {{"mode", "fixed"}, {"step_ns", *config.clock.fixed_step_ns}};
