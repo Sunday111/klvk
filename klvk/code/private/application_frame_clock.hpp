@@ -5,6 +5,7 @@
 #include <concepts>
 #include <cstddef>
 #include <optional>
+#include <span>
 
 #include "application_frame_pacing.hpp"
 #include "klvk/integral_aliases.hpp"
@@ -16,8 +17,18 @@ namespace klvk
 class ApplicationFrameClock
 {
 public:
-    void Initialize(std::optional<u64> fixed_step_nanoseconds);
-    void RegisterFrameStart();
+    using Clock = std::chrono::steady_clock;
+    using TimePoint = Clock::time_point;
+
+    void Initialize(
+        std::optional<u64> fixed_step_nanoseconds,
+        std::span<const u64> frame_durations_ns = {},
+        TimePoint application_start = Clock::now());
+    void RegisterFrameStart(
+        bool pace_recorded_to_real_time = false,
+        std::optional<TimePoint> frame_start = std::nullopt);
+    [[nodiscard]] std::optional<TimePoint> GetNextRecordedFrameStartDeadline() const;
+    [[nodiscard]] u64 GetLastFrameDurationNanoseconds() const noexcept { return last_frame_duration_ns_; }
     void SetTargetFramerate(std::optional<float> framerate);
     void AlignWithFramerate(bool pace_fixed_step_to_real_time, u64 completed_frames);
 
@@ -28,9 +39,6 @@ public:
     [[nodiscard]] float GetLastFrameDurationSeconds() const noexcept;
 
 private:
-    using Clock = std::chrono::steady_clock;
-    using TimePoint = Clock::time_point;
-
     static constexpr size_t kFrameTimeHistorySize = 128;
 
     template <std::floating_point Result = float, typename Duration>
@@ -45,6 +53,10 @@ private:
     TimePoint app_start_time_{};
     std::array<TimePoint, kFrameTimeHistorySize> frame_start_time_history_{};
     std::optional<u64> fixed_step_nanoseconds_;
+    std::span<const u64> frame_durations_ns_;
+    size_t replay_frame_ = 0;
+    u64 replay_elapsed_ns_ = 0;
+    u64 last_frame_duration_ns_ = 0;
     FramePacingSchedule pacing_schedule_;
     float last_frame_duration_seconds_ = 0.f;
     float framerate_ = 0.f;

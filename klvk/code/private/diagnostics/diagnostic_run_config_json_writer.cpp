@@ -68,7 +68,15 @@ nlohmann::json DiagnosticRunConfigJson::Write(const DiagnosticRunConfig& config)
     {
         result["framebuffer_size"] = {config.framebuffer_size->x(), config.framebuffer_size->y()};
     }
-    if (config.clock.fixed_step_ns.has_value())
+    if (!config.clock.frame_durations_ns.empty())
+    {
+        result["clock"] = {{"mode", "recorded"}, {"frame_durations_ns", config.clock.frame_durations_ns}};
+        if (!config.clock.imgui_frame_durations_seconds.empty())
+        {
+            result["clock"]["imgui_frame_durations_seconds"] = config.clock.imgui_frame_durations_seconds;
+        }
+    }
+    else if (config.clock.fixed_step_ns.has_value())
     {
         result["clock"] = {{"mode", "fixed"}, {"step_ns", *config.clock.fixed_step_ns}};
     }

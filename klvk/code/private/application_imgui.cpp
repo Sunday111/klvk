@@ -191,13 +191,20 @@ void ApplicationImGui::PrepareFrame(GlfwState& glfw, bool offscreen, vk::Extent2
     }
 }
 
-void ApplicationImGui::BeginFrame(std::optional<u64> fixed_step_nanoseconds)
+float ApplicationImGui::BeginFrame(
+    std::optional<u64> fixed_step_nanoseconds,
+    std::optional<float> recorded_duration_seconds)
 {
-    if (fixed_step_nanoseconds.has_value())
+    if (recorded_duration_seconds.has_value())
+    {
+        ImGui::GetIO().DeltaTime = *recorded_duration_seconds;
+    }
+    else if (fixed_step_nanoseconds.has_value())
     {
         ImGui::GetIO().DeltaTime = TimerDurationToSeconds(TimerDuration{*fixed_step_nanoseconds});
     }
     ImGui::NewFrame();
+    return ImGui::GetIO().DeltaTime;
 }
 
 void ApplicationImGui::Render(vk::CommandBuffer command_buffer)

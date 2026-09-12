@@ -59,18 +59,41 @@ void SleepUntil(std::chrono::steady_clock::time_point deadline)
 
 }  // namespace
 
-void ApplicationFrameClock::Initialize(std::optional<u64> fixed_step_nanoseconds)
+void ApplicationFrameClock::Initialize(
+    std::optional<u64> fixed_step_nanoseconds,
+    std::span<const u64> frame_durations_ns,
+    TimePoint application_start)
 {
     fixed_step_nanoseconds_ = fixed_step_nanoseconds;
-    app_start_time_ = Clock::now();
+    frame_durations_ns_ = frame_durations_ns;
+    replay_frame_ = 0;
+    replay_elapsed_ns_ = 0;
+    app_start_time_ = application_start;
     std::ranges::fill(frame_start_time_history_, app_start_time_);
     pacing_schedule_.Reset();
 }
 
-void ApplicationFrameClock::RegisterFrameStart()
+void ApplicationFrameClock::RegisterFrameStart(bool pace_recorded_to_real_time, std::optional<TimePoint> frame_start)
 {
+    if (!frame_durations_ns_.empty())
+    {
+        last_frame_duration_ns_ = frame_durations_ns_[std::min(replay_frame_, frame_durations_ns_.size() - 1)];
+        ErrorHandling::Ensure(
+            last_frame_duration_ns_ <= std::numeric_limits<u64>::max() - replay_elapsed_ns_,
+            "Recorded logical time overflowed the nanosecond range");
+        if (pace_recorded_to_real_time)
+        {
+            if (const auto deadline = GetNextRecordedFrameStartDeadline()) SleepUntil(*deadline);
+        }
+        replay_elapsed_ns_ += last_frame_duration_ns_;
+        ++replay_frame_;
+        last_frame_duration_seconds_ = DurationToSeconds<float>(TimerDuration{last_frame_duration_ns_});
+        framerate_ = 1.f / last_frame_duration_seconds_;
+        return;
+    }
     if (const auto step = GetFixedStepSeconds())
     {
+        last_frame_duration_ns_ = *fixed_step_nanoseconds_;
         last_frame_duration_seconds_ = static_cast<float>(*step);
         framerate_ = static_cast<float>(1.0 / *step);
         return;
@@ -78,14 +101,28 @@ void ApplicationFrameClock::RegisterFrameStart()
 
     const TimePoint previous_frame_start_time = frame_start_time_history_[current_frame_time_index_];
     current_frame_time_index_ = (current_frame_time_index_ + 1) % frame_start_time_history_.size();
-    const TimePoint current_frame_start_time = Clock::now();
+    const TimePoint current_frame_start_time = frame_start.has_value() ? *frame_start : Clock::now();
     const TimePoint oldest_frame_start_time =
         std::exchange(frame_start_time_history_[current_frame_time_index_], current_frame_start_time);
 
     framerate_ = static_cast<float>(
         static_cast<double>(frame_start_time_history_.size()) /
         DurationToSeconds<double>(current_frame_start_time - oldest_frame_start_time));
+    last_frame_duration_ns_ =
+        static_cast<u64>(ToNanoseconds(current_frame_start_time - previous_frame_start_time).count());
     last_frame_duration_seconds_ = DurationToSeconds<float>(current_frame_start_time - previous_frame_start_time);
+}
+
+std::optional<ApplicationFrameClock::TimePoint> ApplicationFrameClock::GetNextRecordedFrameStartDeadline() const
+{
+    if (frame_durations_ns_.empty()) return std::nullopt;
+    const u64 next_duration = frame_durations_ns_[std::min(replay_frame_, frame_durations_ns_.size() - 1)];
+    const auto maximum_delay = ToNanoseconds(TimePoint::max() - app_start_time_);
+    const u64 maximum_elapsed = static_cast<u64>(maximum_delay.count());
+    if (replay_elapsed_ns_ > maximum_elapsed || next_duration > maximum_elapsed - replay_elapsed_ns_)
+        return std::nullopt;
+    const auto elapsed = std::chrono::nanoseconds{static_cast<i64>(replay_elapsed_ns_ + next_duration)};
+    return app_start_time_ + std::chrono::duration_cast<Clock::duration>(elapsed);
 }
 
 void ApplicationFrameClock::SetTargetFramerate(std::optional<float> framerate)
@@ -95,6 +132,7 @@ void ApplicationFrameClock::SetTargetFramerate(std::optional<float> framerate)
 
 void ApplicationFrameClock::AlignWithFramerate(bool pace_fixed_step_to_real_time, u64 completed_frames)
 {
+    if (!frame_durations_ns_.empty()) return;
     std::chrono::nanoseconds now{};
     if (!fixed_step_nanoseconds_.has_value() && pacing_schedule_.HasTargetFramerate())
     {
@@ -114,6 +152,7 @@ void ApplicationFrameClock::AlignWithFramerate(bool pace_fixed_step_to_real_time
 
 TimerDuration ApplicationFrameClock::GetElapsedTime(u64 completed_frames) const
 {
+    if (!frame_durations_ns_.empty()) return TimerDuration{replay_elapsed_ns_};
     if (fixed_step_nanoseconds_.has_value())
     {
         ErrorHandling::Ensure(
@@ -128,6 +167,8 @@ TimerDuration ApplicationFrameClock::GetElapsedTime(u64 completed_frames) const
 
 float ApplicationFrameClock::GetRelativeTimeSeconds(u64 completed_frames) const
 {
+    if (!frame_durations_ns_.empty())
+        return static_cast<float>(static_cast<double>(replay_elapsed_ns_) / kNanosecondsPerSecond);
     if (const auto step = GetFixedStepSeconds())
     {
         return static_cast<float>(static_cast<double>(completed_frames) * *step);
@@ -137,7 +178,8 @@ float ApplicationFrameClock::GetRelativeTimeSeconds(u64 completed_frames) const
 
 float ApplicationFrameClock::GetCurrentFrameStartTime(u64 completed_frames) const
 {
-    if (fixed_step_nanoseconds_.has_value()) return GetRelativeTimeSeconds(completed_frames);
+    if (fixed_step_nanoseconds_.has_value() || !frame_durations_ns_.empty())
+        return GetRelativeTimeSeconds(completed_frames);
     return DurationToSeconds(frame_start_time_history_[current_frame_time_index_] - app_start_time_);
 }
 
