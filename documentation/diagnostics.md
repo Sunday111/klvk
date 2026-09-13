@@ -90,6 +90,10 @@ first movement start at the recorded position without emitting a synthetic movem
 | `mouse_button` | `button`, `action` |
 | `mouse_scroll` | `offset: [x, y]` |
 | `key` | `key`, `action` |
+| `text` | `codepoint` (integer Unicode scalar value) |
+
+Text events carry characters separately from physical keys, preserving keyboard layout and Unicode typing.
+For example, `{"frame": 2, "type": "text", "codepoint": 233}` enters `é` into a focused text widget.
 
 Every event also needs one trigger. Actions are `press` and `release`; mouse buttons are `left`, `right`, `middle`,
 `button4`, and `button5`. Mouse positions use the same framebuffer-pixel coordinates as `Window::GetSize`.

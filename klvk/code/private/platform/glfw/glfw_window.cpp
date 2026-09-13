@@ -102,6 +102,11 @@ struct Window::Impl
             static_cast<float>(y_offset));
     }
 
+    static void TextInputCallback(GLFWwindow* glfw_window, unsigned int codepoint)
+    {
+        CallWindowInputMethod<&Window::OnTextInput>(glfw_window, codepoint);
+    }
+
     static void KeyCallback(GLFWwindow* glfw_window, int key, int scancode, int action, int mods)
     {
         (void)scancode;
@@ -257,6 +262,7 @@ void Window::Create()
     glfwSetMouseButtonCallback(impl_->window, Impl::MouseButtonCallback);
     glfwSetScrollCallback(impl_->window, Impl::MouseScrollCallback);
     glfwSetKeyCallback(impl_->window, Impl::KeyCallback);
+    glfwSetCharCallback(impl_->window, Impl::TextInputCallback);
 
     double cursor_x{};
     double cursor_y{};
@@ -326,6 +332,11 @@ void Window::OnKey(Key key, InputAction action)
 {
     keys_.set(static_cast<size_t>(key), action == InputAction::Press);
     app_->GetEventManager().Emit(events::OnKey{.key = key, .action = action});
+}
+
+void Window::OnTextInput(u32 codepoint)
+{
+    app_->GetEventManager().Emit(events::OnTextInput{.codepoint = codepoint});
 }
 
 bool Window::IsFocused() const noexcept
