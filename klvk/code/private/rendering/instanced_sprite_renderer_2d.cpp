@@ -21,13 +21,15 @@ struct PushConstants
 
 }  // namespace
 
-InstancedSpriteRenderer2d::InstancedSpriteRenderer2d(Application& app, const Texture& texture) : app_(&app)
+InstancedSpriteRenderer2d::InstancedSpriteRenderer2d(Application& app, const Texture& texture)
+    : app_(&app),
+      descriptor_sets_(
+          DescriptorSets::Builder(app.GetDeviceContext())
+              .Binding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
+              .Binding(1, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eVertex)
+              .Build(Application::kFramesInFlight))
 {
     DeviceContext& context = app.GetDeviceContext();
-    descriptor_sets_ = DescriptorSets::Builder(context)
-                           .Binding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
-                           .Binding(1, vk::DescriptorType::eStorageBuffer, vk::ShaderStageFlagBits::eVertex)
-                           .Build(Application::kFramesInFlight);
     for (size_t frame = 0; frame != Application::kFramesInFlight; ++frame)
     {
         descriptor_sets_.WriteImage(frame, 0, texture.GetView(), texture.GetSampler());

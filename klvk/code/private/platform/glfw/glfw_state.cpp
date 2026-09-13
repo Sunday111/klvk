@@ -101,7 +101,9 @@ bool GlfwState::InitializeImGui(Window& window) const
                 target->ConsumeReplayControl(
                     *mapped,
                     action == GLFW_RELEASE ? InputAction::Release : InputAction::Press))
+            {
                 return;
+            }
             ImGui_ImplGlfw_KeyCallback(glfw_window, key, scancode, action, mods);
         });
     return true;

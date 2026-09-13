@@ -178,7 +178,9 @@ TimerDuration ApplicationFrameClock::GetElapsedTime(u64 completed_frames) const
 float ApplicationFrameClock::GetRelativeTimeSeconds(u64 completed_frames) const
 {
     if (!frame_durations_ns_.empty())
+    {
         return static_cast<float>(static_cast<double>(replay_elapsed_ns_) / kNanosecondsPerSecond);
+    }
     if (const auto step = GetFixedStepSeconds())
     {
         return static_cast<float>(static_cast<double>(completed_frames) * *step);
@@ -189,7 +191,9 @@ float ApplicationFrameClock::GetRelativeTimeSeconds(u64 completed_frames) const
 float ApplicationFrameClock::GetCurrentFrameStartTime(u64 completed_frames) const
 {
     if (fixed_step_nanoseconds_.has_value() || !frame_durations_ns_.empty())
+    {
         return GetRelativeTimeSeconds(completed_frames);
+    }
     return TimerDurationToSeconds(live_elapsed_offset_) +
            DurationToSeconds(frame_start_time_history_[current_frame_time_index_] - app_start_time_);
 }
