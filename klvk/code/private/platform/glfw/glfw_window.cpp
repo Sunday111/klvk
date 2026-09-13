@@ -333,6 +333,11 @@ bool Window::IsFocused() const noexcept
     return impl_->window && glfwGetWindowAttrib(impl_->window, GLFW_FOCUSED);
 }
 
+bool Window::HasInputFocus() const noexcept
+{
+    return !platform_input_enabled_ || IsFocused();
+}
+
 Vec2<u32> Window::GetFramebufferSize() const noexcept
 {
     if (!impl_->window) return {width_, height_};

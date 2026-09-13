@@ -45,6 +45,16 @@ void DiagnosticRunConfigJson::ValidateCombination(const DiagnosticRunConfig& con
         config.captures.empty() || config.framebuffer_size.has_value(),
         "Diagnostic captures require an explicit framebuffer_size");
 
+    for (const DiagnosticInputConfig& input : config.input)
+    {
+        const bool mouse_input = std::holds_alternative<DiagnosticMouseMoveInput>(input.event) ||
+                                 std::holds_alternative<DiagnosticMouseButtonInput>(input.event) ||
+                                 std::holds_alternative<DiagnosticMouseScrollInput>(input.event);
+        ErrorHandling::Ensure(
+            !mouse_input || config.initial_cursor_position.has_value(),
+            "Mouse replay requires an explicit initial_cursor_position");
+    }
+
     if (config.video.has_value())
     {
         ErrorHandling::Ensure(

@@ -127,6 +127,7 @@ void TestConfigSerializationRoundTrip()
     klvk::DiagnosticRunConfig original;
     original.presentation = klvk::DiagnosticPresentation::Offscreen;
     original.framebuffer_size = edt::Vec2<u32>{640, 480};
+    original.initial_cursor_position = edt::Vec2f{123.5f, -7.25f};
     original.clock.fixed_step_ns = 16'666'667;
     original.input = {
         {.frame = 1, .time_ns = std::nullopt, .event = klvk::DiagnosticMouseMoveInput{.position = {12.5f, 34.25f}}},
@@ -163,6 +164,9 @@ void TestConfigSerializationRoundTrip()
 
     Ensure(parsed.presentation == original.presentation, "presentation did not survive the round trip");
     Ensure(parsed.framebuffer_size == original.framebuffer_size, "framebuffer_size did not survive the round trip");
+    Ensure(
+        parsed.initial_cursor_position == original.initial_cursor_position,
+        "initial cursor position did not survive the round trip");
     Ensure(parsed.clock.fixed_step_ns == original.clock.fixed_step_ns, "clock step did not survive the round trip");
     Ensure(parsed.exit.frame == original.exit.frame, "exit did not survive the round trip");
     Ensure(parsed.application == original.application, "application config did not survive the round trip");
@@ -295,6 +299,7 @@ void Run()
             "version": 1,
             "presentation": "hidden",
             "framebuffer_size": [320, 240],
+            "initial_cursor_position": [100, 40],
             "clock": {"mode": "fixed", "step_seconds": 0.0166666667},
             "input": [
                 {"frame": 1, "type": "mouse_move", "position": [123.5, 45.25]},
@@ -425,6 +430,32 @@ void Run()
         !klvk::LoadDiagnosticRunConfigFromArguments(std::span{arguments}.first(2), root).has_value(),
         "application arguments were incorrectly treated as diagnostic arguments");
 
+    for (std::string_view event :
+         {R"({"type":"mouse_move","position":[1,2]})",
+          R"({"type":"mouse_button","button":"left","action":"press"})",
+          R"({"type":"mouse_scroll","offset":[0,1]})"})
+    {
+        auto input = nlohmann::json::parse(event);
+        input["frame"] = 1;
+        nlohmann::json document = {{"version", 1}, {"input", {input}}, {"exit", {{"frame", 1}}}};
+        Write(valid_path, document.dump());
+        bool rejected = false;
+        try
+        {
+            (void)klvk::LoadDiagnosticRunConfig(valid_path, root);
+        }
+        catch (const std::exception& error)
+        {
+            rejected = std::string_view{error.what()}.find("initial_cursor_position") != std::string_view::npos;
+        }
+        Ensure(rejected, "mouse replay without an initial cursor position was not clearly rejected");
+        document["initial_cursor_position"] = {0, 0};
+        Write(valid_path, document.dump());
+        Ensure(
+            klvk::LoadDiagnosticRunConfig(valid_path, root).input.size() == 1,
+            "mouse replay with an initial cursor position was not accepted");
+    }
+
     const std::array invalid_documents{
         R"({"version":1,"framebuffer_size":[1,1],"captures":[{"frame":1,"time_seconds":0,"path":"a.ppm"}],"exit":{"after_last_capture":true}})",
         R"({"version":1,"captures":[{"frame":1,"path":"a.ppm"}],"exit":{"after_last_capture":true}})",
@@ -442,6 +473,9 @@ void Run()
         R"({"version":1,"input":[{"type":"key","key":"w","action":"press"}],"exit":{"frame":1}})",
         R"({"version":1,"input":[{"frame":1,"time_seconds":0,"type":"key","key":"w","action":"press"}],"exit":{"frame":1}})",
         R"({"version":1,"input":[{"frame":1,"type":"unknown"}],"exit":{"frame":1}})",
+        R"({"version":1,"initial_cursor_position":[1],"exit":{"frame":1}})",
+        R"({"version":1,"initial_cursor_position":[1,"x"],"exit":{"frame":1}})",
+        R"({"version":1,"initial_cursor_position":[1,2,3],"exit":{"frame":1}})",
         R"({"version":1,"input":[{"frame":1,"type":"key","key":"unknown","action":"press"}],"exit":{"frame":1}})",
         R"({"version":1,"input":[{"frame":1,"type":"key","key":"w","action":"repeat"}],"exit":{"frame":1}})",
         R"({"version":1,"input":[{"frame":1,"type":"mouse_button","button":"button6","action":"press"}],"exit":{"frame":1}})",

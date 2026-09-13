@@ -117,7 +117,7 @@ class CubeApp : public klvk::Application
     void OnMouseMove(const klvk::events::OnMouseMove& event)
     {
         constexpr float sensitivity = 0.01f;
-        if (GetWindow().IsFocused() && GetWindow().IsInInputMode() && !ImGui::GetIO().WantCaptureMouse)
+        if (GetWindow().HasInputFocus() && GetWindow().IsInInputMode() && !ImGui::GetIO().WantCaptureMouse)
         {
             const auto delta = (event.current - event.previous) * sensitivity;
             const auto [yaw, pitch, roll] = camera_.GetRotation();
