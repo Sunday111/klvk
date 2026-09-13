@@ -30,6 +30,8 @@ public:
 
     void Advance(u64 frame, TimerDuration elapsed);
     void AdvanceInput(u64 frame, TimerDuration elapsed);
+    void FinishInputReplay();
+    void RestoreLiveInput();
     [[nodiscard]] bool NeedsReadback(bool include_ui) const noexcept;
 
     bool RecordReadback(
@@ -53,6 +55,7 @@ public:
     [[nodiscard]] std::optional<std::filesystem::path> TakeDialogAnswer();
 
 private:
+    bool input_replay_finished_ = false;
     DiagnosticInputPlayer input_player_;
     DiagnosticReplayScheduler replay_;
     DiagnosticVideoRecorder video_;

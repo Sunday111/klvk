@@ -1,3 +1,4 @@
+#include <numeric>
 #include <set>
 
 #include "diagnostic_run_config_json.hpp"
@@ -97,6 +98,28 @@ void DiagnosticRunConfigJson::ValidateCombination(const DiagnosticRunConfig& con
             ErrorHandling::Ensure(
                 checkpoint.frame <= *config.exit.frame,
                 "A checkpoint frame must not exceed the exit frame");
+        }
+    }
+
+    ErrorHandling::Ensure(
+        config.HasExitCondition() || config.ResumesLiveAfterReplay(),
+        "An exit condition is required except for visible recorded-clock replay");
+    if (config.ResumesLiveAfterReplay())
+    {
+        const u64 elapsed =
+            std::accumulate(config.clock.frame_durations_ns.begin(), config.clock.frame_durations_ns.end(), u64{0});
+        for (const DiagnosticInputConfig& input : config.input)
+        {
+            ErrorHandling::Ensure(
+                (!input.frame || *input.frame <= config.clock.frame_durations_ns.size()) &&
+                    (!input.time_ns || *input.time_ns <= elapsed),
+                "Diagnostic input must not extend beyond recorded frames when replay resumes live");
+        }
+        for (const DiagnosticDialogConfig& dialog : config.dialogs)
+        {
+            ErrorHandling::Ensure(
+                dialog.frame <= config.clock.frame_durations_ns.size(),
+                "Diagnostic dialogs must not extend beyond recorded frames when replay resumes live");
         }
     }
 

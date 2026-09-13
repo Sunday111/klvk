@@ -28,6 +28,8 @@ enum class DiagnosticPresentation : u8
 struct DiagnosticClockConfig
 {
     std::optional<u64> fixed_step_ns;
+    std::vector<u64> frame_durations_ns;
+    std::vector<float> imgui_frame_durations_seconds;
 };
 
 struct DiagnosticCaptureConfig
@@ -171,6 +173,17 @@ struct DiagnosticRunConfig
     std::optional<DiagnosticCheckpointConfig> checkpoints;
     DiagnosticExitConfig exit;
     nlohmann::json application = nlohmann::json::object();
+
+    [[nodiscard]] bool HasExitCondition() const noexcept
+    {
+        return exit.frame.has_value() || exit.time_ns.has_value() || exit.after_last_capture;
+    }
+
+    [[nodiscard]] bool ResumesLiveAfterReplay() const noexcept
+    {
+        return presentation == DiagnosticPresentation::Visible && !clock.frame_durations_ns.empty() &&
+               !HasExitCondition();
+    }
 };
 
 // Every path in the result is absolute: those written relative in the document
@@ -178,7 +191,8 @@ struct DiagnosticRunConfig
 // to know where the process was launched from.
 [[nodiscard]] DiagnosticRunConfig LoadDiagnosticRunConfig(
     const std::filesystem::path& path,
-    const std::filesystem::path& executable_directory);
+    const std::filesystem::path& executable_directory,
+    std::optional<DiagnosticPresentation> presentation = std::nullopt);
 
 // Inverse of the parser, kept beside it so the two cannot drift apart: the
 // result is a document LoadDiagnosticRunConfig accepts verbatim. Times are

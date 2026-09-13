@@ -32,6 +32,7 @@ public:
 
     // Input arriving from now on belongs to this one-based frame.
     void BeginFrame(u64 frame) noexcept;
+    void RecordFrameDuration(u64 duration_ns, float imgui_duration_seconds);
 
     // A file dialog the application put in front of the user, and what came back.
     // Nothing means it was dismissed. The answer is stored relative to the
@@ -46,7 +47,7 @@ public:
     // unchanged so a replayed run sees the configuration the recorded one did.
     void Write(
         edt::Vec2<u32> framebuffer_size,
-        u64 fixed_step_ns,
+        std::optional<u64> fixed_step_ns,
         const nlohmann::json& application,
         const std::filesystem::path& executable_directory) const;
 
@@ -66,6 +67,8 @@ private:
     std::unique_ptr<events::IEventListener> event_listener_;
     events::EventSubscription event_subscription_;
     std::vector<DiagnosticInputConfig> input_;
+    std::vector<u64> frame_durations_ns_;
+    std::vector<float> imgui_frame_durations_seconds_;
     std::vector<DiagnosticDialogConfig> dialogs_;
     edt::Vec2f initial_cursor_position_;
     edt::Vec2f last_recorded_position_;

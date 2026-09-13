@@ -115,12 +115,37 @@ yae run klvk_falling_sand_example -- --klvk-record-input /tmp/session.json
 yae run klvk_falling_sand_example -- --klvk-diagnostics /tmp/session.json
 ```
 
-The result uses offscreen presentation, the recorded framebuffer size, a fixed clock, frame-triggered input, and an
+The result uses offscreen presentation, the recorded framebuffer size, a recorded clock, frame-triggered input, and an
 exit at the session's final frame. File-dialog answers obtained through `Application::OpenFileDialog` and
-`SaveFileDialog` are recorded too. Add `captures`, `checkpoints`, or `video` to derive output from the replay.
+`SaveFileDialog` are recorded too. Add `captures` or `checkpoints` to derive output from the replay.
 
 Events are pinned to the frame on which they arrived rather than wall-clock time. Consecutive cursor movements in
 one frame collapse to their final position.
+
+Ordinary recordings preserve each measured frame duration in `clock: {"mode": "recorded", "frame_durations_ns": [...]}`.
+Replay uses those durations for application delta time and accumulates them for logical frame timestamps.
+The optional `clock.imgui_frame_durations_seconds` array preserves the separate ImGui delta time, including delays
+while waiting for a frame to become available. It contains one positive finite float duration per application frame;
+recordings without it use the application duration for ImGui. Recorded durations advance the internal clock;
+they do not impose wall-clock delays. Visible replay uses the application's configured target FPS, or runs
+unrestricted when no target is set. Hidden and offscreen replay run as fast as possible.
+
+An explicit exit condition is always honoured. If it extends beyond the recorded frames, replay uses the final
+durations until that condition is reached. To continue interactively after the recording, set `presentation` to
+`visible` and omit `exit`. After the final recorded frame, normal live timing, native input, dialogs, and window
+resizing resume. Logical elapsed time continues from the recording's end, and held replay keys and mouse buttons
+are released. Input and dialog entries must fall within the recorded frames.
+
+Visible replay displays a shaded `REPLAY - Esc to stop` overlay. Pressing physical Escape cancels replay and
+returns to live operation immediately, cancelling its scheduled exit, remaining captures, and checkpoint checks.
+Pending GPU readbacks are discarded after the device is idle; already written output remains. Cancelling does not
+write a partial checkpoint reference. The Escape press and release are consumed by replay controls; recorded Escape
+events still reach the application. The overlay appears in visible captures and checkpoints that include UI, so
+those hashes differ from offscreen replay. Captures excluding UI are unaffected.
+
+Recording an explicitly fixed-clock run preserves that fixed step. Captures and checkpoints accept either clock;
+video requires a fixed clock.
+Mid-frame wall-clock observations and external clocks are not recorded.
 
 File-dialog answers are stored under `dialogs` in request order:
 
@@ -150,8 +175,10 @@ yae run klvk_falling_sand_example -- \
   --klvk-presentation visible
 ```
 
-`--klvk-presentation <visible|hidden|offscreen>` requires `--klvk-diagnostics`. A visible fixed-clock replay is paced
-to real time so it can be watched; hidden and offscreen runs render as fast as possible.
+`--klvk-presentation <visible|hidden|offscreen>` requires `--klvk-diagnostics`. Visible replay, including fixed-clock
+replay, respects `Application::SetTargetFramerate`; an unset target imposes no FPS limit. Hidden and offscreen runs
+render as fast as possible. The presentation override preserves any configured exit condition. Hidden and offscreen
+presentation require an exit condition.
 
 ## Framebuffer captures
 
@@ -234,7 +261,8 @@ it as useful coverage.
 
 ## Exit behavior
 
-`exit` contains exactly one of `frame`, `time_ns`, `time_seconds`, or `after_last_capture`. The last form waits for all
+`exit` may be omitted for visible recorded-clock replay that should continue as a live run. Otherwise it contains
+exactly one of `frame`, `time_ns`, `time_seconds`, or `after_last_capture`. The last form waits for all
 requested captures to be submitted. Before `RunWithArguments` returns, klvk finishes framebuffer writes and video
 encoding.
 

@@ -13,6 +13,7 @@ public:
     explicit DiagnosticInputPlayer(Window& window, std::optional<edt::Vec2f> initial_cursor_position = std::nullopt);
 
     void Apply(const DiagnosticInputEvent& input);
+    void Finish();
 
 private:
     void ApplyModifier(Key key);

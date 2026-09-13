@@ -1,5 +1,6 @@
 #include "diagnostics/diagnostic_input_player.hpp"
 
+#include <GLFW/glfw3.h>
 #include <imgui.h>
 
 #include <array>
@@ -11,7 +12,9 @@
 #include <string>
 #include <string_view>
 
+#include "application_imgui.hpp"
 #include "diagnostic_test_support.hpp"
+#include "diagnostics/diagnostic_runner.hpp"
 #include "diagnostics/input_recorder.hpp"
 #include "edt/functional/on_scope_leave.hpp"
 #include "klvk/application.hpp"
@@ -21,6 +24,7 @@
 #include "klvk/events/keyboard_events.hpp"
 #include "klvk/events/mouse_events.hpp"
 #include "klvk/window.hpp"
+#include "platform/glfw/glfw_state.hpp"
 
 namespace klvk
 {
@@ -149,6 +153,30 @@ public:
         window->SetPlatformInputEnabled(true);
         tests::Ensure(!window->HasInputFocus(), "ending replay did not restore native focus gating");
         ImGui::EndFrame();
+        window->SetPlatformInputEnabled(false);
+        window->SetFixedFramebufferSize({320, 240});
+        player.Apply(DiagnosticKeyInput{.key = Key::W, .action = InputAction::Press});
+        player.Apply(DiagnosticKeyInput{.key = Key::LeftCtrl, .action = InputAction::Press});
+        player.Apply(DiagnosticMouseButtonInput{.button = MouseButton::Right, .action = InputAction::Press});
+        BeginImGuiFrame();
+        ImGui::EndFrame();
+        const auto rotation_before_finish = camera.GetRotation();
+        mouse_move.reset();
+        player.Finish();
+        BeginImGuiFrame();
+        tests::Ensure(window->IsPlatformInputEnabled(), "live input was not restored");
+        tests::Ensure(!window->HasInputFocus(), "live input retained synthetic focus");
+        tests::Ensure(window->keys_.none() && window->mouse_buttons_.none(), "live input retained held replay input");
+        tests::Ensure(!window->IsInInputMode(), "live input retained captured cursor mode");
+        tests::Ensure(
+            !ImGui::IsKeyDown(ImGuiKey_W) && !io.KeyCtrl && !ImGui::IsMouseDown(ImGuiMouseButton_Right),
+            "ImGui retained held replay input");
+        tests::Ensure(
+            !mouse_move && Near(camera.GetRotation().yaw, rotation_before_finish.yaw),
+            "finishing replay emitted a cursor jump");
+        tests::Ensure(!window->fixed_framebuffer_size_, "live continuation kept the framebuffer size locked");
+        ImGui::EndFrame();
+        TestVisibleReplayControls(application);
         TestRecordedCursor(false);
         TestRecordedCursor(true);
 
@@ -304,6 +332,63 @@ private:
             Near(camera.GetRotation().yaw, source_rotation.yaw) &&
                 Near(camera.GetRotation().pitch, source_rotation.pitch),
             "re-recording a replay changed its first mouse movement");
+    }
+
+    static void TestVisibleReplayControls(Application& application)
+    {
+        glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_NULL);
+        GlfwState glfw;
+        glfw.Initialize();
+        (void)glfw.ConfigureForVulkan(false);
+        Window window(application, 320, 240);
+        tests::Ensure(glfw.InitializeImGui(window), "headless GLFW ImGui initialization failed");
+        auto shutdown = edt::OnScopeLeave([&] { glfw.ShutdownImGui(); });
+        window.SetPlatformInputEnabled(false);
+        window.EnableReplayControls();
+        auto* handle = static_cast<GLFWwindow*>(window.GetPlatformHandle());
+        const auto key_callback = glfwSetKeyCallback(handle, nullptr);
+        glfwSetKeyCallback(handle, key_callback);
+
+        DiagnosticRunConfig config;
+        config.presentation = DiagnosticPresentation::Visible;
+        config.clock.frame_durations_ns = {20'000'000};
+        config.input.push_back(
+            {.frame = 2,
+             .time_ns = std::nullopt,
+             .event = DiagnosticKeyInput{.key = Key::W, .action = InputAction::Press}});
+        config.dialogs.push_back({.frame = 2, .answer = "unused.txt"});
+        config.exit.frame = 3;
+        auto runner = std::make_unique<DiagnosticRunner>(config, 2, application.GetEventManager(), window);
+        DiagnosticInputPlayer player(window);
+        player.Apply(DiagnosticKeyInput{.key = Key::Escape, .action = InputAction::Press});
+        tests::Ensure(!window.ReplayStopRequested(), "recorded Escape cancelled replay");
+        player.Apply(DiagnosticKeyInput{.key = Key::Escape, .action = InputAction::Release});
+        BeginImGuiFrame();
+        ApplicationImGui::DrawReplayOverlay();
+        ImGui::Render();
+        tests::Ensure(ImGui::GetDrawData()->TotalVtxCount > 0, "replay overlay produced no geometry");
+        key_callback(handle, GLFW_KEY_ESCAPE, 0, GLFW_PRESS, 0);
+        tests::Ensure(window.ReplayStopRequested(), "native Escape did not request replay cancellation");
+        runner->RestoreLiveInput();
+        tests::Ensure(!runner->AnswersDialogs(), "cancelled replay still intercepted dialogs");
+        runner.reset();
+        tests::Ensure(window.IsPlatformInputEnabled(), "cancellation did not restore native input");
+        tests::Ensure(!window.IsKeyPressed(GLFW_KEY_ESCAPE), "cancellation leaked Escape to polling callers");
+        key_callback(handle, GLFW_KEY_ESCAPE, 0, GLFW_REPEAT, 0);
+        key_callback(handle, GLFW_KEY_ESCAPE, 0, GLFW_RELEASE, 0);
+        BeginImGuiFrame();
+        tests::Ensure(!ImGui::IsKeyDown(ImGuiKey_Escape), "cancel Escape reached ImGui");
+        ImGui::EndFrame();
+        key_callback(handle, GLFW_KEY_ESCAPE, 0, GLFW_PRESS, 0);
+        BeginImGuiFrame();
+        tests::Ensure(
+            window.IsKeyPressed(Key::Escape) && ImGui::IsKeyDown(ImGuiKey_Escape),
+            "the next live Escape press was swallowed");
+        tests::Ensure(!window.ReplayStopRequested(), "live Escape requested another cancellation");
+        ImGui::EndFrame();
+        key_callback(handle, GLFW_KEY_ESCAPE, 0, GLFW_RELEASE, 0);
+        BeginImGuiFrame();
+        ImGui::EndFrame();
     }
 
     static bool Near(float first, float second) { return std::abs(first - second) < 0.000'001f; }

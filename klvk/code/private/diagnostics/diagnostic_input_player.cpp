@@ -22,6 +22,24 @@ DiagnosticInputPlayer::DiagnosticInputPlayer(Window& window, std::optional<edt::
     }
 }
 
+void DiagnosticInputPlayer::Finish()
+{
+    for (size_t index = 0; index != window_.keys_.size(); ++index)
+    {
+        if (window_.keys_.test(index))
+            Apply(DiagnosticKeyInput{.key = static_cast<Key>(index), .action = InputAction::Release});
+    }
+    for (size_t index = 0; index != window_.mouse_buttons_.size(); ++index)
+    {
+        if (window_.mouse_buttons_.test(index))
+            Apply(
+                DiagnosticMouseButtonInput{.button = static_cast<MouseButton>(index), .action = InputAction::Release});
+    }
+    window_.ResumeLiveInput();
+    const auto cursor = window_.GetCursorPos();
+    ImGui::GetIO().AddMousePosEvent(cursor.x(), cursor.y());
+}
+
 void DiagnosticInputPlayer::ApplyModifier(Key key)
 {
     struct Modifier

@@ -10,10 +10,6 @@ namespace klvk
 
 struct FramePacingFrame
 {
-    std::optional<u64> fixed_step_nanoseconds;
-    bool pace_fixed_step_to_real_time = false;
-    u64 completed_frames = 0;
-    std::chrono::nanoseconds application_start;
     std::chrono::nanoseconds frame_start;
     std::chrono::nanoseconds now;
 };
@@ -35,8 +31,6 @@ private:
     };
 
     [[nodiscard]] static std::optional<TargetPeriod> CalculateTargetPeriod(float framerate) noexcept;
-    [[nodiscard]] std::optional<std::chrono::nanoseconds> GetFixedStepDeadline(
-        const FramePacingFrame& frame) const noexcept;
     [[nodiscard]] std::optional<i64> GetTargetOffset(u64 frame_index) const noexcept;
     [[nodiscard]] std::optional<std::chrono::nanoseconds> GetTargetDeadline(u64 frame_index) const noexcept;
     void AdvancePast(std::chrono::nanoseconds now) noexcept;

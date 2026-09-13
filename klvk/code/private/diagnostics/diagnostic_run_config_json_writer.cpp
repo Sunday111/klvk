@@ -73,7 +73,15 @@ nlohmann::json DiagnosticRunConfigJson::Write(const DiagnosticRunConfig& config)
     {
         result["initial_cursor_position"] = {config.initial_cursor_position->x(), config.initial_cursor_position->y()};
     }
-    if (config.clock.fixed_step_ns.has_value())
+    if (!config.clock.frame_durations_ns.empty())
+    {
+        result["clock"] = {{"mode", "recorded"}, {"frame_durations_ns", config.clock.frame_durations_ns}};
+        if (!config.clock.imgui_frame_durations_seconds.empty())
+        {
+            result["clock"]["imgui_frame_durations_seconds"] = config.clock.imgui_frame_durations_seconds;
+        }
+    }
+    else if (config.clock.fixed_step_ns.has_value())
     {
         result["clock"] = {{"mode", "fixed"}, {"step_ns", *config.clock.fixed_step_ns}};
     }
@@ -147,11 +155,11 @@ nlohmann::json DiagnosticRunConfigJson::Write(const DiagnosticRunConfig& config)
     {
         exit["after_last_capture"] = true;
     }
-    else
+    else if (config.HasExitCondition())
     {
         WriteTrigger(exit, config.exit.frame, config.exit.time_ns);
     }
-    result["exit"] = std::move(exit);
+    if (!exit.empty()) result["exit"] = std::move(exit);
 
     if (!config.application.empty()) result["application"] = config.application;
     return result;
