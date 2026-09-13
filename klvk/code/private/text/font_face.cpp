@@ -4,6 +4,7 @@
 #include <freetype/ftoutln.h>
 
 #include <fstream>
+#include <utility>
 
 #include "klvk/error_handling.hpp"
 
@@ -211,14 +212,25 @@ RasterizedGlyph FontFace::Rasterize(u32 glyph_index, u32 pixel_size) const
     const u32 maximum_coverage = bits_per_pixel == 8 ? slot->bitmap.num_grays - 1U : sample_mask;
     ErrorHandling::Ensure(maximum_coverage > 0 && maximum_coverage <= 255, "Invalid glyph coverage range");
     glyph.coverage.resize(pixel_count);
+    if (bits_per_pixel == 8 && maximum_coverage == 255)
+    {
+        if (std::cmp_equal(slot->bitmap.pitch, glyph.size.x()))
+        {
+            std::copy_n(slot->bitmap.buffer, pixel_count, glyph.coverage.data());
+        }
+        else
+        {
+            for (u32 row = 0; row != glyph.size.y(); ++row)
+            {
+                const u8* source = slot->bitmap.buffer + (static_cast<ptrdiff_t>(row) * slot->bitmap.pitch);
+                std::copy_n(source, glyph.size.x(), glyph.coverage.data() + static_cast<size_t>(row) * glyph.size.x());
+            }
+        }
+        return glyph;
+    }
     for (u32 row = 0; row != glyph.size.y(); ++row)
     {
         const u8* source = slot->bitmap.buffer + (static_cast<ptrdiff_t>(row) * slot->bitmap.pitch);
-        if (bits_per_pixel == 8 && maximum_coverage == 255)
-        {
-            std::copy_n(source, glyph.size.x(), glyph.coverage.data() + static_cast<size_t>(row) * glyph.size.x());
-            continue;
-        }
         for (u32 column = 0; column != glyph.size.x(); ++column)
         {
             const size_t bit_offset = static_cast<size_t>(column) * bits_per_pixel;
