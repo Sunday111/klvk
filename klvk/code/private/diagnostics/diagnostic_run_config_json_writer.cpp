@@ -1,7 +1,7 @@
-#include <type_traits>
 #include <utility>
 
 #include "diagnostic_run_config_json.hpp"
+#include "edt/template/overload.hpp"
 #include "klvk/error_handling.hpp"
 #include "platform/input_mapping.hpp"
 
@@ -26,40 +26,36 @@ nlohmann::json DiagnosticRunConfigJson::WriteInputEvent(const DiagnosticInputEve
 {
     nlohmann::json result = nlohmann::json::object();
     std::visit(
-        [&](const auto& value)
-        {
-            using Event = std::decay_t<decltype(value)>;
-            if constexpr (std::is_same_v<Event, DiagnosticMouseMoveInput>)
+        edt::Overload{
+            [&](const DiagnosticMouseMoveInput& value)
             {
                 result["type"] = "mouse_move";
                 result["position"] = {value.position.x(), value.position.y()};
-            }
-            else if constexpr (std::is_same_v<Event, DiagnosticMouseButtonInput>)
+            },
+            [&](const DiagnosticMouseButtonInput& value)
             {
                 result["type"] = "mouse_button";
                 result["button"] = JsonReader::NameOf(kMouseButtonNames, value.button);
                 result["action"] = JsonReader::NameOf(kActionNames, value.action);
-            }
-            else if constexpr (std::is_same_v<Event, DiagnosticMouseScrollInput>)
+            },
+            [&](const DiagnosticMouseScrollInput& value)
             {
                 result["type"] = "mouse_scroll";
                 result["offset"] = {value.offset.x(), value.offset.y()};
-            }
-            else if constexpr (std::is_same_v<Event, DiagnosticKeyInput>)
+            },
+            [&](const DiagnosticKeyInput& value)
             {
                 const std::optional<std::string_view> name = KeyToName(value.key);
                 ErrorHandling::Ensure(name.has_value(), "Recorded key has no diagnostic configuration name");
                 result["type"] = "key";
                 result["key"] = *name;
                 result["action"] = JsonReader::NameOf(kActionNames, value.action);
-            }
-            else
+            },
+            [&](const DiagnosticTextInput& value)
             {
-                static_assert(std::is_same_v<Event, DiagnosticTextInput>);
                 result["type"] = "text";
                 result["codepoint"] = value.codepoint;
-            }
-        },
+            }},
         event);
     return result;
 }
