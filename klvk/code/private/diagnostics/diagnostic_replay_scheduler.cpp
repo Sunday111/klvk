@@ -196,7 +196,7 @@ std::optional<std::filesystem::path> DiagnosticReplayScheduler::TakeDialogAnswer
     return dialogs_[next_dialog_++].answer;
 }
 
-void DiagnosticReplayScheduler::EnsureComplete() const
+void DiagnosticReplayScheduler::EnsureInputComplete() const
 {
     ErrorHandling::Ensure(
         applied_input_count_ == input_count_,
@@ -208,6 +208,11 @@ void DiagnosticReplayScheduler::EnsureComplete() const
         "Diagnostic run ended with {} recorded dialog answer{} unused",
         dialogs_.size() - next_dialog_,
         dialogs_.size() - next_dialog_ == 1 ? "" : "s");
+}
+
+void DiagnosticReplayScheduler::EnsureComplete() const
+{
+    EnsureInputComplete();
     const auto missing =
         static_cast<size_t>(std::ranges::count_if(captures_, [](const Capture& capture) { return !capture.recorded; }));
     ErrorHandling::Ensure(

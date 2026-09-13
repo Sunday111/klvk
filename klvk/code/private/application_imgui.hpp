@@ -32,7 +32,10 @@ public:
     void Shutdown(GlfwState& glfw);
 
     void PrepareFrame(GlfwState& glfw, bool offscreen, vk::Extent2D extent) const;
-    static void BeginFrame(std::optional<u64> fixed_step_nanoseconds);
+    static float BeginFrame(
+        std::optional<u64> fixed_step_nanoseconds,
+        std::optional<float> recorded_duration_seconds = std::nullopt);
+    static void DrawReplayOverlay();
     static void Render(vk::CommandBuffer command_buffer);
 
 private:

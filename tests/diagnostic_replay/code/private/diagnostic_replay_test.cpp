@@ -1,22 +1,32 @@
+#include <GLFW/glfw3.h>
+#include <backends/imgui_impl_glfw.h>
 #include <fmt/core.h>
+#include <imgui.h>
 
 extern "C"
 {
 #include <libavformat/avformat.h>
 }
 
+#include <array>
+#include <bit>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "application_frame_clock.hpp"
+#include "application_imgui.hpp"
 #include "diagnostic_test_support.hpp"
 #include "diagnostics/diagnostic_replay_scheduler.hpp"
 #include "diagnostics/diagnostic_video_recorder.hpp"
+#include "diagnostics/input_recorder.hpp"
 #include "edt/functional/on_scope_leave.hpp"
 #include "klvk/events/application_events.hpp"
 #include "klvk/events/event_listener.hpp"
@@ -294,8 +304,244 @@ void TestDiagnosticOutputWrites()
 #endif
 }
 
+void TestRecordedFrameClock()
+{
+    const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
+    const auto path =
+        std::filesystem::temp_directory_path() / ("klvk_recorded_clock_" + std::to_string(nonce) + ".json");
+    auto cleanup = edt::OnScopeLeave([&] { std::filesystem::remove(path); });
+    klvk::events::EventManager events;
+    klvk::DiagnosticInputRecorder recorder(path, events, edt::Vec2f{160.f, 120.f});
+    std::vector<u64> durations(120, 8'333'333);
+    durations.push_back(20'000'001);
+    durations.push_back(42'000'000);
+    durations.push_back(5'000'000);
+    klvk::ApplicationFrameClock live_clock;
+    klvk::ApplicationFrameClock::TimePoint frame_start{std::chrono::seconds{1}};
+    live_clock.Initialize(std::nullopt, {}, frame_start);
+    std::vector<float> live_deltas;
+    float recorded_distance = 0.f;
+    for (size_t frame = 0; frame != durations.size(); ++frame)
+    {
+        recorder.BeginFrame(frame + 1);
+        frame_start += std::chrono::nanoseconds{durations[frame]};
+        live_clock.RegisterFrameStart(frame_start);
+        live_deltas.push_back(live_clock.GetLastFrameDurationSeconds());
+        recorder.RecordFrameDuration(live_clock.GetLastFrameDurationNanoseconds(), live_deltas.back());
+        if (frame == 19) events.Emit(klvk::events::OnKey{.key = klvk::Key::W, .action = klvk::InputAction::Press});
+        recorded_distance += live_deltas.back();
+    }
+    recorder.Write({320, 240}, std::nullopt, nlohmann::json::object(), path.parent_path());
+    const auto config = klvk::LoadDiagnosticRunConfig(path, path.parent_path());
+    Ensure(
+        config.initial_cursor_position == edt::Vec2f{160.f, 120.f},
+        "recorded frame clock lost the initial cursor position");
+    Ensure(!config.clock.fixed_step_ns.has_value(), "recording substituted a fixed simulation clock");
+    Ensure(config.input.size() == 1 && config.input.front().frame == 20, "recording changed input frame association");
+    Ensure(config.clock.frame_durations_ns == durations, "recording did not preserve measured frame durations");
+    klvk::ApplicationFrameClock clock;
+    clock.Initialize(config.clock.fixed_step_ns, config.clock.frame_durations_ns);
+    u64 elapsed = 0;
+    float replayed_distance = 0.f;
+    for (size_t frame = 0; frame != durations.size(); ++frame)
+    {
+        clock.RegisterFrameStart();
+        elapsed += durations[frame];
+        Ensure(
+            std::bit_cast<u32>(clock.GetLastFrameDurationSeconds()) == std::bit_cast<u32>(live_deltas[frame]),
+            "replay changed the live simulation delta bits");
+        Ensure(
+            std::bit_cast<u32>(config.clock.imgui_frame_durations_seconds[frame]) ==
+                std::bit_cast<u32>(live_deltas[frame]),
+            "recording changed the ImGui delta bits");
+        replayed_distance += clock.GetLastFrameDurationSeconds();
+        Ensure(clock.GetLastFrameDurationNanoseconds() == durations[frame], "replay changed a frame duration");
+        Ensure(clock.GetElapsedTime(frame).count() == elapsed, "recorded logical time did not accumulate durations");
+        Ensure(
+            std::abs(clock.GetCurrentFrameStartTime(frame) - clock.GetRelativeTimeSeconds(frame)) < 0.000'001f,
+            "recorded frame timestamp used wall time");
+    }
+    Ensure(
+        std::bit_cast<u32>(replayed_distance) == std::bit_cast<u32>(recorded_distance),
+        "replayed delta-time movement diverged from recording");
+    clock.RegisterFrameStart();
+    Ensure(
+        clock.GetLastFrameDurationNanoseconds() == durations.back(),
+        "extended replay did not retain its final duration");
+    clock.Initialize(20'000'000);
+    clock.RegisterFrameStart();
+    Ensure(clock.GetLastFrameDurationNanoseconds() == 20'000'000, "fixed clock did not survive recorded-clock reset");
+    Ensure(clock.GetElapsedTime(3).count() == 60'000'000, "fixed clock logical time changed");
+    recorder.Write({320, 240}, 20'000'000, nlohmann::json::object(), path.parent_path());
+    const auto fixed_config = klvk::LoadDiagnosticRunConfig(path, path.parent_path());
+    Ensure(
+        fixed_config.clock.fixed_step_ns == 20'000'000 && fixed_config.clock.frame_durations_ns.empty() &&
+            fixed_config.clock.imgui_frame_durations_seconds.empty(),
+        "fixed recording retained variable frame durations");
+    auto application_only_document = klvk::DiagnosticRunConfigToJson(config);
+    application_only_document["clock"].erase("imgui_frame_durations_seconds");
+    klvk::Filesystem::WriteFile(path, application_only_document.dump());
+    const auto application_only_config = klvk::LoadDiagnosticRunConfig(path, path.parent_path());
+    Ensure(
+        application_only_config.clock.frame_durations_ns == durations &&
+            application_only_config.clock.imgui_frame_durations_seconds.empty(),
+        "recorded clock without separate ImGui durations was rejected");
+    for (const auto& invalid : std::vector<nlohmann::json>{
+             {{"mode", "recorded"}, {"frame_durations_ns", nlohmann::json::array()}},
+             {{"mode", "recorded"}, {"frame_durations_ns", {0}}},
+             {{"mode", "recorded"}, {"frame_durations_ns", {-1}}},
+             {{"mode", "recorded"}, {"frame_durations_ns", {1.5}}},
+             {{"mode", "recorded"}, {"frame_durations_ns", {std::numeric_limits<u64>::max(), 1}}},
+             {{"mode", "recorded"}, {"frame_durations_ns", {10}}, {"step_ns", 10}},
+             {{"mode", "fixed"}, {"frame_durations_ns", {10}}, {"step_ns", 10}},
+             {{"mode", "recorded"}, {"frame_durations_ns", {10}}, {"imgui_frame_durations_seconds", {0}}},
+             {{"mode", "recorded"}, {"frame_durations_ns", {10}}, {"imgui_frame_durations_seconds", {-1}}},
+             {{"mode", "recorded"}, {"frame_durations_ns", {10}}, {"imgui_frame_durations_seconds", {1e100}}},
+             {{"mode", "recorded"}, {"frame_durations_ns", {10}}, {"imgui_frame_durations_seconds", {1e-100}}},
+             {{"mode", "recorded"}, {"frame_durations_ns", {10}}, {"imgui_frame_durations_seconds", {nullptr}}},
+             {{"mode", "recorded"}, {"frame_durations_ns", {10, 20}}, {"imgui_frame_durations_seconds", {0.01}}},
+             {{"mode", "recorded"},
+              {"frame_durations_ns", {10}},
+              {"imgui_frame_durations_seconds", nlohmann::json::array()}},
+             {{"mode", "fixed"}, {"step_ns", 10}, {"imgui_frame_durations_seconds", {0.01}}}})
+    {
+        auto document = klvk::DiagnosticRunConfigToJson(config);
+        document["clock"] = invalid;
+        klvk::Filesystem::WriteFile(path, document.dump());
+        EnsureThrows(
+            [&] { (void)klvk::LoadDiagnosticRunConfig(path, path.parent_path()); },
+            "invalid recorded clock was accepted");
+    }
+}
+
+void TestReplayPacingAndLiveContinuation()
+{
+    using namespace std::chrono_literals;
+    using TimePoint = klvk::ApplicationFrameClock::TimePoint;
+    const std::array<u64, 2> durations{200'000'000, 400'000'000};
+    klvk::ApplicationFrameClock clock;
+    clock.Initialize(std::nullopt, durations, TimePoint{1s});
+    clock.RegisterFrameStart(TimePoint{1s});
+    Ensure(!clock.GetFramePacingDeadline(true, TimePoint{1s}), "uncapped replay requested sleep");
+    Ensure(!clock.HasFinishedRecordedFrames(), "replay finished before its final frame");
+    clock.SetTargetFramerate(100.f);
+    Ensure(
+        clock.GetFramePacingDeadline(true, TimePoint{1s + 1ms}) == TimePoint{1s + 10ms},
+        "replay FPS limit followed recorded time instead of wall time");
+    clock.RegisterFrameStart(TimePoint{1s + 10ms});
+    Ensure(clock.GetElapsedTime(2).count() == 600'000'000, "FPS limit changed logical elapsed time");
+    Ensure(clock.HasFinishedRecordedFrames(), "replay did not finish on its final frame");
+    clock.ResumeLiveTime(2);
+    clock.RegisterFrameStart(TimePoint{1s + 25ms});
+    Ensure(clock.GetLastFrameDurationNanoseconds() == 15'000'000, "live continuation repeated a recorded delta");
+    Ensure(
+        std::abs(clock.GetCurrentFrameStartTime(3) - 0.615f) < 0.000'001f,
+        "live continuation reset or jumped the logical clock");
+    Ensure(!clock.HasFinishedRecordedFrames(), "live clock still reported recorded frames");
+    Ensure(!clock.GetFramePacingDeadline(false, TimePoint{1s + 25ms}), "disabled pacing requested sleep");
+    Ensure(
+        clock.GetFramePacingDeadline(true, TimePoint{1s + 26ms}) == TimePoint{1s + 35ms},
+        "live continuation lost the configured FPS limit");
+
+    clock.Initialize(500'000'000, {}, TimePoint{2s});
+    clock.RegisterFrameStart(TimePoint{2s});
+    Ensure(
+        clock.GetFramePacingDeadline(true, TimePoint{2s + 1ms}) == TimePoint{2s + 10ms},
+        "fixed replay ignored the FPS limit");
+    Ensure(clock.GetElapsedTime(2).count() == 1'000'000'000, "FPS limit changed the fixed logical clock");
+    clock.SetTargetFramerate(std::nullopt);
+    Ensure(!clock.GetFramePacingDeadline(true, TimePoint{2s + 1ms}), "uncapped fixed replay requested sleep");
+    clock.ResumeLiveTime(2);
+    clock.RegisterFrameStart(TimePoint{2s + 15ms});
+    Ensure(clock.GetLastFrameDurationNanoseconds() == 15'000'000, "cancelled fixed replay retained its fixed step");
+    Ensure(
+        std::abs(clock.GetCurrentFrameStartTime(3) - 1.015f) < 0.000'001f,
+        "cancelling fixed replay reset logical time");
+
+    const auto now = klvk::ApplicationFrameClock::Clock::now();
+    clock.Initialize(std::nullopt, durations, now);
+    clock.RegisterFrameStart(now);
+    clock.RegisterFrameStart(now);
+    const auto recorded_elapsed = clock.GetElapsedTime(2);
+    clock.ResumeLiveTime(2);
+    Ensure(clock.GetElapsedTime(2) >= recorded_elapsed, "live elapsed time moved backwards after replay");
+    Ensure(clock.GetRelativeTimeSeconds(2) >= 0.6f, "relative live time lost the recorded time offset");
+}
+
+void TestRecordedImGuiTiming()
+{
+    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_NULL);
+    Ensure(glfwInit() == GLFW_TRUE, "failed to initialize headless GLFW");
+    auto terminate_glfw = edt::OnScopeLeave([] { glfwTerminate(); });
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    GLFWwindow* window = glfwCreateWindow(320, 240, "ImGui timing test", nullptr, nullptr);
+    Ensure(window != nullptr, "failed to create a headless GLFW window");
+    auto destroy_window = edt::OnScopeLeave([&] { glfwDestroyWindow(window); });
+    const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
+    const auto path = std::filesystem::temp_directory_path() / ("klvk_imgui_clock_" + std::to_string(nonce) + ".json");
+    auto cleanup = edt::OnScopeLeave([&] { std::filesystem::remove(path); });
+    klvk::events::EventManager events;
+    klvk::DiagnosticInputRecorder recorder(path, events, edt::Vec2f{160.f, 120.f});
+    std::array<float, 3> live_durations{};
+    for (bool replay : {false, true})
+    {
+        ImGui::CreateContext();
+        auto destroy_imgui = edt::OnScopeLeave([] { ImGui::DestroyContext(); });
+        ImGuiIO& io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        io.Fonts->AddFontDefault();
+        Ensure(io.Fonts->Build(), "failed to build the ImGui timing font atlas");
+        Ensure(ImGui_ImplGlfw_InitForVulkan(window, false), "failed to initialize headless ImGui input");
+        auto shutdown_backend = edt::OnScopeLeave([] { ImGui_ImplGlfw_Shutdown(); });
+        const auto config =
+            replay ? klvk::LoadDiagnosticRunConfig(path, path.parent_path()) : klvk::DiagnosticRunConfig{};
+        constexpr std::array times{1.0, 1.016666667, 1.6};
+        for (size_t frame = 0; frame != times.size(); ++frame)
+        {
+            glfwSetTime(times[frame]);
+            ImGui_ImplGlfw_NewFrame();
+            io.AddFocusEvent(true);
+            io.AddMousePosEvent(100.f, 100.f);
+            io.AddMouseButtonEvent(ImGuiMouseButton_Left, frame != 1);
+            const float duration = klvk::ApplicationImGui::BeginFrame(
+                replay ? std::optional<u64>{16'666'667} : std::nullopt,
+                replay ? std::optional<float>{config.clock.imgui_frame_durations_seconds[frame]} : std::nullopt);
+            if (replay)
+            {
+                Ensure(
+                    std::bit_cast<u32>(duration) == std::bit_cast<u32>(live_durations[frame]),
+                    "replay changed the ImGui interaction delta");
+            }
+            else
+            {
+                live_durations[frame] = duration;
+                recorder.BeginFrame(frame + 1);
+                recorder.RecordFrameDuration(16'666'667, duration);
+            }
+            if (frame == 2)
+            {
+                Ensure(ImGui::IsMouseClicked(ImGuiMouseButton_Left), "timing test lost the second click");
+                Ensure(
+                    !ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left),
+                    "replay turned separate clicks into a double click");
+            }
+            ImGui::EndFrame();
+        }
+        if (!replay) recorder.Write({320, 240}, std::nullopt, nlohmann::json::object(), path.parent_path());
+        const float fixed_duration = klvk::ApplicationImGui::BeginFrame(20'000'000);
+        Ensure(
+            std::bit_cast<u32>(fixed_duration) ==
+                std::bit_cast<u32>(klvk::TimerDurationToSeconds(klvk::TimerDuration{20'000'000})),
+            "fixed-clock ImGui timing changed");
+        ImGui::EndFrame();
+    }
+}
+
 void Run()
 {
+    TestRecordedFrameClock();
+    TestReplayPacingAndLiveContinuation();
+    TestRecordedImGuiTiming();
     TestFramePhasesAndCompletion();
     TestTimeCatchUpAndAfterLastCapture();
     TestCheckpointCapturePlan();

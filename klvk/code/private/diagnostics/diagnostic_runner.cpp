@@ -24,7 +24,19 @@ void DiagnosticRunner::Advance(u64 frame, TimerDuration elapsed)
 
 void DiagnosticRunner::AdvanceInput(u64 frame, TimerDuration elapsed)
 {
-    replay_.AdvanceInput(frame, elapsed);
+    if (!input_replay_finished_) replay_.AdvanceInput(frame, elapsed);
+}
+
+void DiagnosticRunner::FinishInputReplay()
+{
+    replay_.EnsureInputComplete();
+    RestoreLiveInput();
+}
+
+void DiagnosticRunner::RestoreLiveInput()
+{
+    input_player_.Finish();
+    input_replay_finished_ = true;
 }
 
 bool DiagnosticRunner::NeedsReadback(bool include_ui) const noexcept
@@ -88,7 +100,7 @@ void DiagnosticRunner::EnsureComplete() const
 
 bool DiagnosticRunner::AnswersDialogs() const noexcept
 {
-    return replay_.AnswersDialogs();
+    return !input_replay_finished_ && replay_.AnswersDialogs();
 }
 
 std::optional<std::filesystem::path> DiagnosticRunner::TakeDialogAnswer()

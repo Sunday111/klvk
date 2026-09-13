@@ -51,6 +51,7 @@ public:
     [[nodiscard]] bool AnswersDialogs() const noexcept { return !dialogs_.empty(); }
     [[nodiscard]] std::optional<std::filesystem::path> TakeDialogAnswer();
 
+    void EnsureInputComplete() const;
     void EnsureComplete() const;
 
 private:

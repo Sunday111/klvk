@@ -82,6 +82,11 @@ private:
     // Only events delivered by the platform are dropped; the replay injects
     // through OnMouseMove/OnMouseButton/OnMouseScroll/OnKey/OnTextInput directly.
     void SetPlatformInputEnabled(bool enabled) noexcept;
+    void ResumeLiveInput();
+    void EnableReplayControls() noexcept { replay_controls_enabled_ = true; }
+    [[nodiscard]] bool ReplayStopRequested() const noexcept { return replay_stop_requested_; }
+    [[nodiscard]] bool ConsumeReplayControl(Key key, InputAction action);
+    void RefreshCursorPosition();
     [[nodiscard]] bool IsPlatformInputEnabled() const noexcept;
     static u32 MakeWindowId();
 
@@ -111,6 +116,9 @@ private:
     std::bitset<static_cast<size_t>(MouseButton::Count)> mouse_buttons_;
     bool input_mode_ = false;
     bool platform_input_enabled_ = true;
+    bool replay_controls_enabled_ = false;
+    bool replay_stop_requested_ = false;
+    bool replay_escape_held_ = false;
 };
 
 }  // namespace klvk

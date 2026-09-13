@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "klvk/window.hpp"
+#include "platform/input_mapping.hpp"
 
 namespace klvk
 {
@@ -88,7 +89,22 @@ void GlfwState::WaitEvents() const
 
 bool GlfwState::InitializeImGui(Window& window) const
 {
-    return ImGui_ImplGlfw_InitForVulkan(static_cast<GLFWwindow*>(window.GetPlatformHandle()), true);
+    auto* handle = static_cast<GLFWwindow*>(window.GetPlatformHandle());
+    if (!ImGui_ImplGlfw_InitForVulkan(handle, true)) return false;
+    glfwSetKeyCallback(
+        handle,
+        [](GLFWwindow* glfw_window, int key, int scancode, int action, int mods)
+        {
+            auto* target = static_cast<Window*>(glfwGetWindowUserPointer(glfw_window));
+            const auto mapped = KeyFromGlfw(key);
+            if (target && mapped &&
+                target->ConsumeReplayControl(
+                    *mapped,
+                    action == GLFW_RELEASE ? InputAction::Release : InputAction::Press))
+                return;
+            ImGui_ImplGlfw_KeyCallback(glfw_window, key, scancode, action, mods);
+        });
+    return true;
 }
 
 void GlfwState::ShutdownImGui() const

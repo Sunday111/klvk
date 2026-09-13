@@ -41,11 +41,6 @@ bool FramePacingSchedule::HasTargetFramerate() const noexcept
 
 std::optional<std::chrono::nanoseconds> FramePacingSchedule::GetDeadline(const FramePacingFrame& frame)
 {
-    if (frame.fixed_step_nanoseconds.has_value())
-    {
-        Reset();
-        return GetFixedStepDeadline(frame);
-    }
     if (!target_framerate_.has_value())
     {
         Reset();
@@ -63,20 +58,6 @@ std::optional<std::chrono::nanoseconds> FramePacingSchedule::GetDeadline(const F
 
     if (next_target_frame_ != std::numeric_limits<u64>::max()) ++next_target_frame_;
     return deadline;
-}
-
-std::optional<std::chrono::nanoseconds> FramePacingSchedule::GetFixedStepDeadline(
-    const FramePacingFrame& frame) const noexcept
-{
-    if (!frame.pace_fixed_step_to_real_time) return std::nullopt;
-
-    const u64 step = *frame.fixed_step_nanoseconds;
-    constexpr u64 kMaximumDuration = static_cast<u64>(std::numeric_limits<i64>::max());
-    if (frame.completed_frames != 0 && step > kMaximumDuration / frame.completed_frames) return std::nullopt;
-
-    const i64 elapsed = static_cast<i64>(step * frame.completed_frames);
-    if (frame.application_start.count() > std::numeric_limits<i64>::max() - elapsed) return std::nullopt;
-    return frame.application_start + std::chrono::nanoseconds{elapsed};
 }
 
 std::optional<FramePacingSchedule::TargetPeriod> FramePacingSchedule::CalculateTargetPeriod(float framerate) noexcept

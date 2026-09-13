@@ -2,6 +2,7 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <array>
 #include <limits>
 #include <span>
@@ -66,6 +67,7 @@ struct Application::State
     bool stencil_buffer_enabled_ = false;
     bool offscreen_ = false;
     bool exit_requested_ = false;
+    bool replay_finished_ = false;
     SwapchainPresentMode present_mode_ = SwapchainPresentMode::PreferLowLatency;
     u64 completed_frames_ = 0;
     events::EventManager event_manager_;
@@ -90,15 +92,39 @@ struct Application::State
     // deadlines its recording did.
     [[nodiscard]] std::optional<u64> GetFixedStepNanoseconds() const
     {
-        if (!diagnostic_config_.has_value()) return std::nullopt;
+        if (replay_finished_ || !diagnostic_config_.has_value()) return std::nullopt;
         return diagnostic_config_->clock.fixed_step_ns;
     }
 
     [[nodiscard]] TimerDuration GetElapsedTime() const { return frame_clock_.GetElapsedTime(completed_frames_); }
 
-    void InitTime() { frame_clock_.Initialize(GetFixedStepNanoseconds()); }
+    void InitTime()
+    {
+        frame_clock_.Initialize(
+            GetFixedStepNanoseconds(),
+            diagnostic_config_ ? std::span<const u64>{diagnostic_config_->clock.frame_durations_ns}
+                               : std::span<const u64>{});
+    }
 
-    void RegisterFrameStartTime() { frame_clock_.RegisterFrameStart(); }
+    void RegisterFrameStartTime()
+    {
+        if (diagnostic_runner_ && window_->ReplayStopRequested())
+        {
+            device_context_->WaitIdle();
+            diagnostic_runner_->RestoreLiveInput();
+            diagnostic_runner_.reset();
+            frame_clock_.ResumeLiveTime(completed_frames_);
+            replay_finished_ = true;
+        }
+        if (!replay_finished_ && diagnostic_config_ && diagnostic_config_->ResumesLiveAfterReplay() &&
+            frame_clock_.HasFinishedRecordedFrames())
+        {
+            diagnostic_runner_->FinishInputReplay();
+            frame_clock_.ResumeLiveTime(completed_frames_);
+            replay_finished_ = true;
+        }
+        frame_clock_.RegisterFrameStart();
+    }
 
     [[nodiscard]] float GetRelativeTimeSeconds() const
     {
@@ -110,16 +136,12 @@ struct Application::State
         return frame_clock_.GetCurrentFrameStartTime(completed_frames_);
     }
 
-    // A fixed clock normally means "render as fast as possible", which is what
-    // an offscreen or hidden run wants. A visible one exists to be watched, so
-    // hold each frame until the wall clock catches up with logical time.
-    [[nodiscard]] bool ShouldPaceToRealTime() const
+    [[nodiscard]] bool ShouldLimitFramerate() const
     {
-        return diagnostic_config_.has_value() && diagnostic_config_->presentation == DiagnosticPresentation::Visible &&
-               GetFixedStepNanoseconds().has_value();
+        return !diagnostic_config_ || diagnostic_config_->presentation == DiagnosticPresentation::Visible;
     }
 
-    void AlignWithFramerate() { frame_clock_.AlignWithFramerate(ShouldPaceToRealTime(), completed_frames_); }
+    void AlignWithFramerate() { frame_clock_.AlignWithFramerate(ShouldLimitFramerate()); }
 
     FrameInFlight& CurrentFrame() { return frames_[frame_index_]; }
 
@@ -392,6 +414,10 @@ void Application::RunImpl()
         {
             state_->window_->SetPlatformInputEnabled(false);
         }
+        if (state_->diagnostic_config_->presentation == DiagnosticPresentation::Visible)
+        {
+            state_->window_->EnableReplayControls();
+        }
         state_->InitTime();
         state_->completed_frames_ = 0;
         state_->diagnostic_runner_ = std::make_unique<DiagnosticRunner>(
@@ -443,11 +469,9 @@ void Application::RunImpl()
     }
     if (state_->input_recorder_)
     {
-        constexpr u64 kDefaultRecordedStepNs = 16'666'667;
-        const u64 step_ns = state_->GetFixedStepNanoseconds().value_or(kDefaultRecordedStepNs);
         state_->input_recorder_->Write(
             state_->window_->GetFramebufferSize(),
-            step_ns,
+            state_->GetFixedStepNanoseconds(),
             state_->diagnostic_config_.has_value() ? state_->diagnostic_config_->application : nlohmann::json::object(),
             state_->executable_dir_);
     }
@@ -466,14 +490,14 @@ void Application::RunWithArguments(int argc, char** argv)
     const DiagnosticCommandLine command_line = ParseDiagnosticCommandLine(arguments);
     if (command_line.config_path.has_value())
     {
-        state_->diagnostic_config_ = LoadDiagnosticRunConfig(*command_line.config_path, os::GetExecutableDir());
+        state_->diagnostic_config_ =
+            LoadDiagnosticRunConfig(*command_line.config_path, os::GetExecutableDir(), command_line.presentation);
     }
     if (command_line.presentation.has_value())
     {
         ErrorHandling::Ensure(
             state_->diagnostic_config_.has_value(),
             "--klvk-presentation overrides a diagnostic configuration and requires --klvk-diagnostics");
-        state_->diagnostic_config_->presentation = *command_line.presentation;
     }
     state_->input_record_path_ = command_line.input_record_path;
     if (command_line.write_checkpoints_path.has_value())
@@ -492,7 +516,8 @@ void Application::PreTick()
     // vk::Result::eErrorOutOfDateKHR alone: on Wayland the compositor silently
     // stretches the presented image instead of invalidating the swapchain.
     {
-        if (state_->diagnostic_config_.has_value() && state_->diagnostic_config_->framebuffer_size.has_value())
+        if (!state_->replay_finished_ && state_->diagnostic_config_.has_value() &&
+            state_->diagnostic_config_->framebuffer_size.has_value())
         {
             state_->window_->SetFramebufferSize(*state_->diagnostic_config_->framebuffer_size);
         }
@@ -659,7 +684,25 @@ void Application::PreTick()
     {
         state_->diagnostic_runner_->AdvanceInput(state_->completed_frames_ + 1, state_->GetElapsedTime());
     }
-    ApplicationImGui::BeginFrame(state_->GetFixedStepNanoseconds());
+    std::optional<u64> imgui_step = state_->GetFixedStepNanoseconds();
+    std::optional<float> recorded_imgui_duration;
+    if (!state_->replay_finished_ && state_->diagnostic_config_ &&
+        !state_->diagnostic_config_->clock.frame_durations_ns.empty())
+    {
+        imgui_step = state_->frame_clock_.GetLastFrameDurationNanoseconds();
+        const auto& durations = state_->diagnostic_config_->clock.imgui_frame_durations_seconds;
+        if (!durations.empty())
+        {
+            recorded_imgui_duration = durations[std::min(state_->completed_frames_, durations.size() - 1)];
+        }
+    }
+    const float imgui_duration = ApplicationImGui::BeginFrame(imgui_step, recorded_imgui_duration);
+    if (state_->input_recorder_)
+    {
+        state_->input_recorder_->RecordFrameDuration(
+            state_->frame_clock_.GetLastFrameDurationNanoseconds(),
+            imgui_duration);
+    }
 }
 
 void Application::Tick() {}
@@ -676,6 +719,11 @@ void Application::PostTick()
     const bool capture_without_ui = state_->diagnostic_runner_ && state_->diagnostic_runner_->NeedsReadback(false);
 
     if (state_->diagnostic_window_) state_->diagnostic_window_->Draw();
+    if (state_->diagnostic_runner_ && !state_->replay_finished_ &&
+        state_->diagnostic_config_->presentation == DiagnosticPresentation::Visible)
+    {
+        ApplicationImGui::DrawReplayOverlay();
+    }
 
     // ImGui's pipeline is color-only. End an application's depth-enabled pass and
     // resume rendering the same color image without a depth attachment for the UI.
@@ -805,7 +853,6 @@ void Application::MainLoop()
     while (!WantsToClose())
     {
         state_->RegisterFrameStartTime();
-
         PreTick();
         [[maybe_unused]] const u64 timer_callback_count =
             state_->timer_manager_.Advance(state_->GetElapsedTime(), state_->completed_frames_ + 1);
@@ -857,7 +904,7 @@ const nlohmann::json* Application::GetDiagnosticApplicationConfig() const noexce
 
 std::optional<u64> Application::GetDiagnosticExitFrame() const noexcept
 {
-    if (!state_->diagnostic_config_.has_value()) return std::nullopt;
+    if (state_->replay_finished_ || !state_->diagnostic_config_.has_value()) return std::nullopt;
     return state_->diagnostic_config_->exit.frame;
 }
 

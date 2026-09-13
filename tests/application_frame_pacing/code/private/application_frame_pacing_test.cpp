@@ -37,10 +37,6 @@ void EnsureThrows(Function&& function, std::string_view message)
 FramePacingFrame OrdinaryFrame(std::chrono::nanoseconds frame_start, std::chrono::nanoseconds now)
 {
     return FramePacingFrame{
-        .fixed_step_nanoseconds = std::nullopt,
-        .pace_fixed_step_to_real_time = false,
-        .completed_frames = 0,
-        .application_start = 1s,
         .frame_start = frame_start,
         .now = now,
     };
@@ -220,38 +216,6 @@ void TestTargetChangesResetTheSchedule()
         "re-enabling target pacing reused an old schedule origin");
 }
 
-void TestFixedStepReplayPacing()
-{
-    FramePacingSchedule schedule;
-    schedule.SetTargetFramerate(60.f);
-    FramePacingFrame replay{
-        .fixed_step_nanoseconds = 16'666'667,
-        .pace_fixed_step_to_real_time = false,
-        .completed_frames = 3,
-        .application_start = 10s,
-        .frame_start = 30s,
-        .now = 40s,
-    };
-    Ensure(!schedule.GetDeadline(replay).has_value(), "an unpaced fixed-step replay produced a wall deadline");
-
-    replay.pace_fixed_step_to_real_time = true;
-    EnsureDeadline(
-        schedule.GetDeadline(replay),
-        10s + 50'000'001ns,
-        "visible fixed-step replay did not use logical time from application start");
-
-    replay.completed_frames = 0;
-    EnsureDeadline(schedule.GetDeadline(replay), 10s, "fixed-step frame zero did not target application start");
-
-    replay.completed_frames = std::numeric_limits<u64>::max();
-    Ensure(!schedule.GetDeadline(replay).has_value(), "an overflowing fixed-step deadline was produced");
-
-    EnsureDeadline(
-        schedule.GetDeadline(OrdinaryFrame(50s, 50s + 1ms)),
-        50s + 16'666'666ns,
-        "leaving fixed-step mode reused a stale target schedule");
-}
-
 void Run()
 {
     TestTargetValidation();
@@ -262,7 +226,6 @@ void Run()
     TestLateFrameRecovery();
     TestLargeLateFrameRecovery();
     TestTargetChangesResetTheSchedule();
-    TestFixedStepReplayPacing();
 }
 
 }  // namespace

@@ -191,13 +191,34 @@ void ApplicationImGui::PrepareFrame(GlfwState& glfw, bool offscreen, vk::Extent2
     }
 }
 
-void ApplicationImGui::BeginFrame(std::optional<u64> fixed_step_nanoseconds)
+float ApplicationImGui::BeginFrame(
+    std::optional<u64> fixed_step_nanoseconds,
+    std::optional<float> recorded_duration_seconds)
 {
-    if (fixed_step_nanoseconds.has_value())
+    if (recorded_duration_seconds.has_value())
+    {
+        ImGui::GetIO().DeltaTime = *recorded_duration_seconds;
+    }
+    else if (fixed_step_nanoseconds.has_value())
     {
         ImGui::GetIO().DeltaTime = TimerDurationToSeconds(TimerDuration{*fixed_step_nanoseconds});
     }
     ImGui::NewFrame();
+    return ImGui::GetIO().DeltaTime;
+}
+
+void ApplicationImGui::DrawReplayOverlay()
+{
+    constexpr const char* label = "REPLAY - Esc to stop";
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const ImVec2 text_size = ImGui::CalcTextSize(label);
+    const ImVec2 padding{12.f, 8.f};
+    const ImVec2 corner{viewport->Pos.x + viewport->Size.x - 16.f, viewport->Pos.y + 16.f};
+    const ImVec2 start{corner.x - text_size.x - 2.f * padding.x, corner.y};
+    const ImVec2 end{corner.x, corner.y + text_size.y + 2.f * padding.y};
+    ImDrawList* draw_list = ImGui::GetForegroundDrawList();
+    draw_list->AddRectFilled(start, end, IM_COL32(20, 20, 20, 220), 5.f);
+    draw_list->AddText({start.x + padding.x, start.y + padding.y}, IM_COL32(255, 255, 255, 255), label);
 }
 
 void ApplicationImGui::Render(vk::CommandBuffer command_buffer)

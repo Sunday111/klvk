@@ -284,8 +284,76 @@ void TestCommandLineParsing()
         "a repeated option was accepted");
 }
 
+void TestVisibleReplayWithoutExit()
+{
+    const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
+    const auto path = std::filesystem::temp_directory_path() / ("klvk_live_replay_" + std::to_string(nonce) + ".json");
+    nlohmann::json document = {
+        {"version", 1},
+        {"presentation", "visible"},
+        {"clock", {{"mode", "recorded"}, {"frame_durations_ns", {10, 20}}}}};
+    const auto load = [&](const nlohmann::json& value)
+    {
+        Write(path, value.dump());
+        return klvk::LoadDiagnosticRunConfig(path, path.parent_path());
+    };
+    auto config = load(document);
+    Ensure(config.ResumesLiveAfterReplay(), "visible replay without exit did not enable live continuation");
+    const auto round_trip = klvk::DiagnosticRunConfigToJson(config);
+    Ensure(!round_trip.contains("exit"), "serialization invented an exit condition");
+    Ensure(load(round_trip).ResumesLiveAfterReplay(), "live continuation did not round-trip");
+    for (const auto& exit : std::vector<nlohmann::json>{{{"frame", 5}}, {{"time_ns", 60}}})
+    {
+        auto with_exit = document;
+        with_exit["exit"] = exit;
+        Ensure(!load(with_exit).ResumesLiveAfterReplay(), "recording end overrode an explicit exit condition");
+    }
+    auto after_capture = document;
+    after_capture["framebuffer_size"] = {64, 48};
+    after_capture["captures"] = {{{"frame", 5}, {"path", "end.ppm"}}};
+    after_capture["exit"] = {{"after_last_capture", true}};
+    Ensure(!load(after_capture).ResumesLiveAfterReplay(), "recording end overrode capture-based exit");
+    Write(path, document.dump());
+    EnsureThrows(
+        [&] { (void)klvk::LoadDiagnosticRunConfig(path, path.parent_path(), klvk::DiagnosticPresentation::Hidden); },
+        "a headless presentation override bypassed the required exit");
+    auto offscreen = document;
+    offscreen["presentation"] = "offscreen";
+    Write(path, offscreen.dump());
+    Ensure(
+        klvk::LoadDiagnosticRunConfig(path, path.parent_path(), klvk::DiagnosticPresentation::Visible)
+            .ResumesLiveAfterReplay(),
+        "visible presentation override was validated after the original presentation");
+    auto invalid = document;
+    invalid["exit"] = nlohmann::json::object();
+    EnsureThrows([&] { (void)load(invalid); }, "empty exit was accepted");
+    for (const auto* presentation : {"hidden", "offscreen"})
+    {
+        invalid = document;
+        invalid["presentation"] = presentation;
+        invalid["framebuffer_size"] = {64, 48};
+        EnsureThrows([&] { (void)load(invalid); }, "headless replay without exit was accepted");
+    }
+    invalid = document;
+    invalid["clock"] = {{"mode", "fixed"}, {"step_ns", 10}};
+    EnsureThrows([&] { (void)load(invalid); }, "unbounded fixed replay without exit was accepted");
+    for (const auto& trigger : std::vector<nlohmann::json>{{{"frame", 3}}, {{"time_ns", 31}}})
+    {
+        invalid = document;
+        auto input = trigger;
+        input.update({{"type", "key"}, {"key", "w"}, {"action", "press"}});
+        invalid["input"] = {input};
+        EnsureThrows([&] { (void)load(invalid); }, "input beyond the live handover was accepted");
+    }
+    invalid = document;
+    invalid["dialogs"] = {{{"frame", 3}}};
+    EnsureThrows([&] { (void)load(invalid); }, "dialog beyond the live handover was accepted");
+    std::filesystem::remove(path);
+}
+
 void Run()
 {
+    TestVisibleReplayWithoutExit();
     TestConfigSerializationRoundTrip();
     TestCommandLineParsing();
     TestExactNanosecondTimes();

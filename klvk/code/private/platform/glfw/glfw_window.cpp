@@ -220,6 +220,7 @@ void Window::SetTitle(const char* title)
 bool Window::IsKeyPressed(int key) const
 {
     const std::optional<Key> mapped = KeyFromGlfw(key);
+    if (mapped == Key::Escape && replay_escape_held_) return false;
     return (mapped.has_value() && IsKeyPressed(*mapped)) ||
            (impl_->window && glfwGetKey(impl_->window, key) == GLFW_PRESS);
 }
@@ -264,6 +265,12 @@ void Window::Create()
     glfwSetKeyCallback(impl_->window, Impl::KeyCallback);
     glfwSetCharCallback(impl_->window, Impl::TextInputCallback);
 
+    RefreshCursorPosition();
+}
+
+void Window::RefreshCursorPosition()
+{
+    if (!impl_->window) return;
     double cursor_x{};
     double cursor_y{};
     glfwGetCursorPos(impl_->window, &cursor_x, &cursor_y);
@@ -291,6 +298,24 @@ void Window::OnResize(int width, int height)
 void Window::SetPlatformInputEnabled(bool enabled) noexcept
 {
     platform_input_enabled_ = enabled;
+}
+
+void Window::ResumeLiveInput()
+{
+    RefreshCursorPosition();
+    fixed_framebuffer_size_.reset();
+    replay_controls_enabled_ = false;
+    replay_stop_requested_ = false;
+    SetPlatformInputEnabled(true);
+}
+
+bool Window::ConsumeReplayControl(Key key, InputAction action)
+{
+    if (key != Key::Escape) return false;
+    if (!replay_controls_enabled_ && !replay_escape_held_) return false;
+    replay_escape_held_ = action == InputAction::Press;
+    if (replay_controls_enabled_ && replay_escape_held_) replay_stop_requested_ = true;
+    return true;
 }
 
 bool Window::IsPlatformInputEnabled() const noexcept

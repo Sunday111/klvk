@@ -12,7 +12,8 @@ namespace klvk
 {
 DiagnosticRunConfig LoadDiagnosticRunConfig(
     const std::filesystem::path& path,
-    const std::filesystem::path& executable_directory)
+    const std::filesystem::path& executable_directory,
+    std::optional<DiagnosticPresentation> presentation)
 {
     std::ifstream stream(path);
     ErrorHandling::Ensure(stream.is_open(), "Failed to open diagnostic configuration '{}'", path.string());
@@ -41,7 +42,7 @@ DiagnosticRunConfig LoadDiagnosticRunConfig(
     try
     {
         const nlohmann::json document = nlohmann::json::parse(stream, callback);
-        return DiagnosticRunConfigJson::Read(JsonReader{document, "root"}, executable_directory);
+        return DiagnosticRunConfigJson::Read(JsonReader{document, "root"}, executable_directory, presentation);
     }
     catch (const nlohmann::json::exception& exception)
     {
@@ -136,7 +137,7 @@ std::optional<DiagnosticRunConfig> LoadDiagnosticRunConfigFromArguments(
 {
     const DiagnosticCommandLine command_line = ParseDiagnosticCommandLine(arguments);
     if (!command_line.config_path.has_value()) return std::nullopt;
-    return LoadDiagnosticRunConfig(*command_line.config_path, executable_directory);
+    return LoadDiagnosticRunConfig(*command_line.config_path, executable_directory, command_line.presentation);
 }
 
 nlohmann::json DiagnosticRunConfigToJson(const DiagnosticRunConfig& config)
