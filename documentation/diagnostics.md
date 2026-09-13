@@ -78,10 +78,9 @@ persisted `imgui.ini` state.
 
 ## Input replay
 
-`initial_cursor_position: [x, y]` optionally seeds the framebuffer-pixel cursor position before replayed input.
-Recordings include it so stationary clicks and the first movement start at the recorded position without emitting
-a synthetic movement event. Without this field, the first offscreen mouse position establishes the baseline;
-subsequent movements supply camera deltas.
+`initial_cursor_position: [x, y]` seeds the framebuffer-pixel cursor position before replayed input.
+It is required for mouse movement, button, or scroll events. Recordings include it so stationary clicks and the
+first movement start at the recorded position without emitting a synthetic movement event.
 
 `input` accepts these event shapes:
 
@@ -117,8 +116,7 @@ exit at the session's final frame. File-dialog answers obtained through `Applica
 `SaveFileDialog` are recorded too. Add `captures`, `checkpoints`, or `video` to derive output from the replay.
 
 Events are pinned to the frame on which they arrived rather than wall-clock time. Consecutive cursor movements in
-one frame collapse to their final position. When the initial cursor position is unknown, the first movement remains
-a separate baseline event at its original frame.
+one frame collapse to their final position.
 
 File-dialog answers are stored under `dialogs` in request order:
 

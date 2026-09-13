@@ -402,16 +402,10 @@ void Application::RunImpl()
     }
     if (state_->input_record_path_.has_value())
     {
-        std::optional<Vec2f> initial_cursor_position;
-        if (!state_->offscreen_ ||
-            (state_->diagnostic_config_ && state_->diagnostic_config_->initial_cursor_position.has_value()))
-        {
-            initial_cursor_position = state_->window_->GetCursorPos();
-        }
         state_->input_recorder_ = std::make_unique<DiagnosticInputRecorder>(
             *state_->input_record_path_,
             state_->event_manager_,
-            initial_cursor_position);
+            state_->window_->GetCursorPos());
     }
     MainLoop();
     if (state_->perf_recorder_) state_->perf_recorder_->Finish();

@@ -18,7 +18,6 @@ private:
     void ApplyModifier(Key key);
 
     Window& window_;
-    bool cursor_initialized_;
 };
 
 }  // namespace klvk

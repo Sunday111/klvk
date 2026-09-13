@@ -299,6 +299,7 @@ void Run()
             "version": 1,
             "presentation": "hidden",
             "framebuffer_size": [320, 240],
+            "initial_cursor_position": [100, 40],
             "clock": {"mode": "fixed", "step_seconds": 0.0166666667},
             "input": [
                 {"frame": 1, "type": "mouse_move", "position": [123.5, 45.25]},
@@ -428,6 +429,32 @@ void Run()
     Ensure(
         !klvk::LoadDiagnosticRunConfigFromArguments(std::span{arguments}.first(2), root).has_value(),
         "application arguments were incorrectly treated as diagnostic arguments");
+
+    for (std::string_view event :
+         {R"({"type":"mouse_move","position":[1,2]})",
+          R"({"type":"mouse_button","button":"left","action":"press"})",
+          R"({"type":"mouse_scroll","offset":[0,1]})"})
+    {
+        auto input = nlohmann::json::parse(event);
+        input["frame"] = 1;
+        nlohmann::json document = {{"version", 1}, {"input", {input}}, {"exit", {{"frame", 1}}}};
+        Write(valid_path, document.dump());
+        bool rejected = false;
+        try
+        {
+            (void)klvk::LoadDiagnosticRunConfig(valid_path, root);
+        }
+        catch (const std::exception& error)
+        {
+            rejected = std::string_view{error.what()}.find("initial_cursor_position") != std::string_view::npos;
+        }
+        Ensure(rejected, "mouse replay without an initial cursor position was not clearly rejected");
+        document["initial_cursor_position"] = {0, 0};
+        Write(valid_path, document.dump());
+        Ensure(
+            klvk::LoadDiagnosticRunConfig(valid_path, root).input.size() == 1,
+            "mouse replay with an initial cursor position was not accepted");
+    }
 
     const std::array invalid_documents{
         R"({"version":1,"framebuffer_size":[1,1],"captures":[{"frame":1,"time_seconds":0,"path":"a.ppm"}],"exit":{"after_last_capture":true}})",

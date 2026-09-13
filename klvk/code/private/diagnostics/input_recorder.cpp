@@ -15,7 +15,7 @@ namespace klvk
 DiagnosticInputRecorder::DiagnosticInputRecorder(
     std::filesystem::path path,
     events::EventManager& event_manager,
-    std::optional<edt::Vec2f> initial_cursor_position)
+    edt::Vec2f initial_cursor_position)
     : path_(std::move(path)),
       event_manager_(event_manager),
       initial_cursor_position_(initial_cursor_position),
@@ -44,17 +44,15 @@ void DiagnosticInputRecorder::Append(DiagnosticInputEvent event)
 
 void DiagnosticInputRecorder::OnMouseMove(const events::OnMouseMove& event)
 {
-    const bool initializes_cursor = !initial_cursor_position_ && !last_recorded_position_;
-    if (last_recorded_position_.has_value() && *last_recorded_position_ == event.current) return;
+    if (last_recorded_position_ == event.current) return;
     last_recorded_position_ = event.current;
 
-    if (!input_.empty() && cursor_baseline_input_index_ != input_.size() - 1 && input_.back().frame == current_frame_ &&
+    if (!input_.empty() && input_.back().frame == current_frame_ &&
         std::holds_alternative<DiagnosticMouseMoveInput>(input_.back().event))
     {
         input_.back().event = DiagnosticMouseMoveInput{.position = event.current};
         return;
     }
-    if (initializes_cursor) cursor_baseline_input_index_ = input_.size();
     Append(DiagnosticMouseMoveInput{.position = event.current});
 }
 

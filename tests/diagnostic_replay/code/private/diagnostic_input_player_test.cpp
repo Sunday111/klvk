@@ -51,7 +51,7 @@ public:
                     [&](const events::OnMouseScroll& event) { mouse_scroll = event; },
                     [&](const events::OnKey& event) { key = event; });
         auto subscription = application.GetEventManager().AddEventListener(*listener);
-        DiagnosticInputPlayer player(*window);
+        DiagnosticInputPlayer player(*window, Vec2f{2.5f, 4.25f});
         tests::Ensure(!window->HasInputFocus(), "an unfocused window accepted native input");
         window->SetPlatformInputEnabled(false);
         tests::Ensure(!window->IsFocused(), "replay changed native window focus");
@@ -72,7 +72,7 @@ public:
         BeginImGuiFrame();
         tests::Ensure(window->GetCursorPos() == Vec2f{12.5f, 34.25f}, "replayed cursor position was not stored");
         tests::Ensure(
-            mouse_move.has_value() && mouse_move->previous == Vec2f{12.5f, 34.25f} &&
+            mouse_move.has_value() && mouse_move->previous == Vec2f{2.5f, 4.25f} &&
                 mouse_move->current == Vec2f{12.5f, 34.25f},
             "replayed mouse movement did not emit the expected event");
         tests::Ensure(Near(io.MousePos.x, 12.f) && Near(io.MousePos.y, 34.f), "replayed cursor did not reach ImGui");
@@ -227,65 +227,40 @@ private:
             Near(camera.GetRotation().yaw, expected_rotation.yaw) &&
                 Near(camera.GetRotation().pitch, expected_rotation.pitch),
             "recorded first movement or collapsed mouse-look changed camera rotation");
+        const Vec2f initial_position = *recording.initial_cursor_position;
         window = Window::CreateOffscreen(application, 320, 240);
         window->SetPlatformInputEnabled(false);
         camera.SetRotation({.yaw = 0.f, .pitch = 0.f, .roll = 0.f});
-        DiagnosticInputPlayer legacy_player(*window);
-        legacy_player.Apply(DiagnosticMouseButtonInput{.button = MouseButton::Right, .action = InputAction::Press});
-        legacy_player.Apply(DiagnosticMouseMoveInput{.position = {180.f, 140.f}});
-        tests::Ensure(
-            Near(camera.GetRotation().yaw, 0.f) && Near(camera.GetRotation().pitch, 0.f),
-            "an unseeded replay rotated from the offscreen cursor sentinel");
-        legacy_player.Apply(DiagnosticMouseMoveInput{.position = {190.f, 150.f}});
-        tests::Ensure(
-            Near(camera.GetRotation().yaw, 0.1f) && Near(camera.GetRotation().pitch, 0.1f),
-            "an unseeded replay dropped movement after establishing its cursor position");
-        for (const auto initial_position : {recording.initial_cursor_position, std::optional<Vec2f>{}})
+        DiagnosticInputPlayer source(*window, initial_position);
         {
-            window = Window::CreateOffscreen(application, 320, 240);
-            window->SetPlatformInputEnabled(false);
-            camera.SetRotation({.yaw = 0.f, .pitch = 0.f, .roll = 0.f});
-            DiagnosticInputPlayer source(*window, initial_position);
-            {
-                DiagnosticInputRecorder recorder(path, application.GetEventManager(), initial_position);
-                recorder.BeginFrame(1);
-                source.Apply(DiagnosticMouseButtonInput{.button = MouseButton::Right, .action = InputAction::Press});
-                recorder.BeginFrame(5);
-                source.Apply(DiagnosticMouseMoveInput{.position = {180.f, 140.f}});
-                source.Apply(DiagnosticMouseMoveInput{.position = {190.f, 150.f}});
-                recorder.Write({320, 240}, 16'666'667, nlohmann::json::object(), path.parent_path());
-            }
-            const auto source_rotation = camera.GetRotation();
-            const auto rerecorded = LoadDiagnosticRunConfig(path, path.parent_path());
-            tests::Ensure(
-                rerecorded.initial_cursor_position == initial_position,
-                "re-recording a replay lost its known initial cursor position");
-            window = Window::CreateOffscreen(application, 320, 240);
-            window->SetPlatformInputEnabled(false);
-            camera.SetRotation({.yaw = 0.f, .pitch = 0.f, .roll = 0.f});
-            const Vec2f unknown_position = window->GetCursorPos();
-            DiagnosticInputPlayer destination(*window, rerecorded.initial_cursor_position);
-            for (const DiagnosticInputConfig& input : rerecorded.input)
-            {
-                destination.Apply(input.event);
-                if (!initial_position && input.frame < 5)
-                {
-                    tests::Ensure(
-                        window->GetCursorPos() == unknown_position,
-                        "an unknown cursor acquired a future position before its first movement");
-                }
-            }
-            if (!initial_position)
-            {
-                tests::Ensure(
-                    rerecorded.input.size() == 3 && rerecorded.input[1].frame == 5 && rerecorded.input[2].frame == 5,
-                    "re-recording collapsed the initial baseline into a later movement");
-            }
-            tests::Ensure(
-                Near(camera.GetRotation().yaw, source_rotation.yaw) &&
-                    Near(camera.GetRotation().pitch, source_rotation.pitch),
-                "re-recording a replay changed its first mouse movement");
+            DiagnosticInputRecorder recorder(path, application.GetEventManager(), initial_position);
+            recorder.BeginFrame(1);
+            source.Apply(DiagnosticMouseButtonInput{.button = MouseButton::Right, .action = InputAction::Press});
+            recorder.BeginFrame(5);
+            source.Apply(DiagnosticMouseMoveInput{.position = {180.f, 140.f}});
+            source.Apply(DiagnosticMouseMoveInput{.position = {190.f, 150.f}});
+            recorder.Write({320, 240}, 16'666'667, nlohmann::json::object(), path.parent_path());
         }
+        const auto source_rotation = camera.GetRotation();
+        const auto rerecorded = LoadDiagnosticRunConfig(path, path.parent_path());
+        tests::Ensure(
+            rerecorded.initial_cursor_position == initial_position,
+            "re-recording a replay lost its known initial cursor position");
+        window = Window::CreateOffscreen(application, 320, 240);
+        window->SetPlatformInputEnabled(false);
+        camera.SetRotation({.yaw = 0.f, .pitch = 0.f, .roll = 0.f});
+        DiagnosticInputPlayer destination(*window, rerecorded.initial_cursor_position);
+        for (const DiagnosticInputConfig& input : rerecorded.input)
+        {
+            destination.Apply(input.event);
+        }
+        tests::Ensure(
+            rerecorded.input.size() == 2 && rerecorded.input[0].frame == 1 && rerecorded.input[1].frame == 5,
+            "re-recording changed input frames or failed to collapse consecutive movements");
+        tests::Ensure(
+            Near(camera.GetRotation().yaw, source_rotation.yaw) &&
+                Near(camera.GetRotation().pitch, source_rotation.pitch),
+            "re-recording a replay changed its first mouse movement");
     }
 
     static bool Near(float first, float second) { return std::abs(first - second) < 0.000'001f; }

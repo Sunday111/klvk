@@ -13,8 +13,7 @@ namespace klvk
 {
 
 DiagnosticInputPlayer::DiagnosticInputPlayer(Window& window, std::optional<edt::Vec2f> initial_cursor_position)
-    : window_(window),
-      cursor_initialized_(initial_cursor_position.has_value() || window.GetPlatformHandle() != nullptr)
+    : window_(window)
 {
     if (initial_cursor_position)
     {
@@ -54,11 +53,6 @@ void DiagnosticInputPlayer::Apply(const DiagnosticInputEvent& input)
             using Event = std::decay_t<decltype(event)>;
             if constexpr (std::is_same_v<Event, DiagnosticMouseMoveInput>)
             {
-                if (!cursor_initialized_)
-                {
-                    window_.cursor_ = event.position;
-                    cursor_initialized_ = true;
-                }
                 window_.OnMouseMove(event.position);
                 io.AddMousePosEvent(event.position.x(), event.position.y());
             }
