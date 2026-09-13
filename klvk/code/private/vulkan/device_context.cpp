@@ -254,11 +254,13 @@ void DeviceContext::CreateDevice()
     const vk::PhysicalDeviceFeatures supported_features = physical_device_.getFeatures();
     geometry_shader_enabled_ = supported_features.geometryShader == vk::True;
     tessellation_shader_enabled_ = supported_features.tessellationShader == vk::True;
+    fill_mode_non_solid_enabled_ = supported_features.fillModeNonSolid == vk::True;
 
     auto features2 = vk::PhysicalDeviceFeatures2{}.setFeatures(
         vk::PhysicalDeviceFeatures{}
             .setGeometryShader(supported_features.geometryShader)
-            .setTessellationShader(supported_features.tessellationShader));
+            .setTessellationShader(supported_features.tessellationShader)
+            .setFillModeNonSolid(supported_features.fillModeNonSolid));
     auto features11 = vk::PhysicalDeviceVulkan11Features{}.setShaderDrawParameters(true);
     auto features13 = vk::PhysicalDeviceVulkan13Features{}.setSynchronization2(true).setDynamicRendering(true);
 
