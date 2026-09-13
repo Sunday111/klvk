@@ -1,5 +1,5 @@
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(KLVK_FFMPEG REQUIRED IMPORTED_TARGET
+pkg_check_modules(KLVK_FFMPEG REQUIRED IMPORTED_TARGET GLOBAL
     libavcodec
     libavformat
     libavutil
