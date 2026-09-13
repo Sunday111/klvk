@@ -300,6 +300,7 @@ DiagnosticRunConfig DiagnosticRunConfigJson::Read(
         {"version",
          "presentation",
          "framebuffer_size",
+         "initial_cursor_position",
          "clock",
          "input",
          "captures",
@@ -322,6 +323,10 @@ DiagnosticRunConfig DiagnosticRunConfigJson::Read(
         config.presentation = presentation->EnumValue(kPresentationNames, kPresentationExpectation);
     }
     config.framebuffer_size = ReadFramebufferSize(root);
+    if (const auto position = root.OptionalField("initial_cursor_position"))
+    {
+        config.initial_cursor_position = ReadFloatVector(*position);
+    }
     config.clock.fixed_step_ns = ReadClock(root);
 
     if (const auto input = root.OptionalField("input"))

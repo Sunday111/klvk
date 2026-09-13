@@ -12,7 +12,15 @@
 namespace klvk
 {
 
-DiagnosticInputPlayer::DiagnosticInputPlayer(Window& window) noexcept : window_(window) {}
+DiagnosticInputPlayer::DiagnosticInputPlayer(Window& window, std::optional<edt::Vec2f> initial_cursor_position)
+    : window_(window)
+{
+    if (initial_cursor_position)
+    {
+        window_.cursor_ = *initial_cursor_position;
+        ImGui::GetIO().AddMousePosEvent(initial_cursor_position->x(), initial_cursor_position->y());
+    }
+}
 
 void DiagnosticInputPlayer::ApplyModifier(Key key)
 {

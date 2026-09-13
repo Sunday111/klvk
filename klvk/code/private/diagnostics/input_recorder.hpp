@@ -19,7 +19,10 @@ namespace klvk
 class DiagnosticInputRecorder
 {
 public:
-    DiagnosticInputRecorder(std::filesystem::path path, events::EventManager& event_manager);
+    DiagnosticInputRecorder(
+        std::filesystem::path path,
+        events::EventManager& event_manager,
+        edt::Vec2f initial_cursor_position);
     DiagnosticInputRecorder(const DiagnosticInputRecorder&) = delete;
     DiagnosticInputRecorder(DiagnosticInputRecorder&&) = delete;
     ~DiagnosticInputRecorder();
@@ -64,7 +67,8 @@ private:
     events::EventSubscription event_subscription_;
     std::vector<DiagnosticInputConfig> input_;
     std::vector<DiagnosticDialogConfig> dialogs_;
-    std::optional<edt::Vec2f> last_recorded_position_;
+    edt::Vec2f initial_cursor_position_;
+    edt::Vec2f last_recorded_position_;
     u64 current_frame_ = 1;
 };
 

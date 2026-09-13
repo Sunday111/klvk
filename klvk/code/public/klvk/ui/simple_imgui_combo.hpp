@@ -24,7 +24,7 @@ public:
 private:
     std::vector<std::string> names_;
     std::vector<const char*> names_ptrs_;
-    int selected_ = 0;
+    int selected_ = -1;
     int max_height_ = -1;
     std::string title_;
 };
